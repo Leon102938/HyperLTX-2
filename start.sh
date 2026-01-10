@@ -14,6 +14,11 @@ if [ -f ./tools.config ]; then
   source ./tools.config
 fi
 
+
+# -------- LTX-2 Start Core Auswahl(wegweiser)--------
+export PYTHONPATH="${PYTHONPATH:+$PYTHONPATH:}/workspace/app:/workspace/LTX-2/packages/ltx-core/src:/workspace/LTX-2/packages/ltx-pipelines/src" 
+
+
 # 🌍 BASE_URL automatisch setzen (RUNPOD_POD_ID sicher expandieren)
 echo "🌐 Ermittle dynamische RunPod Proxy-URL..."
 POD_ID="${RUNPOD_POD_ID:-}"
