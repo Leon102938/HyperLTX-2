@@ -4,8 +4,6 @@ FROM runpod/pytorch:0.7.0-cu1251-torch260-ubuntu2204
 SHELL ["/bin/bash","-lc"]
 
 
-
-
 # Basics & HF-Caches (nur Orte, kein zusätzliches Python/Torch)
 ENV DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1 \
@@ -14,9 +12,12 @@ ENV DEBIAN_FRONTEND=noninteractive \
     HF_HOME=/workspace/.cache/hf \
     TRANSFORMERS_CACHE=/workspace/.cache/hf/transformers \
     HF_HUB_CACHE=/workspace/.cache/hf/hub
+# Pfade für das neue Modell-Setup
+    LTX_CHECKPOINT_DIR=/workspace/models/ltx-2 \
+    GEMMA_DIR=/workspace/models/gemma-3 
+
 
 WORKDIR /workspace
-
 
 
 # 📦 Restliche Python-Deps
@@ -26,29 +27,9 @@ RUN python -V && python -m pip -V \
  && python -m pip install --no-cache-dir -r /tmp/requirements.txt
 
 
-# FlashAttention (Python 3.10 / torch 2.6.0+cu124 / CXX11_ABI=False)
-RUN python -m pip uninstall -y flash-attn flash_attn || true && \
-    python -m pip install --no-cache-dir --no-deps \
-    "https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.4.post1/flash_attn-2.7.4.post1+cu12torch2.6cxx11abiFALSE-cp310-cp310-linux_x86_64.whl"
-
-
-# =========================
-# Z-Image Turbo (separates venv, nutzt system Torch, pinned deps)
-# =========================
-ENV ZIMAGE_VENV=/opt/venvs/zimage
-
-RUN mkdir -p "${HF_HOME}" "${TRANSFORMERS_CACHE}" "${HF_HUB_CACHE}" \
- && python -m venv --system-site-packages "${ZIMAGE_VENV}" \
- && "${ZIMAGE_VENV}/bin/pip" install -U --no-cache-dir pip wheel setuptools \
- && "${ZIMAGE_VENV}/bin/pip" install -U --no-cache-dir --no-deps \
-      "huggingface-hub>=0.34.0,<1.0" \
-      "tokenizers>=0.22.0,<=0.23.0" \
-      "transformers>=4.44" \
-      accelerate safetensors \
- && "${ZIMAGE_VENV}/bin/pip" install -U --no-cache-dir --no-deps \
-      git+https://github.com/huggingface/diffusers \
- && "${ZIMAGE_VENV}/bin/python" -c "import torch, tokenizers, transformers, huggingface_hub; from diffusers import ZImagePipeline; print('ZImage OK | torch:', torch.__version__, '| hub:', huggingface_hub.__version__, '| tok:', tokenizers.__version__, '| trf:', transformers.__version__)"
-
+# Installiere Flash Attention 2 (Direkt für Ada Architektur)
+# Wir deinstallieren alte Reste und installieren sauber neu
+RUN python -m pip install --no-cache-dir flash-attn --no-build-isolation
 
 
 
