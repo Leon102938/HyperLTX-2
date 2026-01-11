@@ -15,8 +15,6 @@ if [ -f ./tools.config ]; then
 fi
 
 
-# -------- LTX-2 Start Core Auswahl(wegweiser)--------
-export PYTHONPATH="${PYTHONPATH:+$PYTHONPATH:}/workspace/app:/workspace/LTX-2/packages/ltx-core/src:/workspace/LTX-2/packages/ltx-pipelines/src" 
 
 
 # 🌍 BASE_URL automatisch setzen (RUNPOD_POD_ID sicher expandieren)
@@ -31,9 +29,7 @@ else
   echo "✅ BASE_URL erfolgreich gesetzt: $BASE_URL"
 fi
 
-# ============ 🔧 PYTHONPATH (ohne unbound) ============
-# Falls PYTHONPATH leer/unset ist → nur /workspace/app setzen; sonst anhängen.
-export PYTHONPATH="${PYTHONPATH:+$PYTHONPATH:}/workspace/app"
+
 
 # ============ 🔷 JUPYTERLAB THEME ============
 mkdir -p /root/.jupyter/lab/user-settings/@jupyterlab/apputils-extension
@@ -65,15 +61,11 @@ else
 fi
 
 # ============ 🔷 Download/Init (OVI) ============
-if [ "${Init:-off}" = "on" ]; then
-  echo "🚀 Starte OVI Init"
-  if [ -x /workspace/init.sh ]; then
-    nohup bash /workspace/init.sh >/dev/null 2>&1 & disown
-  else
-    echo "⚠️  /workspace/init.sh nicht gefunden oder nicht ausführbar."
-  fi
-else
-  echo "⏭️  Init=off – überspringe OVI-Download."
+# 🚀 INIT-LOGIK (Dein Wunsch: Separater Skript-Start)
+if [ "${INIT_SCRIPT:-off}" = "on" ]; then
+  echo "🚀 Starte init.sh (Hintergrund)..."
+  chmod +x /workspace/init.sh
+  nohup bash /workspace/init.sh > /workspace/init_download.log 2>&1 & disown
 fi
 
 # ============ ✅ ABSCHLUSS ============
