@@ -9,7 +9,7 @@ pillow
 python-dotenv
 sentencepiece>=0.1.99
 hf_transfer
-hf download
+
 
 
 # ===== Video & Performance =====
