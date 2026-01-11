@@ -29,7 +29,9 @@ else
   echo "✅ BASE_URL erfolgreich gesetzt: $BASE_URL"
 fi
 
-
+# -------- LTX-2 Start Core Auswahl (Wegweiser) --------
+# Dies ist entscheidend, damit Python 'ltx_core' findet!
+export PYTHONPATH="/workspace/app:/workspace/LTX-2/packages/ltx-core/src:/workspace/LTX-2/packages/ltx-pipelines/src:$PYTHONPATH"
 
 # ============ 🔷 JUPYTERLAB THEME ============
 mkdir -p /root/.jupyter/lab/user-settings/@jupyterlab/apputils-extension
