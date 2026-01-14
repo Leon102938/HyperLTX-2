@@ -1,18 +1,23 @@
 #!/bin/bash
+
 set -euo pipefail
 
-# ============ 📂 Projekt-Pfad automatisch finden ============
-# Prüft, wo deine Dateien nach dem Git-Push gelandet sind
-if [ -d "/workspace/LTX-2" ]; then
-    PROJECT_ROOT="/workspace/LTX-2"
-elif [ -d "/workspace/HyperLTX-2" ]; then
-    PROJECT_ROOT="/workspace/HyperLTX-2"
-else
-    PROJECT_ROOT="/workspace"
-fi
 
-echo "📂 Nutze Project Root: $PROJECT_ROOT"
+# ============ 📌 FIX 1: PFAD & VERSION PINNEN ============
+PROJECT_ROOT="/workspace/LTX-2"
 cd "$PROJECT_ROOT"
+
+# Berechtigungen pinnen (Löst dein Problem mit dem Checkpoints-Ordner)
+chmod -R 777 "$PROJECT_ROOT" || true
+
+# ============ 🐍 FIX 2: PYTHONPATH ============
+# Stellt sicher, dass ltx_core gefunden wird
+export PYTHONPATH="$PROJECT_ROOT:$PROJECT_ROOT/packages/ltx-core/src:$PROJECT_ROOT/packages/ltx-pipelines/src:${PYTHONPATH:-}"
+
+# ============ 🛠️ FIX 3: GEMMA 3 SUPPORT ============
+# Erzwingt das Update in der richtigen Python-Umgebung
+echo "🛠️ Update Transformers für Gemma 3..."
+python3.13 -m pip install --upgrade transformers accelerate
 
 # ============ 🔧 PyTorch & Hardware Specs ============
 export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-max_split_size_mb:256}"
@@ -35,10 +40,6 @@ else
   echo "✅ BASE_URL erfolgreich gesetzt: $BASE_URL"
 fi
 
-# ============ 🧠 LTX-2 PYTHONPATH (DIE WICHTIGSTE ZEILE) ============
-# Ohne das findet die App 'ltx_core' nicht!
-export PYTHONPATH="$PROJECT_ROOT:$PROJECT_ROOT/packages/ltx-core/src:$PROJECT_ROOT/packages/ltx-pipelines/src:${PYTHONPATH:-}"
-echo "🐍 PYTHONPATH gesetzt auf: $PYTHONPATH"
 
 # ============ 🔷 JUPYTERLAB THEME ============
 mkdir -p /root/.jupyter/lab/user-settings/@jupyterlab/apputils-extension
