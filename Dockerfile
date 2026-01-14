@@ -11,7 +11,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     TZ=Europe/Berlin \
     HF_HOME=/workspace/.cache/hf \
     TRANSFORMERS_CACHE=/workspace/.cache/hf/transformers \
-    HF_HUB_CACHE=/workspace/.cache/hf/hub 
+    HF_HUB_CACHE=/workspace/.cache/hf/hub
 
 
 
@@ -21,13 +21,12 @@ WORKDIR /workspace
 # 📦 Restliche Python-Deps
 # 4) Rest über requirements.txt (einmal!)
 COPY requirements.txt /tmp/requirements.txt
-RUN python -V && python -m pip -V \
- && python -m pip install --no-cache-dir -r /tmp/requirements.txt
+RUN python3.13 -m pip install --upgrade pip && \
+    python3.13 -m pip install --no-cache-dir -r /tmp/requirements.txt
 
 
-# Installiere Flash Attention 2 (Direkt für Ada Architektur)
-# Wir deinstallieren alte Reste und installieren sauber neu
-RUN python -m pip install --no-cache-dir flash-attn --no-build-isolation
+# Installiere Flash Attention 2 für Python 3.13
+RUN python3.13 -m pip install --no-cache-dir flash-attn --no-build-isolation
 
 
 
