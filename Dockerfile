@@ -12,8 +12,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     HF_HOME=/workspace/.cache/hf \
     TRANSFORMERS_CACHE=/workspace/.cache/hf/transformers \
     HF_HUB_CACHE=/workspace/.cache/hf/hub \
-    LTX_CHECKPOINT_DIR=/workspace/models/ltx-2 \
-    GEMMA_DIR=/workspace/models/gemma-3 
+
 
 
 WORKDIR /workspace

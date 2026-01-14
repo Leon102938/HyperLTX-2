@@ -3,21 +3,16 @@
 set -euo pipefail
 
 
-# ============ 📌 FIX 1: PFAD & VERSION PINNEN ============
+# ============ 📂 PFAD SETZEN ============
 PROJECT_ROOT="/workspace/LTX-2"
 cd "$PROJECT_ROOT"
 
-# Berechtigungen pinnen (Löst dein Problem mit dem Checkpoints-Ordner)
+# Rechte fixen (Einmalig, schnell)
 chmod -R 777 "$PROJECT_ROOT" || true
 
-# ============ 🐍 FIX 2: PYTHONPATH ============
-# Stellt sicher, dass ltx_core gefunden wird
+# ============ 🐍 PYTHON UMGEBUNG ============
+# Wir setzen nur den Pfad, installieren aber NICHTS mehr.
 export PYTHONPATH="$PROJECT_ROOT:$PROJECT_ROOT/packages/ltx-core/src:$PROJECT_ROOT/packages/ltx-pipelines/src:${PYTHONPATH:-}"
-
-# ============ 🛠️ FIX 3: GEMMA 3 SUPPORT ============
-# Erzwingt das Update in der richtigen Python-Umgebung
-echo "🛠️ Update Transformers für Gemma 3..."
-python3.13 -m pip install --upgrade transformers accelerate
 
 # ============ 🔧 PyTorch & Hardware Specs ============
 export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-max_split_size_mb:256}"
@@ -49,7 +44,7 @@ echo '{ "theme": "JupyterLab Dark" }' \
 # ============ 🔷 JUPYTERLAB (Port 8888) ============
 if [ "${JUPYTER:-off}" = "on" ]; then
   echo "🧠 Starte JupyterLab (Port 8888)..."
-  nohup jupyter lab \
+  nohup python3.13 -m jupyter lab \
     --ip=0.0.0.0 \
     --port=8888 \
     --no-browser \
@@ -65,7 +60,7 @@ fi
 # ============ 🔷 FASTAPI (Port 8000) ============
 if [ "${FASTAPI:-on}" = "on" ]; then
   echo "🚀 Starte zentrale FastAPI (Port 8000)..."
-  nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > /workspace/fastapi.log 2>&1 &
+  nohup python3.13 -m uvicorn app.main:app --host 0.0.0.0 --port 8000 > /workspace/fastapi.log 2>&1 &
 else
   echo "⏭️  FASTAPI=off – überspringe FastAPI."
 fi
