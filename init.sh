@@ -6,7 +6,7 @@ source /workspace/tools.config 2>/dev/null || true
 export HF_HUB_ENABLE_HF_TRANSFER=1
 export HF_HOME=/workspace/.cache/hf
 
-MODELS_DIR="/workspace/LTX-2"
+MODELS_DIR="/workspace/LTX-2/checkpoints"
 mkdir -p "$MODELS_DIR/ltx-2"
 mkdir -p "$MODELS_DIR/gemma-3"
 
@@ -30,9 +30,6 @@ else
     echo "⏭️  DW_LTX2 ist OFF – Überspringe Modell-Downloads."
 fi
 
-# 3. Allgemeine Aufgaben (laufen immer, wenn init.sh startet)
-echo "🧹 JUPYTER-FIX: Entferne Cache-Leichen..."
-find "$MODELS_DIR" -name ".cache" -type d -exec rm -rf {} +
 
 # Hier kannst du in Zukunft einfach neue Befehle hinzufügen!
 echo "🏁 init.sh fertig."
