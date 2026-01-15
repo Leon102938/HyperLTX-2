@@ -1,26 +1,20 @@
 #!/bin/bash
-
 set -euo pipefail
 
-
-# ============ 📂 PFAD SETZEN ============
-PROJECT_ROOT="/workspace/LTX-2"
-cd "$PROJECT_ROOT"
-
-# Rechte fixen (Einmalig, schnell)
-chmod -R 777 "$PROJECT_ROOT" || true
-
-# ============ 🐍 PYTHON UMGEBUNG ============
-# Wir setzen nur den Pfad, installieren aber NICHTS mehr.
-export PYTHONPATH="$PROJECT_ROOT:$PROJECT_ROOT/packages/ltx-core/src:$PROJECT_ROOT/packages/ltx-pipelines/src:${PYTHONPATH:-}"
-
-# ============ 🔧 PyTorch & Hardware Specs ============
+# ============ 🔧 Anti-Fragmentation für PyTorch ============
 export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-max_split_size_mb:256}"
+# (optional; falls root nicht erlaubt, diesen Block weglassen)
 if [ -w /etc/profile.d ]; then
-  echo "export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:256" > /etc/profile.d/pytorch_alloc.sh || true
+  echo 'export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:256' > /etc/profile.d/pytorch_alloc.sh || true
 fi
 
-[ -f "./tools.config" ] && source ./tools.config
+# -------- tools.config nur laden, wenn vorhanden --------
+if [ -f ./tools.config ]; then
+  # shellcheck disable=SC1091
+  source ./tools.config
+fi
+
+
 
 
 # 🌍 BASE_URL automatisch setzen (RUNPOD_POD_ID sicher expandieren)
@@ -35,6 +29,14 @@ else
   echo "✅ BASE_URL erfolgreich gesetzt: $BASE_URL"
 fi
 
+# ============ 🔧 PYTHONPATH (ohne unbound) ============
+# Falls PYTHONPATH leer/unset ist → nur /workspace/app setzen; sonst anhängen.
+export PYTHONPATH="/workspace:/workspace/LTX-2:/workspace/LTX-2/packages/ltx-core/src:/workspace/LTX-2/packages/ltx-pipelines/src:${PYTHONPATH:-}"
+
+
+# Wechsel in das Hauptverzeichnis, damit uvicorn und jupyter die richtigen relativen Pfade haben
+cd /workspace/LTX-2 || echo "Ordner LTX-2 noch nicht da, warte auf init..."
+
 
 # ============ 🔷 JUPYTERLAB THEME ============
 mkdir -p /root/.jupyter/lab/user-settings/@jupyterlab/apputils-extension
@@ -44,7 +46,7 @@ echo '{ "theme": "JupyterLab Dark" }' \
 # ============ 🔷 JUPYTERLAB (Port 8888) ============
 if [ "${JUPYTER:-off}" = "on" ]; then
   echo "🧠 Starte JupyterLab (Port 8888)..."
-  nohup python3.13 -m jupyter lab \
+  nohup jupyter lab \
     --ip=0.0.0.0 \
     --port=8888 \
     --no-browser \
@@ -60,7 +62,7 @@ fi
 # ============ 🔷 FASTAPI (Port 8000) ============
 if [ "${FASTAPI:-on}" = "on" ]; then
   echo "🚀 Starte zentrale FastAPI (Port 8000)..."
-  nohup python3.13 -m uvicorn app.main:app --host 0.0.0.0 --port 8000 > /workspace/fastapi.log 2>&1 &
+  nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > /workspace/fastapi.log 2>&1 &
 else
   echo "⏭️  FASTAPI=off – überspringe FastAPI."
 fi
@@ -76,4 +78,3 @@ fi
 # ============ ✅ ABSCHLUSS ============
 echo "✅ Dienste wurden gestartet (je nach config). Logs: /workspace/fastapi.log /workspace/jupyter.log"
 tail -f /dev/null
-
