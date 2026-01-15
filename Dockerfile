@@ -18,7 +18,6 @@ ENV DEBIAN_FRONTEND=noninteractive \
 WORKDIR /workspace
 
 
-
 # 📦 Restliche Python-Deps
 # 4) Rest über requirements.txt (einmal!)
 COPY requirements.txt /tmp/requirements.txt
@@ -37,6 +36,11 @@ COPY . .
 RUN chmod +x /workspace/start.sh
 RUN chmod +x /workspace/init.sh
 RUN chmod +x /workspace/logs.sh
+
+
+# 4. DER OFFIZIELLE PERMISSION-FIX
+RUN chown -R root:root /workspace && chmod -R 777 /workspace
+
 
 EXPOSE 8888 8000
 CMD ["/bin/bash","-lc","/workspace/start.sh"]
