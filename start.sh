@@ -29,14 +29,6 @@ else
   echo "✅ BASE_URL erfolgreich gesetzt: $BASE_URL"
 fi
 
-# ============ 🔧 PYTHONPATH (ohne unbound) ============
-# Falls PYTHONPATH leer/unset ist → nur /workspace/app setzen; sonst anhängen.
-export PYTHONPATH="/workspace:/workspace/LTX-2:/workspace/LTX-2/packages/ltx-core/src:/workspace/LTX-2/packages/ltx-pipelines/src:${PYTHONPATH:-}"
-
-
-# Wechsel in das Hauptverzeichnis, damit uvicorn und jupyter die richtigen relativen Pfade haben
-cd /workspace/LTX-2 || echo "Ordner LTX-2 noch nicht da, warte auf init..."
-
 
 # ============ 🔷 JUPYTERLAB THEME ============
 mkdir -p /root/.jupyter/lab/user-settings/@jupyterlab/apputils-extension
