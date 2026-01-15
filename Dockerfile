@@ -12,6 +12,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     HF_HOME=/workspace/.cache/hf \
     TRANSFORMERS_CACHE=/workspace/.cache/hf/transformers \
     HF_HUB_CACHE=/workspace/.cache/hf/hub \
+    PATH="/home/root/.local/bin:${PATH}" \
     PYTHONPATH="${PYTHONPATH}:/workspace/LTX-2/packages/ltx-core/src:/workspace/LTX-2/packages/ltx-pipelines/src"
 
 
