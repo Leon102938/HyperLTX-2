@@ -19,8 +19,6 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 WORKDIR /workspace
 
-# 1. Gemma 3 Fix (Immer als erstes!)
-RUN python -m pip install --no-cache-dir git+https://github.com/huggingface/transformers.git
 
 
 # 📦 Restliche Python-Deps
