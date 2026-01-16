@@ -1,36 +1,43 @@
 #!/bin/bash
 set -e
 
-# 1. Config laden
+# 1. Config laden & Caches setzen
 source /workspace/tools.config 2>/dev/null || true
 export HF_HUB_ENABLE_HF_TRANSFER=1
 export HF_HOME=/workspace/.cache/hf
 
+# Feste Pfad-Definition (Passend zu deinem ti2vid_two_stages Skript)
 MODELS_DIR="/workspace/LTX-2/checkpoints"
 mkdir -p "$MODELS_DIR/ltx-2"
 mkdir -p "$MODELS_DIR/gemma-3"
 
-# 2. Modell-Download nur wenn DW_LTX2=on
-if [ "${DW_LTX2:-off}" = "on" ]; then
-    echo "📥 DW_LTX2 ist ON – Starte Downloads..."
+# 2. Intelligenter Auto-Download
+# Prüft, ob das Hauptmodell fehlt. Wenn ja -> Startet Download.
+if [ ! -f "$MODELS_DIR/ltx-2/ltx-2-19b-dev-fp8.safetensors" ]; then
+    echo "🚀 Modelle fehlen – Starte automatischen Setup-Prozess..."
     
-    # Login für Gemma 3
-    if [ -n "${HF_TOKEN:-}" ]; then
-        huggingface-cli login --token "$HF_TOKEN"
+    # Login nur wenn Token vorhanden (wichtig für Gemma 3)
+    if [ -n "$HF_TOKEN" ]; then
+        echo "🔑 HF_TOKEN gefunden. Logge ein..."
+        huggingface-cli login --token "$HF_TOKEN" --add-to-git-credential
+    else
+        echo "⚠️  Kein HF_TOKEN in RunPod gesetzt! Gemma-3 Download könnte scheitern."
     fi
 
-    # LTX-2 & Gemma Downloads
+    # LTX-2 & Gemma Downloads in die feste Struktur
+    echo "📥 Lade Modelle nach $MODELS_DIR..."
     huggingface-cli download Lightricks/LTX-2 ltx-2-19b-dev-fp8.safetensors --local-dir "$MODELS_DIR/ltx-2" --local-dir-use-symlinks False
     huggingface-cli download Lightricks/LTX-2 ltx-2-spatial-upscaler-x2-1.0.safetensors --local-dir "$MODELS_DIR/ltx-2" --local-dir-use-symlinks False
     huggingface-cli download Lightricks/LTX-2 ltx-2-19b-distilled-lora-384.safetensors --local-dir "$MODELS_DIR/ltx-2" --local-dir-use-symlinks False
     huggingface-cli download google/gemma-3-12b-it --local-dir "$MODELS_DIR/gemma-3" --local-dir-use-symlinks False
 
-    echo "✅ Downloads abgeschlossen."
+    echo "✅ Alle Downloads abgeschlossen."
 else
-    echo "⏭️  DW_LTX2 ist OFF – Überspringe Modell-Downloads."
+    echo "✅ Modelle bereits in $MODELS_DIR vorhanden. Überspringe Download."
 fi
 
+# 3. Rechte-Fix für das RunPod-Interface (Damit Ordner immer öffenbar sind)
+chmod -R 777 "$MODELS_DIR"
 
-# Hier kannst du in Zukunft einfach neue Befehle hinzufügen!
-echo "🏁 init.sh fertig."
+echo "🏁 init.sh erfolgreich beendet."
 touch /workspace/status/init_done
