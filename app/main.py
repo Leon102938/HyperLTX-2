@@ -1,47 +1,49 @@
+# /workspace/app/main.py
 import os
 from pathlib import Path
-
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
 
 from .editor_api import EditRequest, render_edit
-from .OVI import OVIJobRequest, submit_job, get_status, get_file, OVI_ROOT, OVI_CKPT_DIR
-from .zimage import router as zimage_router
+from .LTX2 import LTX2JobRequest, submit_job, get_status # ✅ Neu LTX2
 
-app = FastAPI(title="OVI API", version="1.0")
+app = FastAPI(title="LTX-2 API", version="1.0")
 
-# ---- static exports (falls du das nutzt) ----
-BASE_DIR = Path(__file__).resolve().parent.parent  # /workspace
+# Exports für n8n (Link-basiert statt Binary)
+BASE_DIR = Path("/workspace")
 EXPORT_DIR = BASE_DIR / "exports"
 EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/exports", StaticFiles(directory=str(EXPORT_DIR)), name="exports")
+# Mount für Jobs (damit Videos per Link abrufbar sind)
+app.mount("/jobs", StaticFiles(directory="/workspace/jobs"), name="jobs")
 
-app.mount("/exports", StaticFiles(directory=str(EXPORT_DIR), html=False), name="exports")
-
-# ---- Routers ----
-app.include_router(zimage_router, prefix="/zimage", tags=["zimage"])
-
-# ---- Ready Flags ----
-OVI_FLAG_FILE = "/workspace/status/ovi_ready"
-ZIMAGE_FLAG_FILE = "/workspace/status/zimage_ready"
-
+# Das Flag aus deiner init.sh
+INIT_FLAG = "/workspace/status/init_done"
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "OVI_ROOT": OVI_ROOT, "OVI_CKPT_DIR": OVI_CKPT_DIR}
-
+    return {"status": "ok", "init_ready": os.path.exists(INIT_FLAG)}
 
 @app.get("/DW/ready")
 def dw_ready():
-    ready = os.path.exists(OVI_FLAG_FILE)
-    return {"ready": ready, "message": "OVI bereit." if ready else "OVI wird noch vorbereitet."}
+    ready = os.path.exists(INIT_FLAG)
+    return {"ready": ready, "message": "Modelle bereit." if ready else "Download läuft noch..."}
 
+# ---- LTX-2 Endpoints ----
+@app.post("/ltx2/submit")
+async def ltx2_submit(request: LTX2JobRequest):
+    jid = await submit_job(request)
+    return {"job_id": jid, "status_url": f"/ltx2/status/{jid}"}
 
+@app.get("/ltx2/status/{job_id}")
+def ltx2_status(job_id: str):
+    status = get_status(job_id)
+    if "output_file" in status and status["status"] == "succeeded":
+        # Erstellt den Link für n8n
+        status["video_url"] = f"/jobs/{job_id}/{job_id}.mp4"
+    return status
 
-# ---- Editor ----
+# ---- Editor bleibt wie er ist ----
 @app.post("/editor/render")
 def editor_render(request: EditRequest):
     return render_edit(request)
-
-
-

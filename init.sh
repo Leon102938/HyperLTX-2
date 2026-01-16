@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+
+mkdir -p /workspace/status
+
 # 1. Config laden & Caches setzen
 source /workspace/tools.config 2>/dev/null || true
 export HF_HUB_ENABLE_HF_TRANSFER=1
