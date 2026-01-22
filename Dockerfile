@@ -13,7 +13,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     TRANSFORMERS_CACHE=/workspace/.cache/hf/transformers \
     HF_HUB_CACHE=/workspace/.cache/hf/hub \
     PATH="/home/root/.local/bin:${PATH}" \
-    PYTHONPATH="${PYTHONPATH}:/workspace/LTX-2/packages/ltx-core/src:/workspace/LTX-2/packages/ltx-pipelines/src"
+# FIX: PYTHONPATH sauber ohne Selbstreferenz setzen
+    PYTHONPATH="/workspace/LTX-2/packages/ltx-core/src:/workspace/LTX-2/packages/ltx-pipelines/src"
 
 RUN apt-get update && apt-get install -y software-properties-common && \
     add-apt-repository ppa:deadsnakes/ppa && \
@@ -42,13 +43,12 @@ RUN python -m pip install --no-cache-dir --upgrade pip && \
     torchaudio \
     --index-url https://download.pytorch.org/whl/cu128
 
-# 4. Vorbereitung für Flash Attention (Ninja beschleunigt den Build extrem)
-RUN python -m pip install ninja packaging wheel setuptools
 
-# 5. Die Geheimwaffe: Flash Attention 3
-# Maximale Geschwindigkeit und Präzision für die LTX-2 Architektur
-# Hinweis: Der Build hier kann 10-15 Min dauern!
-RUN python -m pip install --no-cache-dir git+https://github.com/dao-ailab/flash-attention.git#subdirectory=v3
+# 4. Flash Attention (Die stabilste High-Performance Version)
+# Wir installieren die neueste Version von flash-attn. 
+# Diese nutzt auf Hopper-GPUs automatisch die besten Kernel und ist für LTX-2 perfekt.
+RUN python -m pip install ninja packaging wheel
+RUN python -m pip install --no-cache-dir flash-attn --no-build-isolation
 
 WORKDIR /workspace
 
