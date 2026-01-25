@@ -79,17 +79,38 @@ class _LTX2Service:
                 job.started_at = time.time()
                 self._persist(job)
 
-                # FIX: Unterstriche zu Bindestrichen für LTX-Skript
+                # Basis-Kommando für die Two-Stage Pipeline
                 cmd = [
                     LTX_PYTHON, "packages/ltx-pipelines/src/ltx_pipelines/ti2vid_two_stages.py",
                     "--checkpoint-path", f"{LTX_CKPT_DIR}/ltx-2/ltx-2-19b-dev-fp8.safetensors",
                     "--spatial-upsampler-path", f"{LTX_CKPT_DIR}/ltx-2/ltx-2-spatial-upscaler-x2-1.0.safetensors",
-                    "--distilled-lora", f"{LTX_CKPT_DIR}/ltx-2/ltx-2-19b-distilled-lora-384.safetensors", "1.0",
+                    "--distilled-lora", f"{LTX_CKPT_DIR}/ltx-2/ltx-2-19b-distilled-lora-384.safetensors", "0.8",
                     "--gemma-root", f"{LTX_CKPT_DIR}/gemma-3",
-                    "--prompt", job.prompt, "--output-path", job.output_file, "--enable-fp8"
+                    "--prompt", job.prompt, 
+                    "--output-path", job.output_file, 
+                    "--enable-fp8"
                 ]
-                for k, v in job.overrides.items():
-                    cmd.extend([f"--{k.replace('_', '-')}", str(v)])
+
+                # Dynamische Parameter-Logik
+                ov = job.overrides or {}
+
+                # 1. Image-to-Video Logik
+                if "img_path" in ov and ov["img_path"]:
+                    cmd.extend(["--image", str(ov["img_path"]), "0", "1.0"])
+
+                # 2. LoRA Logik (Unterstützt lora1, lora2, lora3 aus n8n)
+                for i in range(1, 4):
+                    l_key = f"lora{i}"
+                    if l_key in ov and ov[l_key] and isinstance(ov[l_key], list):
+                        # Erwartet ["pfad", stärke]
+                        cmd.extend(["--lora", str(ov[l_key][0]), str(ov[l_key][1])])
+
+                # 3. Standard-Parameter Mapping (Bindestrich-Fix)
+                for k, v in ov.items():
+                    if k in ["width", "height", "num_frames", "num_inference_steps", "cfg_guidance_scale", "negative_prompt"]:
+                        cmd.extend([f"--{k.replace('_', '-')}", str(v)])
+                    elif k == "enhance_prompt" and str(v).lower() in ["true", "an", "1"]:
+                        cmd.append("--enhance-prompt")
 
                 try:
                     with open(job.log_file, "w") as lf:
