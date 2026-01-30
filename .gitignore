@@ -41,3 +41,14 @@ wheel_flashattn/*.whl
 *.mp4
 *.png
 *.jpg
+
+
+
+.cache/
+models/
+LTX-2/
+Z-Image/
+*.png
+*.safetensors
+*.bin
+init_download.log
