@@ -1,7 +1,7 @@
 import torch
 from diffusers import ZImagePipeline
 
-out="/workspace/Ovi/inputs/zimage_test.png"
+out="/workspace/Z_Turbo/zimage_test.png"
 
 dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float16
 
