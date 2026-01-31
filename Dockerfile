@@ -41,10 +41,6 @@ RUN python -m pip install --no-cache-dir --upgrade pip && \
     --index-url https://download.pytorch.org/whl/cu128
 
 
-# 5. Flash Attention Installation (Kompilierung für deine Hardware)
-# Das wird jetzt funktionieren, aber rechne mit 10-20 Minuten Zeit!
-RUN python -m pip install --no-cache-dir flash-attn --no-build-isolation
-
 WORKDIR /workspace
 
 # 6. Restliche Python-Deps
