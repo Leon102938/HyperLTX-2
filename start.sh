@@ -59,7 +59,7 @@ else
   echo "⏭️  FASTAPI=off – überspringe FastAPI."
 fi
 
-# ============ 🔷 Download/Init (OVI) ============
+# ============ 🔷 Download/Init (LTX) ============
 # 🚀 INIT-LOGIK (Dein Wunsch: Separater Skript-Start)
 if [ "${INIT_SCRIPT:-off}" = "on" ]; then
   echo "🚀 Starte init.sh (Hintergrund)..."
