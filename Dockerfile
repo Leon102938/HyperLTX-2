@@ -11,7 +11,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     HF_HOME=/workspace/.cache/hf \
     # FIX: Pfade für CUDA Compiler setzen
     CUDA_HOME=/usr/local/cuda \
-    PATH="/usr/local/cuda/bin:/home/root/.local/bin:${PATH}" \
+    PATH="/usr/local/cuda/bin:/root/.local/bin:${PATH}" \
     LD_LIBRARY_PATH="/usr/local/cuda/lib64:${LD_LIBRARY_PATH}" \
     PYTHONPATH="/workspace/LTX-2/packages/ltx-core/src:/workspace/LTX-2/packages/ltx-pipelines/src"
 
@@ -40,8 +40,6 @@ RUN python -m pip install --no-cache-dir --upgrade pip && \
     torchaudio \
     --index-url https://download.pytorch.org/whl/cu128
 
-# 4. Flash Attention BUILD-TOOLS (WICHTIG: psutil hinzugefügt!)
-RUN python -m pip install --no-cache-dir ninja packaging wheel setuptools psutil
 
 # 5. Flash Attention Installation (Kompilierung für deine Hardware)
 # Das wird jetzt funktionieren, aber rechne mit 10-20 Minuten Zeit!
