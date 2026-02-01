@@ -49,7 +49,12 @@ RUN python -m pip install --no-cache-dir -r /tmp/requirements.txt
 
 # 7. Scripte & Start
 COPY . .
-RUN chmod +x /workspace/*.sh
+
+
+# FIX: Hier werden alle Shell-Scripte ausführbar gemacht 
+# UND die Windows-Zeilenenden (\r) entfernt, falls vorhanden.
+RUN chmod +x /workspace/*.sh && \
+    sed -i 's/\r$//' /workspace/*.sh
 
 EXPOSE 8888 8000
 CMD ["/bin/bash","-lc","/workspace/start.sh"]

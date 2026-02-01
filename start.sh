@@ -59,7 +59,13 @@ else
   echo "⏭️  FASTAPI=off – überspringe FastAPI."
 fi
 
-
+# ============ 🔷 Download/Init (LTX) ============
+# 🚀 INIT-LOGIK (Dein Wunsch: Separater Skript-Start)
+if [ "${INIT_SCRIPT:-off}" = "on" ]; then
+  echo "🚀 Starte init.sh (Hintergrund)..."
+  chmod +x /workspace/init.sh
+  nohup bash /workspace/init.sh > /workspace/init_download.log 2>&1 & disown
+fi
 
 # ============ ✅ ABSCHLUSS ============
 echo "✅ Dienste wurden gestartet (je nach config). Logs: /workspace/fastapi.log /workspace/jupyter.log"
