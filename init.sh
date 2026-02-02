@@ -88,8 +88,8 @@ echo "📥 Prüfe LoRA Downloads..."
     hf_download_file "Lightricks/LTX-2-19b-LoRA-Camera-Control-Static" "ltx-2-19b-lora-camera-control-static.safetensors" "$LORA_DIR"
 
 # Lora 4: Image2Video Adapter
-[[ "${Lora4}" == "on" && ! -f "$LORA_DIR/ltx2_i2v_adapter.safetensors" ]] && \
-    hf_download_file "MachineDelusions/LTX-2_Image2Video_Adapter_LoRa" "ltx2_i2v_adapter.safetensors" "$LORA_DIR"
+[[ "${Lora4}" == "on" && ! -f "$LORA_DIR/LTX-2-Image2Vid-Adapter.safetensors" ]] && \
+    hf_download_file "MachineDelusions/LTX-2_Image2Video_Adapter_LoRa" "LTX-2-Image2Vid-Adapter.safetensors" "$LORA_DIR"
 
 # ----------------------------------------------------
 # 7. Abschluss
