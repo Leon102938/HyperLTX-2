@@ -41,10 +41,12 @@ RUN python -m pip install --no-cache-dir --upgrade pip && \
     --index-url https://download.pytorch.org/whl/cu128
 
 
-# FlashAttention (Source Build, passend zu torch 2.7 + cu128)
-RUN python -m pip install --no-cache-dir -U packaging einops \
- && python -m pip install --no-cache-dir "flash-attn==2.8.3" --no-build-isolation \
+RUN python -m pip install --no-cache-dir -U pip setuptools wheel \
+ && python -m pip install --no-cache-dir ninja packaging psutil pybind11 einops
+
+RUN python -m pip install --no-cache-dir "flash-attn==2.8.3" --no-build-isolation \
  && python -c "import flash_attn; print('flash_attn ok', flash_attn.__version__)"
+
 
 
 WORKDIR /workspace
