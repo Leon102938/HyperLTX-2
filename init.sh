@@ -42,7 +42,7 @@ mkdir -p /workspace/status "$MODELS_DIR/ltx-2" "$MODELS_DIR/gemma-3" "$LORA_DIR"
 if [ "${Z_Image_Turbo}" = "on" ]; then
     echo "[zimage] Z_Image_Turbo is ON. Checking cache..."
     hf_download_all "Tongyi-MAI/Z-Image-Turbo" "allow_patterns=['*.safetensors', '*.json', '*.txt']"
-    touch "/workspace/status/zimage_turbo_ready"
+    touch "/workspace/status/zimage_ready"
 fi
 
 if [ "${Z_Image_Base}" = "on" ]; then

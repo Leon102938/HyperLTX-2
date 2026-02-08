@@ -6,6 +6,10 @@ from fastapi.staticfiles import StaticFiles
 
 from .editor_api import EditRequest, render_edit
 from .LTX2 import LTX2JobRequest, submit_job, get_status # ✅ Neu LTX2
+from .zimage import router as zimage_router
+
+
+
 
 app = FastAPI(title="LTX-2 API", version="1.0")
 
@@ -17,12 +21,27 @@ app.mount("/exports", StaticFiles(directory=str(EXPORT_DIR)), name="exports")
 # Mount für Jobs (damit Videos per Link abrufbar sind)
 app.mount("/jobs", StaticFiles(directory="/workspace/jobs"), name="jobs")
 
+# ---- Routers ----
+app.include_router(zimage_router, prefix="/zimage", tags=["zimage"])
+
+
+
 # Das Flag aus deiner init.sh
 INIT_FLAG = "/workspace/status/init_done"
+ZIMAGE_FLAG_FILE = "/workspace/status/zimage_ready"
+
 
 @app.get("/health")
 def health():
     return {"status": "ok", "init_ready": os.path.exists(INIT_FLAG)}
+
+
+
+@app.get("/DW/zimage_ready")
+def dw_zimage_ready():
+    ready = os.path.exists(ZIMAGE_FLAG_FILE)
+    return {"ready": ready, "message": "Z-Image bereit." if ready else "Z-Image wird noch vorbereitet."}
+
 
 @app.get("/DW/ready")
 def dw_ready():
