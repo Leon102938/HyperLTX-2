@@ -3,6 +3,7 @@ import json
 import os
 import time
 import uuid
+import sys
 from pathlib import Path
 from typing import Optional, Dict, Any
 
@@ -13,9 +14,10 @@ from pydantic import BaseModel, Field
 router = APIRouter()
 
 # ---- Config ----
-ZIMAGE_PY = os.environ.get("ZIMAGE_PY", "/opt/venvs/zimage/bin/python")
+# sys.executable findet automatisch das Python, mit dem du die API startest.
+# Das ersetzt den festen Pfad, der vorher zum "No such file or directory" Fehler geführt hat.
+ZIMAGE_PY = sys.executable 
 HF_HOME = os.environ.get("HF_HOME", "/workspace/.cache/hf")
-# Wir holen die dynamische BASE_URL vom RunPod
 BASE_URL = os.environ.get("BASE_URL", "").rstrip("/") 
 
 STATUS_DIR = Path(os.environ.get("STATUS_DIR", "/workspace/status"))
@@ -54,8 +56,6 @@ def _read_status(job_id: str) -> Dict[str, Any]:
     
     data = json.loads(p.read_text(encoding="utf-8"))
     
-    # ✅ DYNAMISCHE URL ERZEUGEN
-    # Wenn der Job erfolgreich war, bauen wir den absoluten Link zusammen
     if data.get("state") == "succeeded":
         data["file_url"] = f"{BASE_URL}/zimage/jobs/{job_id}/file"
     
@@ -63,6 +63,10 @@ def _read_status(job_id: str) -> Dict[str, Any]:
 
 
 async def _run_job(job_id: str) -> None:
+    """
+    Startet den Bildgenerator. Die Logs werden jetzt sofort in Dateien geschrieben,
+    damit man sie live in JupyterLab mitverfolgen kann.
+    """
     d = _job_dir(job_id)
     req_path = d / "request.json"
     out_path = d / "out.png"
@@ -71,84 +75,84 @@ async def _run_job(job_id: str) -> None:
 
     _write_status(job_id, "running")
 
+    # Der eigentliche Generator-Code
     worker = r"""
-import os, json, torch
-from diffusers import ZImagePipeline
+import os, json, torch, sys
+try:
+    from diffusers import ZImagePipeline
+    
+    with open(os.environ["JOB_JSON"], "r", encoding="utf-8") as f:
+        req = json.load(f)
 
-with open(os.environ["JOB_JSON"], "r", encoding="utf-8") as f:
-    req = json.load(f)
+    prompt = req["prompt"]
+    width = int(req["width"])
+    height = int(req["height"])
+    steps = int(req["steps"])
+    guidance = float(req["guidance_scale"])
+    seed = req.get("seed", None)
+    out_path = req["out_path"]
 
-prompt = req["prompt"]
-width = int(req["width"])
-height = int(req["height"])
-steps = int(req["steps"])
-guidance = float(req["guidance_scale"])
-seed = req.get("seed", None)
-out_path = req["out_path"]
+    dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float16
+    
+    print(f"Modell wird geladen...")
+    pipe = ZImagePipeline.from_pretrained(
+        "Tongyi-MAI/Z-Image-Turbo",
+        torch_dtype=dtype,
+        low_cpu_mem_usage=False,
+    )
 
-dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float16
+    if torch.cuda.is_available():
+        pipe = pipe.to("cuda")
 
-pipe = ZImagePipeline.from_pretrained(
-    "Tongyi-MAI/Z-Image-Turbo",
-    torch_dtype=dtype,
-    low_cpu_mem_usage=False,
-)
+    gen = None
+    if seed is not None:
+        gen = torch.Generator("cuda" if torch.cuda.is_available() else "cpu").manual_seed(int(seed))
 
-if torch.cuda.is_available():
-    pipe = pipe.to("cuda")
+    print(f"Generierung startet für: {prompt}")
+    img = pipe(
+        prompt=prompt,
+        height=height,
+        width=width,
+        num_inference_steps=steps,
+        guidance_scale=guidance,
+        generator=gen,
+    ).images[0]
 
-gen = None
-if seed is not None:
-    gen = torch.Generator("cuda" if torch.cuda.is_available() else "cpu").manual_seed(int(seed))
-
-img = pipe(
-    prompt=prompt,
-    height=height,
-    width=width,
-    num_inference_steps=steps,
-    guidance_scale=guidance,
-    generator=gen,
-).images[0]
-
-os.makedirs(os.path.dirname(out_path), exist_ok=True)
-img.save(out_path)
-print(out_path)
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    img.save(out_path)
+    print(f"Fertig! Bild unter {out_path} gespeichert.")
+except Exception as e:
+    print(f"FEHLER: {str(e)}", file=sys.stderr)
+    sys.exit(1)
 """
 
     env = os.environ.copy()
     env["HF_HOME"] = HF_HOME
     env["JOB_JSON"] = str(req_path)
+    # Sorgt dafür, dass die lokale ZImagePipeline gefunden wird
+    env["PYTHONPATH"] = os.environ.get("PYTHONPATH", "") + ":" + str(Path.cwd())
 
-    proc = await asyncio.create_subprocess_exec(
-        ZIMAGE_PY, "-c", worker,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-        env=env,
-    )
+    try:
+        # Die Log-Dateien werden hier direkt zum Schreiben geöffnet
+        with open(stdout_path, "wb") as out_f, open(stderr_path, "wb") as err_f:
+            proc = await asyncio.create_subprocess_exec(
+                ZIMAGE_PY, "-c", worker,
+                stdout=out_f,
+                stderr=err_f,
+                env=env,
+            )
+            # Wir warten, bis der Prozess fertig ist
+            return_code = await proc.wait()
 
-    out_b, err_b = await proc.communicate()
-    stdout_path.write_bytes(out_b or b"")
-    stderr_path.write_bytes(err_b or b"")
+        if return_code != 0:
+            _write_status(job_id, "failed", extra={"error": f"Prozess beendet mit Fehlercode {return_code}"})
+        elif not out_path.exists():
+            _write_status(job_id, "failed", extra={"error": "Bilddatei wurde nicht erstellt."})
+        else:
+            _write_status(job_id, "succeeded", extra={"output_path": str(out_path)})
 
-    if proc.returncode != 0:
-        _write_status(job_id, "failed", extra={
-            "error": f"zimage subprocess exit code {proc.returncode}",
-            "stderr_log": str(stderr_path),
-        })
-        return
-
-    if not out_path.exists():
-        _write_status(job_id, "failed", extra={
-            "error": "out.png missing after generation",
-            "stdout_log": str(stdout_path),
-            "stderr_log": str(stderr_path),
-        })
-        return
-
-    _write_status(job_id, "succeeded", extra={
-        "output_path": str(out_path),
-        "file_endpoint": f"/zimage/jobs/{job_id}/file",
-    })
+    except Exception as e:
+        _write_status(job_id, "failed", extra={"error": f"API konnte Job nicht starten: {str(e)}"})
 
 
 @router.get("/ready")
@@ -183,7 +187,6 @@ async def zimage_submit(req: ZImageJobRequest):
 @router.get("/jobs/{job_id}")
 def zimage_status(job_id: str):
     try:
-        # Hier wird jetzt automatisch die BASE_URL in das Resultat gemischt
         return _read_status(job_id)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="job_id not found")
