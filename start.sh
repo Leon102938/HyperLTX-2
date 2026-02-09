@@ -3,6 +3,9 @@ set -euo pipefail
 
 cd /app
 
+mkdir -p /workspace
+
+
 
 # ============ 🔧 Anti-Fragmentation für PyTorch ============
 export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-max_split_size_mb:256}"
@@ -23,7 +26,7 @@ fi
 
 # 🌍 BASE_URL automatisch setzen (RUNPOD_POD_ID sicher expandieren)
 echo "🌐 Ermittle dynamische RunPod Proxy-URL..."
-POD_ID="${RUNPOD_POD_ID:-}"
+POD_ID="${RUNPOD_POD_ID:-${POD_ID:-}}"
 if [ -z "$POD_ID" ]; then
   echo "❌ FEHLER: RUNPOD_POD_ID nicht gesetzt – .env nicht geschrieben!"
 else
@@ -39,6 +42,8 @@ mkdir -p /root/.jupyter/lab/user-settings/@jupyterlab/apputils-extension
 echo '{ "theme": "JupyterLab Dark" }' \
   > /root/.jupyter/lab/user-settings/@jupyterlab/apputils-extension/themes.jupyterlab-settings
 
+
+
 # ============ 🔷 JUPYTERLAB (Port 8888) ============
 if [ "${JUPYTER:-off}" = "on" ]; then
   echo "🧠 Starte JupyterLab (Port 8888)..."
@@ -47,13 +52,18 @@ if [ "${JUPYTER:-off}" = "on" ]; then
     --port=8888 \
     --no-browser \
     --allow-root \
-    --NotebookApp.token='' \
-    --NotebookApp.password='' \
-    --NotebookApp.disable_check_xsrf=True \
-    --NotebookApp.notebook_dir='/workspace' \
+    --ServerApp.token='' \
+    --ServerApp.password='' \
+    --ServerApp.disable_check_xsrf=True \
+    --ServerApp.root_dir=/workspace \
     --ServerApp.allow_origin='*' \
     > /workspace/jupyter.log 2>&1 &
+  echo "✅ Jupyter gestartet. Log: /workspace/jupyter.log"
+else
+  echo "⏭️  JUPYTER=off – überspringe Jupyter."
 fi
+
+
 
 # ============ 🔷 FASTAPI (Port 8000) ============
 if [ "${FASTAPI:-on}" = "on" ]; then
@@ -68,7 +78,7 @@ fi
 if [ "${INIT_SCRIPT:-off}" = "on" ]; then
   echo "🚀 Starte init.sh (Hintergrund)..."
   chmod +x /app/init.sh
-  nohup bash /app/init.sh > /workspace/init_download.log 2>&1 & disown
+  nohup bash /app/init.sh > /workspace/init_download.log 2>&1 &
 fi
 
 
