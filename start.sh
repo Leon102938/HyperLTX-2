@@ -1,6 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
+cd /app
+
+
 # ============ 🔧 Anti-Fragmentation für PyTorch ============
 export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-max_split_size_mb:256}"
 # (optional; falls root nicht erlaubt, diesen Block weglassen)
@@ -8,10 +11,11 @@ if [ -w /etc/profile.d ]; then
   echo 'export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:256' > /etc/profile.d/pytorch_alloc.sh || true
 fi
 
-# -------- tools.config nur laden, wenn vorhanden --------
-if [ -f ./tools.config ]; then
-  # shellcheck disable=SC1091
-  source ./tools.config
+
+
+# tools.config ins Volume spiegeln, damit init.sh sie sicher findet
+if [ -f /app/tools.config ]; then
+  cp -f /app/tools.config /workspace/tools.config
 fi
 
 
@@ -63,9 +67,10 @@ fi
 # 🚀 INIT-LOGIK (Dein Wunsch: Separater Skript-Start)
 if [ "${INIT_SCRIPT:-off}" = "on" ]; then
   echo "🚀 Starte init.sh (Hintergrund)..."
-  chmod +x /workspace/init.sh
-  nohup bash /workspace/init.sh > /workspace/init_download.log 2>&1 & disown
+  chmod +x /app/init.sh
+  nohup bash /app/init.sh > /workspace/init_download.log 2>&1 & disown
 fi
+
 
 # ============ ✅ ABSCHLUSS ============
 echo "✅ Dienste wurden gestartet (je nach config). Logs: /workspace/fastapi.log /workspace/jupyter.log"

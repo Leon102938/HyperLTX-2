@@ -52,7 +52,7 @@ RUN python -m pip install --no-cache-dir "flash-attn==2.8.3" --no-build-isolatio
 
 
 
-WORKDIR /workspace
+WORKDIR /app
 
 # 6. Restliche Python-Deps
 COPY requirements.txt /tmp/requirements.txt
@@ -64,8 +64,8 @@ COPY . .
 
 # FIX: Hier werden alle Shell-Scripte ausführbar gemacht 
 # UND die Windows-Zeilenenden (\r) entfernt, falls vorhanden.
-RUN chmod +x /workspace/*.sh && \
-    sed -i 's/\r$//' /workspace/*.sh
+RUN chmod +x /app/*.sh && \
+    sed -i 's/\r$//' /app/*.sh
 
 EXPOSE 8888 8000
-CMD ["/bin/bash","-lc","/workspace/start.sh"]
+CMD ["/bin/bash","-lc","/app/start.sh"]
