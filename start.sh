@@ -45,7 +45,7 @@ echo '{ "theme": "JupyterLab Dark" }' \
 
 
 # ============ 🔷 JUPYTERLAB (Port 8888) ============
-if [ "${JUPYTER:-off}" = "on" ]; then
+if [ "${JUPYTER:-on}" = "on" ]; then
   echo "🧠 Starte JupyterLab (Port 8888)..."
   nohup jupyter lab \
     --ip=0.0.0.0 \
