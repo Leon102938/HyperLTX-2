@@ -13,10 +13,11 @@ fi
 
 
 
-# tools.config ins Volume spiegeln, damit init.sh sie sicher findet
+# -------- tools.config nur laden, wenn vorhanden --------
 if [ -f /workspace/tools.config ]; then
-  cp -f /workspace/tools.config /workspace/tools.config
+  source /workspace/tools.config
 fi
+
 
 
 
