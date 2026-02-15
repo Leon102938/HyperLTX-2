@@ -80,23 +80,29 @@ class _LTX2Service:
                 self._persist(job)
 
                 # Basis-Kommando für die Two-Stage Pipeline
+                # Dynamische Parameter-Logik
+                ov = job.overrides or {}
+                # Simple Strength Override (wie bei LoRAs):
+                # - distilled_strength (preferred)
+                # - distilled_lora_strength (alias)
+                distilled_strength = ov.get("distilled_strength", ov.get("distilled_lora_strength", 0.8))
+
                 cmd = [
                     LTX_PYTHON, "packages/ltx-pipelines/src/ltx_pipelines/ti2vid_two_stages.py",
                     "--checkpoint-path", f"{LTX_CKPT_DIR}/ltx-2/ltx-2-19b-dev-fp8.safetensors",
                     "--spatial-upsampler-path", f"{LTX_CKPT_DIR}/ltx-2/ltx-2-spatial-upscaler-x2-1.0.safetensors",
-                    "--distilled-lora", f"{LTX_CKPT_DIR}/ltx-2/ltx-2-19b-distilled-lora-384.safetensors", "0.8",
+                    "--distilled-lora", f"{LTX_CKPT_DIR}/ltx-2/ltx-2-19b-distilled-lora-384.safetensors", str(distilled_strength),
                     "--gemma-root", f"{LTX_CKPT_DIR}/gemma-3",
                     "--prompt", job.prompt, 
                     "--output-path", job.output_file, 
                     "--enable-fp8"
                 ]
 
-                # Dynamische Parameter-Logik
-                ov = job.overrides or {}
-
                 # 1. Image-to-Video Logik
                 if "img_path" in ov and ov["img_path"]:
-                    cmd.extend(["--image", str(ov["img_path"]), "0", "1.0"])
+                    # Simple Strength Override: img_strength (default 1.0)
+                    img_strength = ov.get("img_strength", 1.0)
+                    cmd.extend(["--image", str(ov["img_path"]), "0", str(img_strength)])
 
                 # 2. LoRA Logik (Unterstützt lora1, lora2, lora3 aus n8n)
                 for i in range(1, 4):
