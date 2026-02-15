@@ -64,4 +64,4 @@ COPY . .
 
 
 EXPOSE 8888 8000
-CMD ["/bin/bash","-lc","/workspace/start.sh"]
+CMD ["/bin/bash","-lc","bash /workspace/start.sh"]
