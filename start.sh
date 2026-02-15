@@ -1,9 +1,6 @@
 #!/bin/bash
 set -euo pipefail
 
-cd /app
-
-mkdir -p /workspace
 
 
 
@@ -45,7 +42,7 @@ echo '{ "theme": "JupyterLab Dark" }' \
 
 
 # ============ 🔷 JUPYTERLAB (Port 8888) ============
-if [ "${JUPYTER:-on}" = "on" ]; then
+if [ "${JUPYTER:-off}" = "on" ]; then
   echo "🧠 Starte JupyterLab (Port 8888)..."
   nohup jupyter lab \
     --ip=0.0.0.0 \
@@ -66,7 +63,7 @@ fi
 
 
 # ============ 🔷 FASTAPI (Port 8000) ============
-if [ "${FASTAPI:-on}" = "on" ]; then
+if [ "${FASTAPI:-off}" = "on" ]; then
   echo "🚀 Starte zentrale FastAPI (Port 8000)..."
   nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > /workspace/fastapi.log 2>&1 &
 else
