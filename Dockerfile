@@ -62,10 +62,7 @@ RUN python -m pip install --no-cache-dir -r /tmp/requirements.txt
 COPY . .
 
 
-# FIX: Hier werden alle Shell-Scripte ausführbar gemacht 
-# UND die Windows-Zeilenenden (\r) entfernt, falls vorhanden.
-RUN chmod +x /worksapce/*.sh && \
-    sed -i 's/\r$//' /worksapce/*.sh
+
 
 EXPOSE 8888 8000
 CMD ["/bin/bash","-lc","/worksapce/start.sh"]
