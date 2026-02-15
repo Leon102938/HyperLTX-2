@@ -14,8 +14,8 @@ fi
 
 
 # tools.config ins Volume spiegeln, damit init.sh sie sicher findet
-if [ -f /app/tools.config ]; then
-  cp -f /app/tools.config /workspace/tools.config
+if [ -f /workspace/tools.config ]; then
+  cp -f /workspace/tools.config /workspace/tools.config
 fi
 
 
@@ -74,8 +74,8 @@ fi
 # 🚀 INIT-LOGIK (Dein Wunsch: Separater Skript-Start)
 if [ "${INIT_SCRIPT:-off}" = "on" ]; then
   echo "🚀 Starte init.sh (Hintergrund)..."
-  chmod +x /app/init.sh
-  nohup bash /app/init.sh > /workspace/init_download.log 2>&1 &
+  chmod +x /workspace/init.sh
+  nohup bash /workspace/init.sh > /workspace/init_download.log 2>&1 &
 fi
 
 
