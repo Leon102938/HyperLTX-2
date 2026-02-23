@@ -107,3 +107,22 @@ echo "📥 Prüfe LoRA Downloads..."
 chmod -R 777 "$MODELS_DIR" || true
 echo "🏁 init.sh erfolgreich beendet."
 touch /workspace/status/init_done
+
+# ----------------------------------------------------
+# 8. Optional: Real-ESRGAN AI Installer (nach init_done)
+# ----------------------------------------------------
+if [ "${UPSCALER_INSTALL:-off}" = "on" ]; then
+  UPSCALER_INSTALLER="/workspace/upscaler_installer_minimal/install_realesrgan_ai_pod.sh"
+  if [ -x "$UPSCALER_INSTALLER" ]; then
+    echo "🛠️ Starte optionalen Upscaler-Installer..."
+    if bash "$UPSCALER_INSTALLER"; then
+      touch /workspace/status/upscaler_install_done
+      echo "✅ Upscaler-Installer erfolgreich."
+    else
+      touch /workspace/status/upscaler_install_failed
+      echo "❌ Upscaler-Installer fehlgeschlagen."
+    fi
+  else
+    echo "⚠️ Upscaler-Installer nicht gefunden: $UPSCALER_INSTALLER"
+  fi
+fi
