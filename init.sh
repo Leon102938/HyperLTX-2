@@ -113,7 +113,8 @@ touch /workspace/status/init_done
 # ----------------------------------------------------
 if [ "${UPSCALER_INSTALL:-off}" = "on" ]; then
   UPSCALER_INSTALLER="/workspace/upscaler_installer_minimal/install_realesrgan_ai_pod.sh"
-  if [ -x "$UPSCALER_INSTALLER" ]; then
+  if [ -f "$UPSCALER_INSTALLER" ]; then
+    chmod +x "$UPSCALER_INSTALLER" 2>/dev/null || true
     echo "🛠️ Starte optionalen Upscaler-Installer..."
     if bash "$UPSCALER_INSTALLER"; then
       touch /workspace/status/upscaler_install_done

@@ -89,7 +89,8 @@ if [[ -f "$REQ_FILE" ]]; then
   # Pod already has CUDA torch/torchvision. Skip those to prevent huge redundant installs.
   awk '!/^[[:space:]]*torch([[:space:]]|$|[<>=!~])|^[[:space:]]*torchvision([[:space:]]|$|[<>=!~])/' "$REQ_FILE" > "$REQ_FILTERED"
   log "Installing Real-ESRGAN python requirements (without torch/torchvision)..."
-  python -m pip install -r "$REQ_FILTERED"
+  # Reuse preinstalled CUDA torch stack; avoid slow build-isolation env that re-downloads torch.
+  python -m pip install --no-build-isolation -r "$REQ_FILTERED"
 else
   warn "requirements.txt missing in repo, continuing with editable install only"
 fi
@@ -137,4 +138,4 @@ touch "$READY_FLAG"
 log "Upscaler AI runtime is ready."
 log "Ready flag: $READY_FLAG"
 log "Run command:"
-printf '%s\n' "bash /workspace/realesrgan_gpu_pack/upscale_video_ai_cuda.sh --in /workspace/edit.mp4 --out /workspace/output_tiktok_1080x1920.mp4 --model x2 --target 1080x1920 --tile 0"
+printf '%s\n' "bash /workspace/upscaler_installer_minimal/upscale_video_ai_cuda.sh --in /workspace/edit.mp4 --out /workspace/output_tiktok_1080x1920.mp4 --model x2 --target 1080x1920 --tile 0"

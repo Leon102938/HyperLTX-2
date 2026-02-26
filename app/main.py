@@ -5,7 +5,14 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from .editor_api import EditRequest, render_edit
-from .upscaler_api import UpscaleVideoRequest, upscale_video
+from .upscaler_api import (
+    UpscaleVideoRequest,
+    UpscaleSubmitRequest,
+    upscale_video,
+    submit_upscale_job,
+    get_upscale_job,
+    get_upscale_job_log,
+)
 from .LTX2 import LTX2JobRequest, submit_job, get_status
 from .zimage import router as zimage_router
 
@@ -91,3 +98,18 @@ def editor_render(request: EditRequest):
 @app.post("/upscale/video")
 def upscale_video_route(request: UpscaleVideoRequest):
     return upscale_video(request)
+
+
+@app.post("/upscale/submit")
+def upscale_submit_route(request: UpscaleSubmitRequest):
+    return submit_upscale_job(request)
+
+
+@app.get("/upscale/get/{job_id}")
+def upscale_get_route(job_id: str):
+    return get_upscale_job(job_id)
+
+
+@app.get("/upscale/log/{job_id}")
+def upscale_log_route(job_id: str, tail: int = 120):
+    return get_upscale_job_log(job_id, tail=tail)
