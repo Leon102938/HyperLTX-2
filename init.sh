@@ -5,6 +5,7 @@ set -euo pipefail
 sed -i 's/\r$//' "$0" 2>/dev/null || true
 
 # 1) Sicherstellen, dass tools.config im Volume existiert
+mkdir -p /workspace /workspace/outputs
 mkdir -p /workspace /workspace/status
 if [ -f /app/tools.config ] && [ ! -f /workspace/tools.config ]; then
   cp -f /app/tools.config /workspace/tools.config
@@ -45,7 +46,7 @@ export HF_HOME=/workspace/.cache/hf
 
 MODELS_DIR="/workspace/LTX-2/checkpoints"
 LORA_DIR="$MODELS_DIR/loras"
-mkdir -p "$MODELS_DIR/ltx-2" "$MODELS_DIR/gemma-3" "$LORA_DIR"
+mkdir -p "$MODELS_DIR/ltx-2.3" "$MODELS_DIR/gemma-3" "$LORA_DIR"
 
 # ----------------------------------------------------
 # 4. Z-Image Sektion
@@ -72,15 +73,20 @@ if [ ! -f "$MODELS_DIR/ltx-2/ltx-2-19b-dev-fp8.safetensors" ]; then
     python3 -c "from huggingface_hub import login; login(token='${HF_TOKEN}')"
   fi
 
-  hf_download_file "Lightricks/LTX-2" "ltx-2-19b-dev-fp8.safetensors" "$MODELS_DIR/ltx-2"
-  hf_download_file "Lightricks/LTX-2" "ltx-2-spatial-upscaler-x2-1.0.safetensors" "$MODELS_DIR/ltx-2"
-  hf_download_file "Lightricks/LTX-2" "ltx-2-19b-distilled-lora-384.safetensors" "$MODELS_DIR/ltx-2"
+  hf_download_file "Lightricks/LTX-2.3" "ltx-2.3-22b-dev.safetensors" "$MODELS_DIR/ltx-2.3"
+  hf_download_file "Lightricks/LTX-2.3" "ltx-2.3-spatial-upscaler-x2-1.0.safetensors" "$MODELS_DIR/ltx-2.3"
+  hf_download_file "Lightricks/LTX-2.3" "ltx-2-19b-distilled-lora-384.safetensors" "$MODELS_DIR/ltx-2.3"
 
-  echo "🚀 Lade Gemma-3..."
-  python3 - <<PY
+echo "🚀 Lade Gemma-3..."
+python3 - <<PY
 from huggingface_hub import snapshot_download
-snapshot_download(repo_id="google/gemma-3-12b-it", local_dir="$MODELS_DIR/gemma-3",
-                  local_dir_use_symlinks=False, resume_download=True)
+
+snapshot_download(
+    repo_id="google/gemma-3-12b-it-qat-q4_0-unquantized",
+    local_dir="$MODELS_DIR/gemma-3",
+    local_dir_use_symlinks=False,
+    resume_download=True
+)
 PY
 fi
 
