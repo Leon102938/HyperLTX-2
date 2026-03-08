@@ -75,7 +75,7 @@ if [ ! -f "$MODELS_DIR/ltx-2/ltx-2-19b-dev-fp8.safetensors" ]; then
 
   hf_download_file "Lightricks/LTX-2.3" "ltx-2.3-22b-dev.safetensors" "$MODELS_DIR/ltx-2.3"
   hf_download_file "Lightricks/LTX-2.3" "ltx-2.3-spatial-upscaler-x2-1.0.safetensors" "$MODELS_DIR/ltx-2.3"
-  hf_download_file "Lightricks/LTX-2.3" "ltx-2-19b-distilled-lora-384.safetensors" "$MODELS_DIR/ltx-2.3"
+  hf_download_file "Lightricks/LTX-2.3" "ltx-2.3-22b-distilled-lora-384.safetensors" "$MODELS_DIR/ltx-2.3"
 
 echo "🚀 Lade Gemma-3..."
 python3 - <<PY

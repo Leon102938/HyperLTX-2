@@ -20,7 +20,7 @@ timm
 
 # ===== HF / Diffusers-Stack (LTX-2 Optimized) =====
 diffusers>=0.32.1
-transformers>=4.48.0
+transformers==4.52.4
 tokenizers>=0.21.0
 accelerate>=1.3.0
 huggingface_hub
