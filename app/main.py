@@ -13,11 +13,11 @@ from .upscaler_api import (
     get_upscale_job,
     get_upscale_job_log,
 )
-from .LTX2 import LTX2JobRequest, submit_job, get_status
+from .LTX2 import LTX2JobRequest, LTX_BACKEND, submit_job, get_status
 from .zimage import router as zimage_router
 
 
-app = FastAPI(title="LTX-2 API", version="1.0")
+app = FastAPI(title="LTX-2.3 API", version="2.3")
 
 # Exports für n8n (Link-basiert statt Binary)
 BASE_DIR = Path("/workspace")
@@ -38,7 +38,7 @@ ZIMAGE_FLAG_FILE = "/workspace/status/zimage_ready"
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "init_ready": os.path.exists(INIT_FLAG)}
+    return {"status": "ok", "init_ready": os.path.exists(INIT_FLAG), "ltx_backend": LTX_BACKEND}
 
 
 @app.get("/DW/zimage_ready")
@@ -53,12 +53,17 @@ def dw_ready():
     return {"ready": ready, "message": "Modelle bereit." if ready else "Download läuft noch..."}
 
 
-# ---------------- LTX-2 ENDPUNKTE ----------------
+# ---------------- LTX-2 / LTX-2.3 ENDPUNKTE ----------------
 
 @app.post("/ltx2/submit")
 async def ltx2_submit(request: LTX2JobRequest):
     jid = await submit_job(request)
-    return {"job_id": jid, "status_url": f"/ltx2/status/{jid}", "get_url": f"/ltx2/get/{jid}"}
+    return {
+        "job_id": jid,
+        "backend": LTX_BACKEND,
+        "status_url": f"/ltx2/status/{jid}",
+        "get_url": f"/ltx2/get/{jid}",
+    }
 
 
 @app.get("/ltx2/status/{job_id}")
@@ -74,6 +79,7 @@ def ltx2_get(job_id: str):
         return {
             "ok": True,
             "job_id": job_id,
+            "backend": info.get("backend", LTX_BACKEND),
             "status": "succeeded",
             "video_url": f"/jobs/{job_id}/{job_id}.mp4",
             "filename": f"{job_id}.mp4",
@@ -83,6 +89,7 @@ def ltx2_get(job_id: str):
     return {
         "ok": False,
         "job_id": job_id,
+        "backend": info.get("backend", LTX_BACKEND),
         "status": info.get("status"),
         "error": info.get("error"),
     }
