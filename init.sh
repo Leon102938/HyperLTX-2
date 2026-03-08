@@ -5,7 +5,7 @@ set -euo pipefail
 sed -i 's/\r$//' "$0" 2>/dev/null || true
 
 # 1) Sicherstellen, dass tools.config im Volume existiert
-mkdir -p /workspace /workspace/outputs
+mkdir -p /workspace /workspace/LTX-2/outputs
 mkdir -p /workspace /workspace/status
 if [ -f /app/tools.config ] && [ ! -f /workspace/tools.config ]; then
   cp -f /app/tools.config /workspace/tools.config
