@@ -2,53 +2,36 @@
 __pycache__/
 *.py[cod]
 *.so
-**/__pycache__/
-**/*.ipynb
 
 # Jupyter
 *.ipynb
 
-
-# Umgebungen & Tools
+# Envs
 .env
 .venv/
 env/
 venv/
 
-# System-Dateien
+# System
 .DS_Store
 Thumbs.db
 
-# RunPod / temporäres Zeug
+# Temp
 /workspace/tmp/
 workspace/tmp/
 *.pid
+.cache/
+init_download.log
 
-# Models & große Files (wenn du willst)
-weights/
-*.safetensors
-
-# VSCode & IDEs
+# IDE
 .vscode/
 .idea/
 
-# Git
-.git
-.gitkeep
-wheel_flashattn/*.whl
-
-
+# Large outputs / generated files
 *.mp4
-*.png
-*.jpg
 
-
-
-.cache/
+# Optional: local models only if they should NOT be versioned
+weights/
 models/
-LTX-2/
-Z-Image/
-*.png
 *.safetensors
 *.bin
-init_download.log
