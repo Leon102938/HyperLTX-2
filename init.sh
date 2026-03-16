@@ -40,13 +40,29 @@ hf_hub_download(repo_id="$REPO", filename="$FILE", local_dir="$TARGET", local_di
 PY
 }
 
+function hf_download_snapshot_to_dir() {
+  local REPO="$1"
+  local TARGET="$2"
+  python3 - <<PY
+from huggingface_hub import snapshot_download
+snapshot_download(
+    repo_id="$REPO",
+    local_dir="$TARGET",
+    local_dir_use_symlinks=False,
+    resume_download=True
+)
+PY
+}
+
 # 3) Caches setzen
 export HF_HUB_ENABLE_HF_TRANSFER=1
 export HF_HOME=/workspace/.cache/hf
 
 MODELS_DIR="/workspace/LTX-2/checkpoints"
 LORA_DIR="$MODELS_DIR/loras"
+QWEN_MODELS_DIR="/workspace/models/qwen3-tts"
 mkdir -p "$MODELS_DIR/ltx-2.3" "$MODELS_DIR/gemma-3" "$LORA_DIR"
+mkdir -p "$QWEN_MODELS_DIR"
 
 # ----------------------------------------------------
 # 4. Z-Image Sektion
@@ -64,7 +80,48 @@ if [ "${Z_Image_Base:-off}" = "on" ]; then
 fi
 
 # ----------------------------------------------------
-# 5. LTX-2 Basis-Modelle
+# 5. Qwen3-TTS Sektion
+# ----------------------------------------------------
+if [ "${Qwen_TTS_Tokenizer:-off}" = "on" ] || [ "${Qwen_TTS_Model:-off}" = "on" ]; then
+  echo "[qwen] Preparing runtime environment..."
+  mkdir -p "/workspace/venvs"
+  if [ ! -f "/workspace/venvs/qwen3-tts/bin/activate" ]; then
+    python3 -m venv --system-site-packages "/workspace/venvs/qwen3-tts"
+  fi
+
+  if [ -f "/workspace/venvs/qwen3-tts/bin/activate" ]; then
+    touch "/workspace/status/qwen_tts_env_ready"
+  fi
+fi
+
+if [ "${Qwen_TTS_Tokenizer:-off}" = "on" ]; then
+  echo "[qwen] Qwen_TTS_Tokenizer is ON. Checking tokenizer path..."
+  if [ -d "/opt/models/qwen/Qwen3-TTS-Tokenizer-12Hz" ]; then
+    ln -sfn "/opt/models/qwen/Qwen3-TTS-Tokenizer-12Hz" "$QWEN_MODELS_DIR/Qwen3-TTS-Tokenizer-12Hz"
+  elif [ ! -f "$QWEN_MODELS_DIR/Qwen3-TTS-Tokenizer-12Hz/config.json" ]; then
+    hf_download_snapshot_to_dir "Qwen/Qwen3-TTS-Tokenizer-12Hz" "$QWEN_MODELS_DIR/Qwen3-TTS-Tokenizer-12Hz"
+  fi
+
+  if [ -f "$QWEN_MODELS_DIR/Qwen3-TTS-Tokenizer-12Hz/config.json" ]; then
+    touch "/workspace/status/qwen_tts_tokenizer_ready"
+  fi
+fi
+
+if [ "${Qwen_TTS_Model:-off}" = "on" ]; then
+  echo "[qwen] Qwen_TTS_Model is ON. Checking model path..."
+  if [ -d "/opt/models/qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice" ]; then
+    ln -sfn "/opt/models/qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice" "$QWEN_MODELS_DIR/Qwen3-TTS-12Hz-1.7B-CustomVoice"
+  elif [ ! -f "$QWEN_MODELS_DIR/Qwen3-TTS-12Hz-1.7B-CustomVoice/config.json" ]; then
+    hf_download_snapshot_to_dir "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice" "$QWEN_MODELS_DIR/Qwen3-TTS-12Hz-1.7B-CustomVoice"
+  fi
+
+  if [ -f "$QWEN_MODELS_DIR/Qwen3-TTS-12Hz-1.7B-CustomVoice/config.json" ]; then
+    touch "/workspace/status/qwen_tts_model_ready"
+  fi
+fi
+
+# ----------------------------------------------------
+# 6. LTX-2 Basis-Modelle
 # ----------------------------------------------------
 if [ ! -f "$MODELS_DIR/ltx-2/ltx-2-19b-dev-fp8.safetensors" ]; then
   echo "🚀 Hauptmodelle fehlen – Starte Setup..."
@@ -91,7 +148,7 @@ PY
 fi
 
 # ----------------------------------------------------
-# 6. LoRA Sektion
+# 7. LoRA Sektion
 # ----------------------------------------------------
 echo "📥 Prüfe LoRA Downloads..."
 
@@ -108,14 +165,16 @@ echo "📥 Prüfe LoRA Downloads..."
   hf_download_file "MachineDelusions/LTX-2_Image2Video_Adapter_LoRa" "LTX-2-Image2Vid-Adapter.safetensors" "$LORA_DIR"
 
 # ----------------------------------------------------
-# 7. Abschluss
+# 8. Abschluss
 # ----------------------------------------------------
 chmod -R 777 "$MODELS_DIR" || true
+chmod -R 777 "$QWEN_MODELS_DIR" || true
+chmod -R 777 "/workspace/venvs/qwen3-tts" || true
 echo "🏁 init.sh erfolgreich beendet."
 touch /workspace/status/init_done
 
 # ----------------------------------------------------
-# 8. Optional: Real-ESRGAN AI Installer (nach init_done)
+# 9. Optional: Real-ESRGAN AI Installer (nach init_done)
 # ----------------------------------------------------
 if [ "${UPSCALER_INSTALL:-off}" = "on" ]; then
   UPSCALER_INSTALLER="/workspace/upscaler_installer_minimal/install_realesrgan_ai_pod.sh"

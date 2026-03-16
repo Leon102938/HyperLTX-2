@@ -14,6 +14,7 @@ from .upscaler_api import (
     get_upscale_job_log,
 )
 from .LTX2 import LTX2JobRequest, LTX_BACKEND, submit_job, get_status
+from .qwen_tts import router as qwen_tts_router
 from .zimage import router as zimage_router
 
 
@@ -30,10 +31,14 @@ app.mount("/jobs", StaticFiles(directory="/workspace/jobs"), name="jobs")
 
 # ---- Routers ----
 app.include_router(zimage_router, prefix="/zimage", tags=["zimage"])
+app.include_router(qwen_tts_router, prefix="/qwen_tts", tags=["qwen_tts"])
 
 # Flags
 INIT_FLAG = "/workspace/status/init_done"
 ZIMAGE_FLAG_FILE = "/workspace/status/zimage_ready"
+QWEN_ENV_FLAG_FILE = "/workspace/status/qwen_tts_env_ready"
+QWEN_TOKENIZER_FLAG_FILE = "/workspace/status/qwen_tts_tokenizer_ready"
+QWEN_MODEL_FLAG_FILE = "/workspace/status/qwen_tts_model_ready"
 
 
 @app.get("/health")
@@ -45,6 +50,21 @@ def health():
 def dw_zimage_ready():
     ready = os.path.exists(ZIMAGE_FLAG_FILE)
     return {"ready": ready, "message": "Z-Image bereit." if ready else "Z-Image wird noch vorbereitet."}
+
+
+@app.get("/DW/qwen_tts_ready")
+def dw_qwen_tts_ready():
+    env_ready = os.path.exists(QWEN_ENV_FLAG_FILE)
+    tokenizer_ready = os.path.exists(QWEN_TOKENIZER_FLAG_FILE)
+    model_ready = os.path.exists(QWEN_MODEL_FLAG_FILE)
+    ready = env_ready and tokenizer_ready and model_ready
+    return {
+        "ready": ready,
+        "env_ready": env_ready,
+        "tokenizer_ready": tokenizer_ready,
+        "model_ready": model_ready,
+        "message": "Qwen TTS bereit." if ready else "Qwen TTS wird noch vorbereitet.",
+    }
 
 
 @app.get("/DW/ready")
