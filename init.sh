@@ -65,22 +65,7 @@ mkdir -p "$MODELS_DIR/ltx-2.3" "$MODELS_DIR/gemma-3" "$LORA_DIR"
 mkdir -p "$QWEN_MODELS_DIR"
 
 # ----------------------------------------------------
-# 4. Z-Image Sektion
-# ----------------------------------------------------
-if [ "${Z_Image_Turbo:-off}" = "on" ]; then
-  echo "[zimage] Z_Image_Turbo is ON. Checking cache..."
-  hf_download_all "Tongyi-MAI/Z-Image-Turbo"
-  touch "/workspace/status/zimage_ready"
-fi
-
-if [ "${Z_Image_Base:-off}" = "on" ]; then
-  echo "[zimage] Z_Image_Base is ON. Starting download..."
-  hf_download_all "Tongyi-MAI/Z-Image"
-  touch "/workspace/status/zimage_base_ready"
-fi
-
-# ----------------------------------------------------
-# 5. Qwen3-TTS Sektion
+# 4. Qwen3-TTS Sektion
 # ----------------------------------------------------
 if [ "${Qwen_TTS_Tokenizer:-off}" = "on" ] || [ "${Qwen_TTS_Model:-off}" = "on" ]; then
   echo "[qwen] Preparing runtime environment..."
@@ -118,6 +103,21 @@ if [ "${Qwen_TTS_Model:-off}" = "on" ]; then
   if [ -f "$QWEN_MODELS_DIR/Qwen3-TTS-12Hz-1.7B-CustomVoice/config.json" ]; then
     touch "/workspace/status/qwen_tts_model_ready"
   fi
+fi
+
+# ----------------------------------------------------
+# 5. Z-Image Sektion
+# ----------------------------------------------------
+if [ "${Z_Image_Turbo:-off}" = "on" ]; then
+  echo "[zimage] Z_Image_Turbo is ON. Checking cache..."
+  hf_download_all "Tongyi-MAI/Z-Image-Turbo"
+  touch "/workspace/status/zimage_ready"
+fi
+
+if [ "${Z_Image_Base:-off}" = "on" ]; then
+  echo "[zimage] Z_Image_Base is ON. Starting download..."
+  hf_download_all "Tongyi-MAI/Z-Image"
+  touch "/workspace/status/zimage_base_ready"
 fi
 
 # ----------------------------------------------------
