@@ -23,6 +23,7 @@ TOKENIZER_PATH = Path("/workspace/models/qwen3-tts/Qwen3-TTS-Tokenizer-12Hz")
 ENV_FLAG = STATUS_DIR / "qwen_tts_env_ready"
 TOKENIZER_FLAG = STATUS_DIR / "qwen_tts_tokenizer_ready"
 MODEL_FLAG = STATUS_DIR / "qwen_tts_model_ready"
+RUNTIME_FLAG = STATUS_DIR / "qwen_tts_runtime_ready"
 QWEN_PYTHON = Path("/workspace/venvs/qwen3-tts/bin/python")
 
 WORKER_CODE = r"""
@@ -51,7 +52,9 @@ if torch.cuda.is_available():
 
 try:
     model = Qwen3TTSModel.from_pretrained(model_path, **kwargs)
-except TypeError:
+except Exception:
+    if "attn_implementation" not in kwargs:
+        raise
     kwargs.pop("attn_implementation", None)
     model = Qwen3TTSModel.from_pretrained(model_path, **kwargs)
 
@@ -112,11 +115,13 @@ def _ready_payload() -> dict:
     env_ready = ENV_FLAG.exists() and QWEN_PYTHON.exists()
     tokenizer_ready = TOKENIZER_FLAG.exists() and TOKENIZER_PATH.exists()
     model_ready = MODEL_FLAG.exists() and MODEL_PATH.exists()
+    runtime_ready = RUNTIME_FLAG.exists()
     return {
-        "ready": env_ready and tokenizer_ready and model_ready,
+        "ready": env_ready and tokenizer_ready and model_ready and runtime_ready,
         "env_ready": env_ready,
         "tokenizer_ready": tokenizer_ready,
         "model_ready": model_ready,
+        "runtime_ready": runtime_ready,
         "model_path": str(MODEL_PATH),
         "tokenizer_path": str(TOKENIZER_PATH),
         "python_path": str(QWEN_PYTHON),

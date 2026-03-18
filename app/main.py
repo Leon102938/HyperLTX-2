@@ -39,6 +39,7 @@ ZIMAGE_FLAG_FILE = "/workspace/status/zimage_ready"
 QWEN_ENV_FLAG_FILE = "/workspace/status/qwen_tts_env_ready"
 QWEN_TOKENIZER_FLAG_FILE = "/workspace/status/qwen_tts_tokenizer_ready"
 QWEN_MODEL_FLAG_FILE = "/workspace/status/qwen_tts_model_ready"
+QWEN_RUNTIME_FLAG_FILE = "/workspace/status/qwen_tts_runtime_ready"
 
 
 @app.get("/health")
@@ -57,12 +58,14 @@ def dw_qwen_tts_ready():
     env_ready = os.path.exists(QWEN_ENV_FLAG_FILE)
     tokenizer_ready = os.path.exists(QWEN_TOKENIZER_FLAG_FILE)
     model_ready = os.path.exists(QWEN_MODEL_FLAG_FILE)
-    ready = env_ready and tokenizer_ready and model_ready
+    runtime_ready = os.path.exists(QWEN_RUNTIME_FLAG_FILE)
+    ready = env_ready and tokenizer_ready and model_ready and runtime_ready
     return {
         "ready": ready,
         "env_ready": env_ready,
         "tokenizer_ready": tokenizer_ready,
         "model_ready": model_ready,
+        "runtime_ready": runtime_ready,
         "message": "Qwen TTS bereit." if ready else "Qwen TTS wird noch vorbereitet.",
     }
 

@@ -61,6 +61,9 @@ export HF_HOME=/workspace/.cache/hf
 MODELS_DIR="/workspace/LTX-2/checkpoints"
 LORA_DIR="$MODELS_DIR/loras"
 QWEN_MODELS_DIR="/workspace/models/qwen3-tts"
+QWEN_VENV="/workspace/venvs/qwen3-tts"
+QWEN_PREBUILT_VENV="/opt/venvs/qwen3-tts"
+QWEN_RUNTIME_FLAG="/workspace/status/qwen_tts_runtime_ready"
 mkdir -p "$MODELS_DIR/ltx-2.3" "$MODELS_DIR/gemma-3" "$LORA_DIR"
 mkdir -p "$QWEN_MODELS_DIR"
 
@@ -70,12 +73,35 @@ mkdir -p "$QWEN_MODELS_DIR"
 if [ "${Qwen_TTS_Tokenizer:-off}" = "on" ] || [ "${Qwen_TTS_Model:-off}" = "on" ]; then
   echo "[qwen] Preparing runtime environment..."
   mkdir -p "/workspace/venvs"
-  if [ ! -f "/workspace/venvs/qwen3-tts/bin/activate" ]; then
-    python3 -m venv --system-site-packages "/workspace/venvs/qwen3-tts"
+  rm -f "$QWEN_RUNTIME_FLAG"
+  if [ ! -e "$QWEN_VENV" ] && [ -d "$QWEN_PREBUILT_VENV" ]; then
+    ln -sfn "$QWEN_PREBUILT_VENV" "$QWEN_VENV"
+  elif [ ! -f "$QWEN_VENV/bin/activate" ]; then
+    python3 -m venv "$QWEN_VENV"
   fi
 
-  if [ -f "/workspace/venvs/qwen3-tts/bin/activate" ]; then
+  if [ -f "$QWEN_VENV/bin/activate" ]; then
+    if [ ! -d "$QWEN_PREBUILT_VENV" ]; then
+      "$QWEN_VENV/bin/pip" install --no-cache-dir -U pip setuptools wheel
+      "$QWEN_VENV/bin/pip" install --no-cache-dir ninja packaging psutil pybind11
+      "$QWEN_VENV/bin/pip" install --no-cache-dir \
+        torch==2.7.0 \
+        torchaudio \
+        --index-url https://download.pytorch.org/whl/cu128
+      "$QWEN_VENV/bin/pip" install --no-cache-dir "flash-attn==2.8.3" --no-build-isolation
+      "$QWEN_VENV/bin/pip" install --no-cache-dir \
+        "qwen-tts==0.1.1" \
+        "transformers==4.57.3" \
+        "accelerate==1.12.0"
+    fi
+    "$QWEN_VENV/bin/python" - <<'PY'
+import qwen_tts
+import transformers
+print("qwen_tts ok", qwen_tts.__file__)
+print("transformers", transformers.__version__)
+PY
     touch "/workspace/status/qwen_tts_env_ready"
+    touch "$QWEN_RUNTIME_FLAG"
   fi
 fi
 
@@ -169,7 +195,7 @@ echo "📥 Prüfe LoRA Downloads..."
 # ----------------------------------------------------
 chmod -R 777 "$MODELS_DIR" || true
 chmod -R 777 "$QWEN_MODELS_DIR" || true
-chmod -R 777 "/workspace/venvs/qwen3-tts" || true
+chmod -R 777 "$QWEN_VENV" || true
 echo "🏁 init.sh erfolgreich beendet."
 touch /workspace/status/init_done
 
