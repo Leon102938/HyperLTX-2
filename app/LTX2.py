@@ -3,6 +3,7 @@ import asyncio
 import json
 import os
 import shlex
+import subprocess
 import time
 import uuid
 from dataclasses import asdict, dataclass
@@ -55,6 +56,79 @@ LIST_FLAG_MAP = {
 BOOL_FLAG_MAP = {
     "enhance_prompt": "--enhance-prompt",
 }
+
+
+def _resolve_path(value: Any) -> str:
+    return str(Path(str(value)).expanduser().resolve())
+
+
+def _get_audio_path(overrides: Dict[str, Any]) -> Optional[str]:
+    for key in ("audio_path", "audio", "audio_file", "audio_file_path"):
+        value = overrides.get(key)
+        if value not in (None, ""):
+            return _resolve_path(value)
+    return None
+
+
+def _probe_audio_channels(path: str) -> Optional[int]:
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-select_streams",
+                "a:0",
+                "-show_entries",
+                "stream=channels",
+                "-of",
+                "default=nk=1:nw=1",
+                path,
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        value = result.stdout.strip()
+        return int(value) if value else None
+    except Exception:
+        return None
+
+
+def _prepare_a2vid_audio(audio_path: str, output_file: str) -> str:
+    channels = _probe_audio_channels(audio_path)
+    if channels is None or channels >= 2:
+        return audio_path
+
+    prepared_path = str(Path(output_file).with_suffix(".a2vid_input.wav"))
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-i",
+            audio_path,
+            "-ac",
+            "2",
+            prepared_path,
+        ],
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    return prepared_path
+
+
+def _select_pipeline_module(overrides: Dict[str, Any]) -> tuple[str, bool]:
+    requested = str(overrides.get("pipeline") or overrides.get("mode") or "").strip().lower().replace("-", "_")
+    audio_path = _get_audio_path(overrides)
+
+    if requested in {"", "ti2vid", "t2v", "i2v", "text_to_video", "image_to_video"}:
+        return ("ltx_pipelines.a2vid_two_stage", True) if audio_path else ("ltx_pipelines.ti2vid_two_stages", False)
+    if requested in {"a2vid", "a2v", "audio2video", "audio_to_video"}:
+        return "ltx_pipelines.a2vid_two_stage", True
+
+    raise ValueError(f"Unsupported pipeline/mode: {requested}")
+
 
 class LTX2JobRequest(BaseModel):
     prompt: str = Field(..., min_length=1)
@@ -112,19 +186,19 @@ def _looks_like_single_lora(value: list[Any] | tuple[Any, ...]) -> bool:
 
 def _coerce_lora_entry(entry: Any, default_strength: float) -> tuple[str, float]:
     if isinstance(entry, str):
-        return str(Path(entry).expanduser().resolve()), float(default_strength)
+        return _resolve_path(entry), float(default_strength)
     if isinstance(entry, (list, tuple)):
         if not entry:
             raise ValueError("LoRA entry is empty")
         path = entry[0]
         strength = entry[1] if len(entry) > 1 and entry[1] is not None else default_strength
-        return str(Path(str(path)).expanduser().resolve()), float(strength)
+        return _resolve_path(path), float(strength)
     if isinstance(entry, dict):
         path = entry.get("path") or entry.get("file") or entry.get("model") or entry.get("checkpoint_path")
         if not path:
             raise ValueError("LoRA dict requires 'path'")
         strength = entry.get("strength", default_strength)
-        return str(Path(str(path)).expanduser().resolve()), float(strength)
+        return _resolve_path(path), float(strength)
     raise ValueError(f"Unsupported LoRA entry: {entry!r}")
 
 
@@ -152,18 +226,18 @@ def _coerce_image_entry(
     default_crf: int,
 ) -> tuple[str, int, float, Optional[int]]:
     if isinstance(entry, str):
-        return str(Path(entry).expanduser().resolve()), default_frame_idx, float(default_strength), default_crf
+        return _resolve_path(entry), default_frame_idx, float(default_strength), default_crf
 
     if isinstance(entry, (list, tuple)):
         if not entry:
             raise ValueError("Image entry is empty")
         if len(entry) == 1:
-            return str(Path(str(entry[0])).expanduser().resolve()), default_frame_idx, float(default_strength), default_crf
+            return _resolve_path(entry[0]), default_frame_idx, float(default_strength), default_crf
         if len(entry) == 2:
-            return str(Path(str(entry[0])).expanduser().resolve()), default_frame_idx, float(entry[1]), default_crf
+            return _resolve_path(entry[0]), default_frame_idx, float(entry[1]), default_crf
         if len(entry) == 3:
-            return str(Path(str(entry[0])).expanduser().resolve()), int(entry[1]), float(entry[2]), default_crf
-        return str(Path(str(entry[0])).expanduser().resolve()), int(entry[1]), float(entry[2]), int(entry[3])
+            return _resolve_path(entry[0]), int(entry[1]), float(entry[2]), default_crf
+        return _resolve_path(entry[0]), int(entry[1]), float(entry[2]), int(entry[3])
 
     if isinstance(entry, dict):
         path = entry.get("path") or entry.get("image") or entry.get("image_path") or entry.get("img_path")
@@ -172,7 +246,7 @@ def _coerce_image_entry(
         frame_idx = entry.get("frame_idx", entry.get("frame", default_frame_idx))
         strength = entry.get("strength", entry.get("image_strength", entry.get("img_strength", default_strength)))
         crf = entry.get("crf", entry.get("image_crf", entry.get("img_crf", default_crf)))
-        return str(Path(str(path)).expanduser().resolve()), int(frame_idx), float(strength), int(crf) if crf is not None else None
+        return _resolve_path(path), int(frame_idx), float(strength), int(crf) if crf is not None else None
 
     raise ValueError(f"Unsupported image entry: {entry!r}")
 
@@ -270,6 +344,12 @@ def _append_raw_flags(cmd: list[str], value: Any) -> None:
 
 def _build_command(prompt: str, output_file: str, overrides: Dict[str, Any]) -> tuple[list[str], Dict[str, str]]:
     ov = _normalize_overrides(overrides)
+    pipeline_module, use_a2vid = _select_pipeline_module(ov)
+    audio_path = _get_audio_path(ov)
+    if use_a2vid and not audio_path:
+        raise ValueError("audio_path is required when pipeline/mode is set to a2vid")
+    if use_a2vid:
+        audio_path = _prepare_a2vid_audio(audio_path, output_file)
 
     checkpoint_path = str(ov.get("checkpoint_path") or DEFAULT_CHECKPOINT_PATH)
     spatial_upsampler_path = str(ov.get("spatial_upsampler_path") or DEFAULT_SPATIAL_UPSAMPLER_PATH)
@@ -288,7 +368,7 @@ def _build_command(prompt: str, output_file: str, overrides: Dict[str, Any]) -> 
     cmd = [
         LTX_PYTHON,
         "-m",
-        "ltx_pipelines.ti2vid_two_stages",
+        pipeline_module,
         "--checkpoint-path",
         checkpoint_path,
         "--spatial-upsampler-path",
@@ -300,6 +380,11 @@ def _build_command(prompt: str, output_file: str, overrides: Dict[str, Any]) -> 
         "--output-path",
         output_file,
     ]
+
+    if use_a2vid:
+        cmd.extend(["--audio-path", audio_path])
+        _append_scalar_flag(cmd, "--audio-start-time", ov.get("audio_start_time"))
+        _append_scalar_flag(cmd, "--audio-max-duration", ov.get("audio_max_duration"))
 
     for path, strength in distilled_loras:
         cmd.extend(["--distilled-lora", path, str(strength)])
