@@ -3,7 +3,6 @@
 from typing import Any, Dict, Optional
 
 import torch
-from acestep.models.mlx.dit_generate import mlx_generate_diffusion
 
 
 class DiffusionMixin:
@@ -62,6 +61,14 @@ class DiffusionMixin:
             Dict[str, Any]: ``{"target_latents": torch.Tensor, "time_costs": dict}``.
         """
         import numpy as np
+
+        try:
+            from acestep.models.mlx.dit_generate import mlx_generate_diffusion
+        except ModuleNotFoundError as exc:
+            raise RuntimeError(
+                "MLX diffusion backend is unavailable because 'acestep.models.mlx' "
+                "is not present in this ACE-Step checkout."
+            ) from exc
 
         _ = encoder_attention_mask, encoder_attention_mask_non_cover
 
