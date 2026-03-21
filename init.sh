@@ -64,16 +64,26 @@ QWEN_MODELS_DIR="/workspace/models/qwen3-tts"
 QWEN_VENV="/workspace/venvs/qwen3-tts"
 QWEN_PREBUILT_VENV="/opt/venvs/qwen3-tts"
 QWEN_RUNTIME_FLAG="/workspace/status/qwen_tts_runtime_ready"
+ACE_STEP_ROOT="/workspace/ACE-Step-1.5"
+ACE_STEP_CKPT_DIR="$ACE_STEP_ROOT/checkpoints"
+ACE_STEP_READY_FLAG="/workspace/status/ace_step_ready"
+ACE_STEP_ENV_FLAG="/workspace/status/ace_step_env_ready"
 mkdir -p "$MODELS_DIR/ltx-2.3" "$MODELS_DIR/gemma-3" "$LORA_DIR"
 mkdir -p "$QWEN_MODELS_DIR"
+mkdir -p "$ACE_STEP_CKPT_DIR"
 
 # ----------------------------------------------------
-# 4. Qwen3-TTS Sektion
+# 4. Qwen3-TTS / Shared Runtime Sektion
 # ----------------------------------------------------
-if [ "${Qwen_TTS_Tokenizer:-off}" = "on" ] || [ "${Qwen_TTS_Model:-off}" = "on" ]; then
+if [ "${Qwen_TTS_Tokenizer:-off}" = "on" ] || [ "${Qwen_TTS_Model:-off}" = "on" ] || [ "${Ace_Step1_5:-off}" = "on" ]; then
   echo "[qwen] Preparing runtime environment..."
   mkdir -p "/workspace/venvs"
-  rm -f "$QWEN_RUNTIME_FLAG"
+  if [ "${Qwen_TTS_Tokenizer:-off}" = "on" ] || [ "${Qwen_TTS_Model:-off}" = "on" ]; then
+    rm -f "$QWEN_RUNTIME_FLAG"
+  fi
+  if [ "${Ace_Step1_5:-off}" = "on" ]; then
+    rm -f "$ACE_STEP_ENV_FLAG"
+  fi
   if [ ! -e "$QWEN_VENV" ] && [ -d "$QWEN_PREBUILT_VENV" ]; then
     ln -sfn "$QWEN_PREBUILT_VENV" "$QWEN_VENV"
   elif [ ! -f "$QWEN_VENV/bin/activate" ]; then
@@ -81,7 +91,8 @@ if [ "${Qwen_TTS_Tokenizer:-off}" = "on" ] || [ "${Qwen_TTS_Model:-off}" = "on" 
   fi
 
   if [ -f "$QWEN_VENV/bin/activate" ]; then
-    if [ ! -d "$QWEN_PREBUILT_VENV" ]; then
+    if [ ! -d "$QWEN_PREBUILT_VENV" ] && \
+       { [ "${Qwen_TTS_Tokenizer:-off}" != "on" ] && [ "${Qwen_TTS_Model:-off}" != "on" ] || [ ! -f "/workspace/status/qwen_tts_env_ready" ]; }; then
       "$QWEN_VENV/bin/pip" install --no-cache-dir -U pip setuptools wheel
       "$QWEN_VENV/bin/pip" install --no-cache-dir ninja packaging psutil pybind11
       "$QWEN_VENV/bin/pip" install --no-cache-dir \
@@ -89,17 +100,85 @@ if [ "${Qwen_TTS_Tokenizer:-off}" = "on" ] || [ "${Qwen_TTS_Model:-off}" = "on" 
         torchaudio \
         --index-url https://download.pytorch.org/whl/cu128
       "$QWEN_VENV/bin/pip" install --no-cache-dir "flash-attn==2.8.3" --no-build-isolation
-      "$QWEN_VENV/bin/pip" install --no-cache-dir \
-        "qwen-tts==0.1.1" \
-        "transformers==4.57.3" \
-        "accelerate==1.12.0"
+      if [ "${Qwen_TTS_Tokenizer:-off}" = "on" ] || [ "${Qwen_TTS_Model:-off}" = "on" ]; then
+        "$QWEN_VENV/bin/pip" install --no-cache-dir \
+          "qwen-tts==0.1.1" \
+          "transformers==4.57.3" \
+          "accelerate==1.12.0"
+      fi
     fi
-    "$QWEN_VENV/bin/python" - <<'PY'
+    if [ "${Qwen_TTS_Tokenizer:-off}" = "on" ] || [ "${Qwen_TTS_Model:-off}" = "on" ]; then
+      "$QWEN_VENV/bin/python" - <<'PY'
 import qwen_tts
 import transformers
 print("qwen_tts ok", qwen_tts.__file__)
 print("transformers", transformers.__version__)
 PY
+      touch "/workspace/status/qwen_tts_env_ready"
+      touch "$QWEN_RUNTIME_FLAG"
+    fi
+  fi
+fi
+
+if [ "${Ace_Step1_5:-off}" = "on" ] && [ -f "$QWEN_VENV/bin/activate" ]; then
+  echo "[ace-step] Preparing shared runtime in Qwen env..."
+
+  if [ ! -f "$ACE_STEP_ENV_FLAG" ] && ! "$QWEN_VENV/bin/python" - <<'PY'
+import transformers.configuration_utils as cu
+import diffusers
+import loguru
+import toml
+import modelscope
+import torchvision
+import torchao
+assert hasattr(cu, "layer_type_validation")
+PY
+  then
+    "$QWEN_VENV/bin/pip" install --no-cache-dir \
+      "torchvision==0.22.0" \
+      "diffusers" \
+      "toml" \
+      "loguru" \
+      "modelscope" \
+      "torchao" \
+      "matplotlib>=3.7.5" \
+      "scipy>=1.10.1" \
+      "soundfile>=0.13.1" \
+      "einops>=0.8.1" \
+      "fastapi>=0.110.0" \
+      "uvicorn[standard]>=0.27.0" \
+      "numba>=0.63.1" \
+      "vector-quantize-pytorch>=1.27.15" \
+      "python-dotenv" \
+      "xxhash"
+
+    if [ -d "$ACE_STEP_ROOT/acestep/third_parts/nano-vllm" ]; then
+      "$QWEN_VENV/bin/pip" install --no-cache-dir -e "$ACE_STEP_ROOT/acestep/third_parts/nano-vllm"
+    fi
+  fi
+
+  "$QWEN_VENV/bin/python" - <<'PY'
+import transformers
+import transformers.configuration_utils as cu
+import diffusers
+import loguru
+import toml
+import modelscope
+import torchvision
+import torch
+
+assert hasattr(cu, "layer_type_validation")
+print("ace-step runtime ok")
+print("torch", torch.__version__)
+print("transformers", transformers.__version__)
+print("diffusers", diffusers.__version__)
+print("torchvision", torchvision.__version__)
+PY
+  touch "$ACE_STEP_ENV_FLAG"
+fi
+
+if [ "${Qwen_TTS_Tokenizer:-off}" = "on" ] || [ "${Qwen_TTS_Model:-off}" = "on" ]; then
+  if [ -f "$QWEN_VENV/bin/activate" ]; then
     touch "/workspace/status/qwen_tts_env_ready"
     touch "$QWEN_RUNTIME_FLAG"
   fi
@@ -132,7 +211,29 @@ if [ "${Qwen_TTS_Model:-off}" = "on" ]; then
 fi
 
 # ----------------------------------------------------
-# 5. Z-Image Sektion
+# 5. ACE-Step 1.5 Sektion
+# ----------------------------------------------------
+if [ "${Ace_Step1_5:-off}" = "on" ]; then
+  echo "[ace-step] Ace_Step1_5 is ON. Checking model path..."
+  if [ -f "$ACE_STEP_CKPT_DIR/acestep-v15-turbo/config.json" ] && \
+     [ -f "$ACE_STEP_CKPT_DIR/vae/config.json" ] && \
+     [ -f "$ACE_STEP_CKPT_DIR/Qwen3-Embedding-0.6B/config.json" ] && \
+     [ -f "$ACE_STEP_CKPT_DIR/acestep-5Hz-lm-1.7B/config.json" ]; then
+    echo "[ace-step] Main model already present."
+  else
+    hf_download_snapshot_to_dir "ACE-Step/Ace-Step1.5" "$ACE_STEP_CKPT_DIR"
+  fi
+
+  if [ -f "$ACE_STEP_CKPT_DIR/acestep-v15-turbo/config.json" ] && \
+     [ -f "$ACE_STEP_CKPT_DIR/vae/config.json" ] && \
+     [ -f "$ACE_STEP_CKPT_DIR/Qwen3-Embedding-0.6B/config.json" ] && \
+     [ -f "$ACE_STEP_CKPT_DIR/acestep-5Hz-lm-1.7B/config.json" ]; then
+    touch "$ACE_STEP_READY_FLAG"
+  fi
+fi
+
+# ----------------------------------------------------
+# 6. Z-Image Sektion
 # ----------------------------------------------------
 if [ "${Z_Image_Turbo:-off}" = "on" ]; then
   echo "[zimage] Z_Image_Turbo is ON. Checking cache..."
@@ -147,9 +248,12 @@ if [ "${Z_Image_Base:-off}" = "on" ]; then
 fi
 
 # ----------------------------------------------------
-# 6. LTX-2 Basis-Modelle
+# 7. LTX-2 Basis-Modelle
 # ----------------------------------------------------
-if [ ! -f "$MODELS_DIR/ltx-2/ltx-2-19b-dev-fp8.safetensors" ]; then
+if [ ! -f "$MODELS_DIR/ltx-2.3/ltx-2.3-22b-dev.safetensors" ] || \
+   [ ! -f "$MODELS_DIR/ltx-2.3/ltx-2.3-spatial-upscaler-x2-1.0.safetensors" ] || \
+   [ ! -f "$MODELS_DIR/ltx-2.3/ltx-2.3-22b-distilled-lora-384.safetensors" ] || \
+   [ ! -f "$MODELS_DIR/gemma-3/config.json" ]; then
   echo "🚀 Hauptmodelle fehlen – Starte Setup..."
 
   if [ -n "${HF_TOKEN:-}" ]; then
@@ -174,7 +278,7 @@ PY
 fi
 
 # ----------------------------------------------------
-# 7. LoRA Sektion
+# 8. LoRA Sektion
 # ----------------------------------------------------
 echo "📥 Prüfe LoRA Downloads..."
 
@@ -191,16 +295,17 @@ echo "📥 Prüfe LoRA Downloads..."
   hf_download_file "MachineDelusions/LTX-2_Image2Video_Adapter_LoRa" "LTX-2-Image2Vid-Adapter.safetensors" "$LORA_DIR"
 
 # ----------------------------------------------------
-# 8. Abschluss
+# 9. Abschluss
 # ----------------------------------------------------
 chmod -R 777 "$MODELS_DIR" || true
 chmod -R 777 "$QWEN_MODELS_DIR" || true
 chmod -R 777 "$QWEN_VENV" || true
+chmod -R 777 "$ACE_STEP_CKPT_DIR" || true
 echo "🏁 init.sh erfolgreich beendet."
 touch /workspace/status/init_done
 
 # ----------------------------------------------------
-# 9. Optional: Real-ESRGAN AI Installer (nach init_done)
+# 10. Optional: Real-ESRGAN AI Installer (nach init_done)
 # ----------------------------------------------------
 if [ "${UPSCALER_INSTALL:-off}" = "on" ]; then
   UPSCALER_INSTALLER="/workspace/upscaler_installer_minimal/install_realesrgan_ai_pod.sh"

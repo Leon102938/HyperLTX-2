@@ -13,6 +13,8 @@ from .upscaler_api import (
     get_upscale_job,
     get_upscale_job_log,
 )
+from .ace_step_1_5 import get_ready_payload as ace_step_ready_payload
+from .ace_step_1_5 import router as ace_step_router
 from .LTX2 import LTX2JobRequest, LTX_BACKEND, submit_job, get_status
 from .qwen_tts import router as qwen_tts_router
 from .zimage import router as zimage_router
@@ -30,6 +32,7 @@ app.mount("/exports", StaticFiles(directory=str(EXPORT_DIR)), name="exports")
 app.mount("/jobs", StaticFiles(directory="/workspace/jobs"), name="jobs")
 
 # ---- Routers ----
+app.include_router(ace_step_router, prefix="/Ace_step_1.5", tags=["Ace_step_1.5"])
 app.include_router(zimage_router, prefix="/zimage", tags=["zimage"])
 app.include_router(qwen_tts_router, prefix="/qwen_tts", tags=["qwen_tts"])
 
@@ -68,6 +71,13 @@ def dw_qwen_tts_ready():
         "runtime_ready": runtime_ready,
         "message": "Qwen TTS bereit." if ready else "Qwen TTS wird noch vorbereitet.",
     }
+
+
+@app.get("/DW/ace_step_1_5_ready")
+def dw_ace_step_ready():
+    payload = ace_step_ready_payload()
+    payload["message"] = "ACE-Step 1.5 bereit." if payload["ready"] else "ACE-Step 1.5 wird noch vorbereitet."
+    return payload
 
 
 @app.get("/DW/ready")

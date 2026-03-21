@@ -45,7 +45,7 @@ RUN python -m pip install --no-cache-dir --upgrade pip && \
 
 
 RUN python -m pip install --no-cache-dir -U pip setuptools wheel \
- && python -m pip install --no-cache-dir ninja packaging psutil pybind11 SoX qwen_tts einops
+ && python -m pip install --no-cache-dir ninja packaging psutil pybind11 qwen_tts einops
 
 RUN python -m pip install --no-cache-dir "flash-attn==2.8.3" --no-build-isolation \
  && python -c "import flash_attn; print('flash_attn ok', flash_attn.__version__)"
