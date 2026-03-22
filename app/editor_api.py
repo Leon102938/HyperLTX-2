@@ -36,6 +36,23 @@ class SubtitleRequest(BaseModel):
     uppercase: Optional[bool] = False
 
 
+class TextOverlayRequest(BaseModel):
+    text: str
+    start: float
+    end: float
+    style: Optional[str] = "hook_alert"
+    position: Optional[str] = "top"
+    uppercase: Optional[bool] = False
+    margin_v: Optional[int] = None
+    font_size: Optional[int] = None
+    primary_color: Optional[str] = None
+    secondary_color: Optional[str] = None
+    outline_color: Optional[str] = None
+    outline_w: Optional[float] = None
+    shadow: Optional[float] = None
+    bold: Optional[bool] = None
+
+
 class EditRequest(BaseModel):
     clips: List[Clip]
     output_name: Optional[str] = None
@@ -51,6 +68,7 @@ class EditRequest(BaseModel):
     audio_volume: Optional[float] = None
     audio_trim_to_video: Optional[bool] = True
     subtitles: Optional[SubtitleRequest] = None
+    text_overlays: Optional[List[TextOverlayRequest]] = None
 
 
 def _run(cmd: List[str]) -> str:
@@ -124,6 +142,16 @@ def _ass_color(hex_rgb: str) -> str:
     if len(rgb) != 6:
         rgb = "FFFFFF"
     return f"&H00{rgb[4:6]}{rgb[2:4]}{rgb[0:2]}&"
+
+
+def _safe_ass_color(value: Optional[str], fallback: str) -> str:
+    raw = (value or "").strip()
+    if not raw:
+        return fallback
+    rgb = raw.lstrip("#")
+    if not re.fullmatch(r"[0-9A-Fa-f]{6}", rgb):
+        return fallback
+    return _ass_color(rgb)
 
 
 SUBTITLE_STYLE_PRESETS: Dict[str, Dict[str, Any]] = {
@@ -208,6 +236,26 @@ def _pick_subtitle_style(style_name: Optional[str], seed_value: str) -> tuple[st
     if style_key not in SUBTITLE_STYLE_PRESETS:
         style_key = "clean_premium"
     return style_key, SUBTITLE_STYLE_PRESETS[style_key]
+
+
+def _overlay_alignment(position: Optional[str]) -> int:
+    pos = (position or "top").strip().lower()
+    if pos == "center":
+        return 5
+    if pos == "bottom":
+        return 2
+    return 8
+
+
+def _overlay_margin_v(position: Optional[str], margin_v: Optional[int]) -> int:
+    if margin_v is not None:
+        return max(0, int(margin_v))
+    pos = (position or "top").strip().lower()
+    if pos == "center":
+        return 80
+    if pos == "bottom":
+        return 220
+    return 145
 
 
 def _resolve_transition_style(style_name: Optional[str]) -> tuple[str, Optional[str]]:
@@ -399,8 +447,62 @@ def _highlight_last_word(chunk: str, primary_color: str, secondary_color: str) -
     return f"{_ass_escape(lead)} " + rf"{{\c{secondary_color}}}{_ass_escape(tail)}{{\c{primary_color}}}"
 
 
+def _normalize_text_overlays(
+    text_overlays: Optional[List[TextOverlayRequest]],
+    total_duration: float,
+    seed_value: str,
+) -> List[Dict[str, Any]]:
+    normalized: List[Dict[str, Any]] = []
+    if not text_overlays:
+        return normalized
+
+    for idx, overlay in enumerate(text_overlays):
+        try:
+            text = str(overlay.text or "").strip()
+            if not text:
+                continue
+
+            start = float(overlay.start)
+            end = float(overlay.end)
+            if end <= start:
+                continue
+
+            start = _clamp(start, 0.0, total_duration)
+            end = _clamp(end, 0.0, total_duration)
+            if end <= start:
+                continue
+
+            style_name, base_style = _pick_subtitle_style(overlay.style, f"{seed_value}:overlay:{idx}")
+            style = dict(base_style)
+            style["fontsize"] = max(1, int(overlay.font_size)) if overlay.font_size is not None else style["fontsize"]
+            style["primary"] = _safe_ass_color(overlay.primary_color, style["primary"])
+            style["secondary"] = _safe_ass_color(overlay.secondary_color, style["secondary"])
+            style["outline"] = _safe_ass_color(overlay.outline_color, style["outline"])
+            style["back"] = style["outline"]
+            style["outline_w"] = max(0.0, float(overlay.outline_w)) if overlay.outline_w is not None else style["outline_w"]
+            style["shadow"] = max(0.0, float(overlay.shadow)) if overlay.shadow is not None else style["shadow"]
+            if overlay.bold is not None:
+                style["bold"] = -1 if overlay.bold else 0
+            style["alignment"] = _overlay_alignment(overlay.position)
+            style["margin_v"] = _overlay_margin_v(overlay.position, overlay.margin_v)
+
+            normalized.append({
+                "style_name": style_name,
+                "style_id": f"Overlay{idx + 1}",
+                "style": style,
+                "start": start,
+                "end": end,
+                "text": text.upper() if overlay.uppercase else text,
+            })
+        except Exception:
+            continue
+
+    return normalized
+
+
 def _build_ass_subtitles(
-    subtitle_req: SubtitleRequest,
+    subtitle_req: Optional[SubtitleRequest],
+    text_overlays: Optional[List[TextOverlayRequest]],
     ass_path: str,
     width: int,
     height: int,
@@ -409,30 +511,33 @@ def _build_ass_subtitles(
     audio_path: Optional[str] = None,
     audio_start: float = 0.0,
     audio_max_duration: Optional[float] = None,
-) -> str:
-    style_name, style = _pick_subtitle_style(subtitle_req.style, seed_value)
-    mode = (subtitle_req.mode or "chunk").strip().lower()
-    timed_chunks = (
-        _asr_segmented_chunks(subtitle_req, audio_path, audio_start=audio_start, max_duration=audio_max_duration)
-        if audio_path
-        else []
-    )
-    if not timed_chunks:
-        chunks = _split_caption_chunks(subtitle_req.text, mode, subtitle_req.words_per_caption or 3)
-        if not chunks:
-            return style_name
-        chunk_word_counts = [max(1, len(c.split())) for c in chunks]
-        total_words = sum(chunk_word_counts)
-        timed_chunks = []
-        cursor = 0.0
-        for idx, chunk in enumerate(chunks):
-            proportional = total_duration * (chunk_word_counts[idx] / total_words)
-            end = total_duration if idx == len(chunks) - 1 else min(total_duration, cursor + proportional)
-            timed_chunks.append({"start": cursor, "end": end, "text": chunk})
-            cursor = end
+) -> Optional[str]:
+    subtitle_style_name = None
+    subtitle_style = None
+    timed_chunks: List[Dict[str, Any]] = []
+    if subtitle_req and subtitle_req.text.strip():
+        subtitle_style_name, subtitle_style = _pick_subtitle_style(subtitle_req.style, seed_value)
+        mode = (subtitle_req.mode or "chunk").strip().lower()
+        timed_chunks = (
+            _asr_segmented_chunks(subtitle_req, audio_path, audio_start=audio_start, max_duration=audio_max_duration)
+            if audio_path
+            else []
+        )
+        if not timed_chunks:
+            chunks = _split_caption_chunks(subtitle_req.text, mode, subtitle_req.words_per_caption or 3)
+            if chunks:
+                chunk_word_counts = [max(1, len(c.split())) for c in chunks]
+                total_words = sum(chunk_word_counts)
+                cursor = 0.0
+                for idx, chunk in enumerate(chunks):
+                    proportional = total_duration * (chunk_word_counts[idx] / total_words)
+                    end = total_duration if idx == len(chunks) - 1 else min(total_duration, cursor + proportional)
+                    timed_chunks.append({"start": cursor, "end": end, "text": chunk})
+                    cursor = end
 
-    if not timed_chunks:
-        return style_name
+    overlay_entries = _normalize_text_overlays(text_overlays, total_duration, seed_value)
+    if not timed_chunks and not overlay_entries:
+        return subtitle_style_name
     lines = [
         "[Script Info]",
         "ScriptType: v4.00+",
@@ -445,29 +550,52 @@ def _build_ass_subtitles(
         "Format: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,BackColour,"
         "Bold,Italic,Underline,StrikeOut,ScaleX,ScaleY,Spacing,Angle,BorderStyle,Outline,Shadow,"
         "Alignment,MarginL,MarginR,MarginV,Encoding",
-        "Style: Main,{fontname},{fontsize},{primary},{secondary},{outline},{back},{bold},0,0,0,100,100,0,0,1,{outline_w},{shadow},{alignment},50,50,{margin_v},1".format(
-            **style
-        ),
+    ]
+
+    if subtitle_style:
+        lines.append(
+            "Style: Main,{fontname},{fontsize},{primary},{secondary},{outline},{back},{bold},0,0,0,100,100,0,0,1,{outline_w},{shadow},{alignment},50,50,{margin_v},1".format(
+                **subtitle_style
+            )
+        )
+    for overlay in overlay_entries:
+        lines.append(
+            "Style: {style_id},{fontname},{fontsize},{primary},{secondary},{outline},{back},{bold},0,0,0,100,100,0,0,1,{outline_w},{shadow},{alignment},50,50,{margin_v},1".format(
+                style_id=overlay["style_id"],
+                **overlay["style"],
+            )
+        )
+    lines += [
         "",
         "[Events]",
         "Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text",
     ]
 
     for chunk in timed_chunks:
-        display = chunk["text"].upper() if subtitle_req.uppercase else chunk["text"]
-        display = _highlight_last_word(display, style["primary"], style["secondary"])
+        display = chunk["text"].upper() if subtitle_req and subtitle_req.uppercase else chunk["text"]
+        display = _highlight_last_word(display, subtitle_style["primary"], subtitle_style["secondary"])
         lines.append(
             "Dialogue: 0,{start},{end},Main,,0,0,0,,{anim}{text}".format(
                 start=_format_ass_time(chunk["start"]),
                 end=_format_ass_time(chunk["end"]),
-                anim=style["anim"],
+                anim=subtitle_style["anim"],
                 text=display,
+            )
+        )
+    for overlay in overlay_entries:
+        lines.append(
+            "Dialogue: 1,{start},{end},{style_id},,0,0,0,,{anim}{text}".format(
+                start=_format_ass_time(overlay["start"]),
+                end=_format_ass_time(overlay["end"]),
+                style_id=overlay["style_id"],
+                anim=overlay["style"]["anim"],
+                text=_ass_escape(overlay["text"]),
             )
         )
 
     with open(ass_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
-    return style_name
+    return subtitle_style_name
 
 
 def render_edit(req: EditRequest) -> Dict[str, Any]:
@@ -627,6 +755,9 @@ def render_edit(req: EditRequest) -> Dict[str, Any]:
         final_audio_label = "[aoutmix]"
 
     filter_complex = ";".join(fc_parts)
+    has_subtitles = bool(req.subtitles and req.subtitles.text.strip())
+    has_text_overlays = bool(_normalize_text_overlays(req.text_overlays, total_dur, job_id))
+    should_burn_ass = has_subtitles or has_text_overlays
 
     # Re-encode (verhindert Macroblock-Müll an Cuts)
     cmd += [
@@ -644,15 +775,16 @@ def render_edit(req: EditRequest) -> Dict[str, Any]:
         "-c:a", "aac",
         "-b:a", "192k",
         "-movflags", "+faststart",
-        tmp_out_path if req.subtitles and req.subtitles.text.strip() else out_path,
+        tmp_out_path if should_burn_ass else out_path,
     ]
 
     _run(cmd)
 
     subtitle_style_used = None
-    if req.subtitles and req.subtitles.text.strip():
+    if should_burn_ass:
         subtitle_style_used = _build_ass_subtitles(
             req.subtitles,
+            req.text_overlays,
             sub_ass_path,
             W,
             H,
@@ -685,6 +817,10 @@ def render_edit(req: EditRequest) -> Dict[str, Any]:
         ])
         try:
             os.remove(tmp_out_path)
+        except FileNotFoundError:
+            pass
+        try:
+            os.remove(sub_ass_path)
         except FileNotFoundError:
             pass
 
