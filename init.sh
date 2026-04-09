@@ -16,6 +16,14 @@ source /workspace/tools.config 2>/dev/null || true
 
 export PATH="/usr/local/bin:/root/.local/bin:/usr/local/cuda/bin:/usr/bin:/bin:$PATH"
 
+
+# SoX systemweit sicherstellen
+if ! command -v sox >/dev/null 2>&1; then
+  apt-get update
+  apt-get install -y sox libsox-fmt-all
+fi
+
+
 # 2) Download-Funktionen
 function hf_download_all() {
   local REPO="$1"
@@ -97,8 +105,10 @@ if [ "${Qwen_TTS_Tokenizer:-off}" = "on" ] || [ "${Qwen_TTS_Model:-off}" = "on" 
       "$QWEN_VENV/bin/pip" install --no-cache-dir ninja packaging psutil pybind11
       "$QWEN_VENV/bin/pip" install --no-cache-dir \
         torch==2.7.0 \
-        torchaudio \
+        torchaudio==2.7.0 \
+        torchvision==0.22.0 \
         --index-url https://download.pytorch.org/whl/cu128
+      
       "$QWEN_VENV/bin/pip" install --no-cache-dir "flash-attn==2.8.3" --no-build-isolation
       if [ "${Qwen_TTS_Tokenizer:-off}" = "on" ] || [ "${Qwen_TTS_Model:-off}" = "on" ]; then
         "$QWEN_VENV/bin/pip" install --no-cache-dir \
@@ -321,5 +331,9 @@ if [ "${UPSCALER_INSTALL:-off}" = "on" ]; then
     fi
   else
     echo "⚠️ Upscaler-Installer nicht gefunden: $UPSCALER_INSTALLER"
-  fi
+ 
+
+
+
+ fi
 fi
