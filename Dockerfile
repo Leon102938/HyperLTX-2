@@ -60,8 +60,7 @@ RUN python -m pip install --no-cache-dir -r /tmp/requirements.txt
 
 # 7. Scripte & Start
 COPY . .
-
-
+COPY config/jupyter_server_config.py /usr/local/etc/jupyter/jupyter_server_config.py
 
 EXPOSE 8888 8000
 CMD ["/bin/bash","-lc","bash /workspace/start.sh"]
