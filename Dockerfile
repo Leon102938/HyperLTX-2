@@ -38,10 +38,10 @@ RUN ln -sf /usr/bin/python3.12 /usr/bin/python3 && ln -sf /usr/bin/python3.12 /u
 # 3. PyTorch 2.7 (Stabil für CUDA 12.8)
 RUN python -m pip install --no-cache-dir --upgrade pip && \
     python -m pip install --no-cache-dir \
-    torch==2.7.0 \
-    torchvision \
-    torchaudio \
-    --index-url https://download.pytorch.org/whl/cu128
+      "torch==2.7.0+cu128" \
+      "torchvision==0.22.0+cu128" \
+      "torchaudio==2.7.0+cu128" \
+      --index-url https://download.pytorch.org/whl/cu128
 
 
 RUN python -m pip install --no-cache-dir -U pip setuptools wheel \
