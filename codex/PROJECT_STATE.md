@@ -1,0 +1,172 @@
+# PROJECT_STATE.md
+
+## Projektstatus
+Status: Phase-1-Kern abgeschlossen; Phase 2A und 2B erweitern den Core jetzt um regelbasierte Scene-/Shot-Planung plus Mehrfach-Takes mit Selektion pro Szene
+
+## Verifizierte Fakten
+- Git-Root ist `/workspace`.
+- `origin` zeigt auf `https://github.com/Leon102938/HyperLTX-2`.
+- Die vorhandene Laufumgebung ist bereits ein RunPod-faehiges Medien-Template mit FastAPI, Jupyter, Modellen, Jobs- und Statusordnern.
+- Ein zentraler API-Prozess laeuft bereits ueber `uvicorn app.main:app` auf Port `8000`.
+- JupyterLab laeuft bereits auf Port `8888`.
+- Der Pod meldet `RUNPOD_GPU_NAME=NVIDIA RTX 6000 Ada Generation`, `RUNPOD_GPU_COUNT=1`, `RUNPOD_CPU_COUNT=10`, `RUNPOD_MEM_GB=167`.
+- GPU und Torch sind nutzbar: `torch 2.7.0+cu128`, CUDA verfuegbar, 1 GPU erkannt.
+- Bereits verifizierte lokale Backends bzw. Wrapper:
+  - LTX-2.3 Video ueber `app/LTX2.py`
+  - Qwen3-TTS ueber `app/qwen_tts.py`
+  - ACE-Step 1.5 Musik ueber `app/ace_step_1_5.py`
+  - Z-Image ueber `app/zimage.py`
+  - Editor ueber `app/editor_api.py`
+  - Upscaler ueber `app/upscaler_api.py`
+- Readiness-Endpunkte melden derzeit `ready=true` fuer Init, Qwen TTS, ACE-Step 1.5 und Z-Image.
+- Vorhandene Modellbestaende:
+  - `/workspace/LTX-2/checkpoints` ca. `74G`
+  - `/workspace/ACE-Step-1.5/checkpoints` ca. `9.4G`
+  - `/workspace/models/qwen3-tts` ca. `4.9G`
+- Bisheriger Projekt-Memory-Stand lag in `/workspace/Codex`; kanonisch gepflegt wird ab jetzt `/workspace/codex`.
+- Ein neues Paket `/workspace/agent_core` wurde gebaut.
+- Der neue Core enthaelt:
+  - `agent.py`
+  - `schemas.py`
+  - `planner.py`
+  - `state_store.py`
+  - `backend_registry.py`
+  - `assembler.py`
+  - `utils.py`
+  - Adapter fuer `qwen_tts`, `ltx2`, `music_stub`, `storyboard_stub`
+- Der neue Core nutzt in Phase 1 standardmaessig lokale HTTP-Endpunkte der bestehenden FastAPI statt tiefer Eingriffe in Backend-Repos.
+- Der Planner koppelt bei `use_voice=true` die geplante finale Videolaenge an geschaetzte oder echte Voice-Dauer plus Guard-Padding.
+- Beispieljob vorhanden: `/workspace/examples/minimal_job.json`
+- Tests vorhanden:
+  - `/workspace/tests/test_core_smoke.py`
+  - `/workspace/tests/test_planner_rules.py`
+  - `/workspace/tests/test_assembler_mux.py`
+  - `/workspace/tests/test_scene_planner.py`
+- Verifiziert ausgefuehrte Tests:
+  - `python -m unittest discover -s /workspace/tests -v` -> aktuell erfolgreich, 18 Tests gruen
+- Verifizierter echter End-to-End-Core-Lauf:
+  - Job-ID: `real-e2e-check-3`
+  - Input: kurzer Real-Job mit Voice aktiv, `768x448`, `num_inference_steps=8`
+  - Qwen TTS: erfolgreich, echte WAV erzeugt, reale Dauer `3.92s`
+  - LTX2: erfolgreich, reales MP4 erzeugt
+  - Video-Output: `/workspace/jobs/real-e2e-check-3_video/real-e2e-check-3_video.mp4`
+  - Audio-Output: `/workspace/exports/qwen_3ef111ac124c.wav`
+  - Verifizierte Video-Daten via `ffprobe`: `768x448`, `24 fps`, Dauer `5.042s`
+- Verifizierter echter End-to-End-Mux-Lauf:
+  - Job-ID: `real-e2e-mux-2`
+  - Qwen TTS: erfolgreich, echte WAV erzeugt, reale Dauer `3.20s`
+  - LTX2: erfolgreich, echtes MP4 erzeugt, reale Dauer `4.71s`
+  - Assembler: erfolgreich, finales MP4 `/workspace/agent_runs/real-e2e-mux-2/final.mp4` erzeugt
+  - Verifizierte Finaldaten via `ffprobe`: `768x448`, `24 fps`, Audio `aac`, Gesamtdauer `4.710s`
+  - Verifizierter Mux-Modus: `voice_padded_to_video`
+- Verifiziert: rohe LTX2-MP4s koennen bereits einen Audio-Stream enthalten; der neue Assembler ersetzt diesen kontrolliert durch die erzeugte Voice-Spur.
+- Verifiziert: die bisherige Dauervertragsluecke entstand, weil der Planner bereits quantisierte Dauerwerte berechnete, der LTX2-Adapter `num_frames` danach aber aus der gerundeten Plan-Dauer erneut ableitete.
+- Verifiziert implementierter Fix:
+  - der Planner quantisiert jetzt einmalig auf den LTX-Framevertrag
+  - `plan.target_duration_sec` ist die quantisierte Plan-Dauer
+  - `video.params.num_frames` ist die kanonische Framezahl
+  - der LTX2-Adapter uebernimmt genau diese Framezahl statt neu zu rechnen
+- Verifizierter realer Dauervertragslauf A:
+  - Job-ID: `real-duration-case-a`
+  - geplanter Zielwert: `5.041s`
+  - reale Voice: `3.92s`
+  - reales Video: `5.042s`
+  - finales MP4: `5.042s`
+  - Delta Plan zu realem Video: `0.001s`
+- Verifizierter realer Dauervertragslauf C:
+  - Job-ID: `real-duration-case-c`
+  - Voice deaktiviert
+  - geplanter Zielwert: `4.041s`
+  - reales Video: `4.042s`
+  - finales MP4: `4.042s`
+  - Delta Plan zu realem Video: `0.001s`
+- Verifizierter realer Randfall B auf Assembler-Ebene:
+  - Job-ID: `real-duration-case-b`
+  - reales Qwen-TTS-Audio: `17.84s`
+  - reales kurzes LTX2-Video wiederverwendet: `4.042s`
+  - finales MP4: `4.042s`
+  - Timing-Modus: `voice_trimmed_to_video`
+  - Hinweis: dieser Fall wurde absichtlich ausserhalb des normalen Agent-Runs provoziert, weil der Planner ihn im regulaeren Pfad inzwischen korrekt verhindert.
+- Verifiziert implementierte Phase 2A:
+  - `ProductionPlan` enthaelt jetzt `scenes`
+  - jedes Scene-Objekt enthaelt mindestens Beschreibung, Ziel-Dauer, Prompt-Basis, Narrationszuordnung, Framezahl, Render-Parameter und einen ersten renderbaren Shot
+  - der Single-Flow bleibt als `single_scene`-Fallback erhalten
+- Verifiziert implementierte Phase 2B:
+  - jede Szene enthaelt jetzt geplante `takes`
+  - jeder Take hat mindestens `take_id`, `scene_id`, `take_index`, `seed`, Prompt-Text und Render-Parameter
+  - pro Szene koennen mehrere reale LTX2-Takes erzeugt werden
+  - der Agent spiegelt erfolgreiche Take-Videos in den Job-Workspace unter `scenes/<scene_id>/takes/`
+  - `takes.json` wird pro Job als eigenes Artefakt geschrieben
+  - pro Szene wird ein `selected_take` dokumentiert
+  - die finale Assembly nutzt nur die ausgewaehlten Takes
+- Verifizierter echter Phase-2A-Multi-Segment-Lauf:
+  - Job-ID: `real-phase2a-multiscene-1`
+  - Segmentierung: `2` Szenen
+  - geplante Szenendauern: `3.041s` + `3.041s`
+  - Rohclips:
+    - `/workspace/jobs/real-phase2a-multiscene-1_scene_01_video/real-phase2a-multiscene-1_scene_01_video.mp4`
+    - `/workspace/jobs/real-phase2a-multiscene-1_scene_02_video/real-phase2a-multiscene-1_scene_02_video.mp4`
+  - zusammengesetztes Rohvideo: `/workspace/agent_runs/real-phase2a-multiscene-1/assembled_video.mp4`
+  - finales MP4: `/workspace/agent_runs/real-phase2a-multiscene-1/final.mp4`
+  - verifizierter Segmentierungsmodus: `multi_scene`
+  - verifizierte reale Finaldauer: `6.105s`
+  - verifiziertes Delta Plan zu concateniertem Video: `0.023s`
+- Verifiziert: pro Job wird jetzt auch `scene_plan.json` als Artefakt geschrieben.
+- Verifizierter echter Phase-2B-Multi-Take-Lauf:
+  - Job-ID: `real-phase2b-multitake-1`
+  - Segmentierung: `2` Szenen
+  - Take-Plan: `2` Takes pro Szene
+  - reale LTX2-Takes erfolgreich:
+    - `scene_01_take_01`
+    - `scene_01_take_02`
+    - `scene_02_take_01`
+    - `scene_02_take_02`
+  - Take-Referenzen im Job-Workspace:
+    - `/workspace/agent_runs/real-phase2b-multitake-1/scenes/scene_01/takes/scene_01_take_01.mp4`
+    - `/workspace/agent_runs/real-phase2b-multitake-1/scenes/scene_01/takes/scene_01_take_02.mp4`
+    - `/workspace/agent_runs/real-phase2b-multitake-1/scenes/scene_02/takes/scene_02_take_01.mp4`
+    - `/workspace/agent_runs/real-phase2b-multitake-1/scenes/scene_02/takes/scene_02_take_02.mp4`
+  - verifizierter Auswahlmodus: `first_successful_take`
+  - verifizierte `selected_take_ids`:
+    - `scene_01_take_01`
+    - `scene_02_take_01`
+  - verifiziertes Artefakt `takes.json` vorhanden
+  - finales MP4: `/workspace/agent_runs/real-phase2b-multitake-1/final.mp4`
+  - verifizierte Finaldauer via `ffprobe`: `6.105s`
+
+## Verifizierte Luecken
+- ZImage, ACE-Step, Editor und Upscaler sind noch nicht im neuen Core integriert.
+- Music- und Storyboard-Adapter sind bewusst nur Future-ready-Stubs.
+- Es gibt noch keine externe API-Schicht fuer den neuen Core.
+- Es gibt noch keine n8n-Anbindung.
+- Es gibt noch keinen Hook-/Quality-/Storyboard-Produktionspfad im Core.
+- `a2vid` ist fuer generierte TTS-Audio im aktuellen Pod-Setup nicht als stabiler Phase-1-Vertrag verifiziert.
+- Multi-Segment-Qualitaet ist jetzt strukturell besser planbar, aber es gibt noch keine Auswahl-/Retry-Engine, keine Shot-Selektion und keine Quality-Guard-Logik.
+- Die Take-Auswahl ist absichtlich noch einfach: erster erfolgreicher Take pro Szene.
+- Die Concat-Stufe kann bei Multi-Segment-Jobs noch kleine Container-/Timing-Abweichungen gegenueber der geplanten Szenensumme haben.
+- `.gitignore` ignoriert jetzt die bekannten Laufzeit-/Artefaktordner und lokale Runtime-Logs des Pods.
+
+## Annahmen
+- Der bestehende FastAPI-Layer soll vorerst nicht ersetzt, sondern spaeter als bestehende Integrationsflaeche behandelt werden.
+- Fuer Phase 1 bleibt die HTTP-basierte Adapter-Schicht der schnellste stabile Integrationsweg; spaeter kann direkter Python-Zugriff pro Backend ergaenzt werden.
+- Der belastbare Phase-1-Pfad ist aktuell `text/script -> qwen_tts -> ti2vid -> final.mp4`.
+- Phase 2A verbessert Qualitaet zuerst ueber bessere Planung, nicht ueber neue Modellfamilien.
+- Phase 2B verbessert die Produktionsrobustheit zuerst ueber Mehrfach-Takes plus einfache Selektion, nicht ueber komplexe AI-Bewertung.
+- `agent_runs/`, `exports/`, `jobs/`, `status/`, `venvs/`, Checkpoints und lokale `.log`-Dateien sind Laufzeit-/Umgebungsbestand und nicht primaer fuer Commits gedacht.
+
+## Offene Fragen
+- Soll der naechste produktive Adapterpfad `ACE-Step`, `ZImage` oder Editor/Assembler sein?
+- Soll der Core spaeter direkt in die bestehende FastAPI eingehangen werden oder zunaechst rein intern bleiben?
+- Wie fein soll die naechste Planner-Generation werden: mehr Produktionsregeln oder zuerst mehr Backends?
+- Soll der LTX2-Adapter spaeter von HTTP auf direkten Python-Aufruf umgestellt werden?
+- Soll `a2vid` spaeter mit strengem Audio-/Frame-Vertrag wieder freigeschaltet werden?
+- Soll fuer spaetere Phasen neben Dauer auch eine explizite Shot-/Clip-Vertragslogik eingefuehrt werden?
+- Soll Phase 2B als naechstes eher Shot-Variation plus Auswahl oder eher ein zweiter produktiver Backend-Pfad werden?
+- Wann soll die Selektion von `first_successful_take` auf echte Scoring-/Quality-Regeln erweitert werden?
+
+## Empfehlungen
+- Den bestehenden Phase-1-Kern nicht aufblasen, sondern als Basis fuer den zweiten Vertical Slice nutzen.
+- Phase 2B sollte auf diesem Stand nicht in eine Bewertungs-Orgie kippen; der naechste Schritt sollte gezielt ein leichter Quality-Guard oder eine einfache Retry-/Selection-Verfeinerung sein.
+- Vor einer externen API zuerst die internen Artefakt- und Fehlervertraege stabilisieren.
+- Phase 1 kann fuer den definierten Scope jetzt als technisch sauber abgeschlossen gelten.
+- Fuer den Tagesabschluss sollte `agent_core/`, `tests/`, `examples/`, `.gitignore` und `/workspace/codex` priorisiert werden; Laufzeitordner sollten draussen bleiben.

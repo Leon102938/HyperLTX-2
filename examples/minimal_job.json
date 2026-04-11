@@ -1,0 +1,15 @@
+{
+  "job_id": "phase1-demo-job",
+  "idea": "A premium cinematic teaser about an AI video agent waking up inside a RunPod workstation.",
+  "script": "Inside a silent GPU pod, a modular video agent boots up, studies the task, turns words into narration, and renders a polished teaser that feels precise, premium, and production ready.",
+  "duration_sec": 12,
+  "orientation": "landscape",
+  "resolution": "standard",
+  "use_voice": true,
+  "voice_id": "Ryan",
+  "use_music": false,
+  "use_storyboard": false,
+  "style": "cinematic tech trailer",
+  "extra_llm_instruction": "Keep the visuals clean, focused, and editorial rather than flashy.",
+  "pipeline_preference": "auto"
+}
