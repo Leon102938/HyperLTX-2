@@ -166,3 +166,64 @@ Auswirkung:
 - `takes.json` dokumentiert alle Take-Kandidaten und den `selected_take` pro Szene
 - die finale Assembly arbeitet nur mit den selektierten Takes
 - spaetere Score-/Quality-Auswahl kann auf demselben Take-Vertrag aufsetzen
+
+## D-014
+Datum: 2026-04-11
+
+Entscheidung:
+Phase 2C validiert jeden erfolgreichen Take technisch vor der Selektion und erlaubt nur ein kleines begrenztes Retry-Budget pro Szene.
+
+Begruendung:
+Der naechste robuste Schritt nach Mehrfach-Takes ist keine AI-Inhaltsbewertung, sondern ein klarer technischer Guard gegen leere, triviale, falsch formatierte oder korrupt wirkende Medienartefakte. So bleibt der Produktionsvertrag klein, nachvollziehbar und backendnah.
+
+Auswirkung:
+- jeder Take dokumentiert `review_status` und `validation`
+- die Standardauswahl ist jetzt `quality_guarded_best_valid_take`
+- `first_successful_take` bleibt nur noch als Tie-Break/Fallback fuer technisch gleichwertige valide Kandidaten
+- technisch abgelehnte Takes koennen pro Szene begrenzt neu gerendert werden
+- der Assembler akzeptiert nur noch validierte selektierte Takes
+
+## D-015
+Datum: 2026-04-11
+
+Entscheidung:
+Phase 2D fuehrt eine kleine regelbasierte Shot-/Prompt-Variation-Engine pro Szene ein, statt sofort in AI-Planung oder Inhaltsbewertung zu springen.
+
+Begruendung:
+Der naechste sinnvolle Qualitaetshebel nach technischem Guard und Mehrfach-Takes ist kontrollierte kreative Kandidatenvielfalt. Ein regelbasierter Variantenvertrag ist klein, testbar und kompatibel mit dem bestehenden Guard-/Retry-/Selection-Flow.
+
+Auswirkung:
+- jede Szene kann mehrere `variations` mit eigenem Shot- und Prompt-Profil enthalten
+- pro Variation koennen danach mehrere Takes geplant und gerendert werden
+- `scene_plan.json`, `takes.json` und `state.json` dokumentieren Varianten und die ausgewaehlte Variation
+- technische Selektion bleibt unveraendert; inhaltliche Variantenbewertung bleibt fuer spaetere Phasen offen
+
+## D-016
+Datum: 2026-04-11
+
+Entscheidung:
+Phase 2E fuehrt nur eine kleine regelbasierte kreative Auswahl ueber technisch validen Kandidaten ein, keine AI-Bewertungsmaschine.
+
+Begruendung:
+Nach Phase 2D existieren mehrere kreative Varianten pro Szene, aber ein grosser Bewertungsapparat waere fuer den aktuellen Core zu schwer, schwerer testbar und wuerde den stabilen Produktionsvertrag unnoetig aufweichen. Ein kleiner heuristischer Layer bringt bereits echten Mehrwert bei geringem Risiko.
+
+Auswirkung:
+- technische Validitaet bleibt harte Voraussetzung
+- kreative Regeln arbeiten nur innerhalb der technisch besten validen Kandidaten
+- persistiert werden mindestens `technical_score`, `creative_score`, `selection_reason` und `selected_by_rule`
+- direkte Nachbarschaftsabwechslung und grobe Szenenziel-Passung werden jetzt explizit in der Auswahl beruecksichtigt
+
+## D-017
+Datum: 2026-04-11
+
+Entscheidung:
+Phase 3A nutzt Z-Image als vorhandenen lokalen Storyboard-/Keyframe-Pfad.
+
+Begruendung:
+Z-Image existiert bereits im Pod-Stack, haengt an der bestehenden FastAPI, erzeugt echte Bildartefakte und erfordert keinen neuen Backend-Zweig ausserhalb des vorhandenen Systems. Fuer Phase 3A ist das der kleinste produktive Schritt zu visueller Vorsteuerung.
+
+Auswirkung:
+- Storyboard bleibt optional und ergaenzend
+- der Core erzeugt echte PNG-Keyframes pro Szene bzw. Variation
+- Keyframes werden selektiert und sauber persistiert
+- der Video-Flow bekommt Storyboard-Kontext, aber noch keinen grossen i2v-Umbau

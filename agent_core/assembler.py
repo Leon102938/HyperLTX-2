@@ -15,6 +15,7 @@ class ResultAssembler:
         workspace: Path,
         voice_result: ExecutionResult | None,
         video_result: ExecutionResult,
+        storyboard_result: ExecutionResult | None = None,
     ) -> ResultSummary:
         success = bool(video_result.success)
         message = "Video agent run completed." if success else (video_result.error or "Video generation failed.")
@@ -25,6 +26,7 @@ class ResultAssembler:
         actual_final_duration_sec: float | None = None
         scene_outputs = video_result.metadata.get("scene_outputs", [])
         selected_scene_outputs = video_result.metadata.get("selected_scene_outputs", scene_outputs)
+        self._assert_selected_scene_outputs_are_valid(selected_scene_outputs)
         effective_video_path = video_result.output_path
         if success and len(selected_scene_outputs) > 1:
             assembled_video_path = workspace / "assembled_video.mp4"
@@ -142,6 +144,7 @@ class ResultAssembler:
             artifacts=list(state.artifacts),
             backend_runs={
                 "voice": voice_result.model_dump(mode="json") if voice_result else None,
+                "storyboard": storyboard_result.model_dump(mode="json") if storyboard_result else None,
                 "video": video_result.model_dump(mode="json"),
             },
             metadata={
@@ -150,7 +153,16 @@ class ResultAssembler:
                 "orientation": plan.orientation,
                 "resolution": {"width": plan.width, "height": plan.height, "label": plan.resolution_label},
                 "scene_count": len(plan.scenes),
-                "selection_mode": video_result.metadata.get("selection_mode", "first_successful_take"),
+                "storyboard_enabled": bool(plan.metadata.get("storyboard_enabled", False)),
+                "storyboard_selection_mode": plan.metadata.get("storyboard_selection_mode"),
+                "selected_scene_storyboards": (
+                    storyboard_result.metadata.get("selected_scene_storyboards", []) if storyboard_result else []
+                ),
+                "selection_mode": video_result.metadata.get("selection_mode", "quality_guarded_best_valid_take"),
+                "creative_selection_mode": video_result.metadata.get(
+                    "creative_selection_mode", "rule_based_scene_variation_heuristic"
+                ),
+                "fallback_selection_mode": video_result.metadata.get("fallback_selection_mode", "first_successful_take"),
                 "selected_scene_outputs": selected_scene_outputs,
                 "assembly": assembly_metadata,
             },
@@ -163,6 +175,7 @@ class ResultAssembler:
         state: JobState,
         message: str,
         voice_result: ExecutionResult | None = None,
+        storyboard_result: ExecutionResult | None = None,
     ) -> ResultSummary:
         return ResultSummary(
             job_id=job.job_id or "",
@@ -176,7 +189,10 @@ class ResultAssembler:
             output_final_path=None,
             output_audio_path=voice_result.output_path if voice_result else None,
             artifacts=list(state.artifacts),
-            backend_runs={"voice": voice_result.model_dump(mode="json") if voice_result else None},
+            backend_runs={
+                "voice": voice_result.model_dump(mode="json") if voice_result else None,
+                "storyboard": storyboard_result.model_dump(mode="json") if storyboard_result else None,
+            },
             metadata={"errors": list(state.errors)},
         )
 
@@ -187,3 +203,17 @@ class ResultAssembler:
                 state.artifacts[index] = artifact
                 return
         state.artifacts.append(artifact)
+
+    @staticmethod
+    def _assert_selected_scene_outputs_are_valid(selected_scene_outputs: list[dict[str, object]]) -> None:
+        for scene_output in selected_scene_outputs:
+            validation = scene_output.get("validation")
+            review_status = scene_output.get("review_status")
+            if validation is not None and isinstance(validation, dict) and validation.get("passed") is not True:
+                raise RuntimeError(
+                    f"Assembler received non-valid selected take for {scene_output.get('scene_id', 'unknown_scene')}"
+                )
+            if review_status is not None and review_status != "selected":
+                raise RuntimeError(
+                    f"Assembler received unselected scene output for {scene_output.get('scene_id', 'unknown_scene')}"
+                )

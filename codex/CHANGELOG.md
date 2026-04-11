@@ -79,8 +79,53 @@
 - Tests erneut erfolgreich ausgefuehrt: `python -m unittest discover -s /workspace/tests -v` -> 18 Tests gruen
 - echter Multi-Take-Lauf `real-phase2b-multitake-1` erfolgreich verifiziert
 
+## 2026-04-11 Phase-2C Technical Quality Guard
+- `TakeValidationReport` und `TakeRetryRecord` in die Schemas aufgenommen
+- jeder erfolgreiche Take wird jetzt technisch per Dateicheck, `ffprobe`, Decode-Check, Aufloesung, FPS und plausibler Dauer validiert
+- jeder Take dokumentiert jetzt `review_status` plus strukturierten `validation`-Block
+- neue Auswahlregel `quality_guarded_best_valid_take` implementiert
+- `first_successful_take` bleibt nur noch als Tie-Break/Fallback fuer technisch gleichwertige valide Kandidaten erhalten
+- begrenzte Retry-Regeln pro Szene eingefuehrt; technisch abgelehnte Takes koennen einmalig nachgerendert werden
+- `takes.json` und `state.json` dokumentieren jetzt Retry-Historie, Guard-Status und Auswahlgrund pro Szene
+- Assembler bricht jetzt ab, wenn ein nicht validierter selektierter Take uebergeben wird
+- neue Tests fuer Quality-Guard-Basis, Auswahl, Retry-Fallback und State-Persistenz hinzugefuegt
+- Tests erneut erfolgreich ausgefuehrt: `python -m unittest discover -s /workspace/tests -v` -> 22 Tests gruen
+- echter Phase-2C-Lauf `real-phase2c-quality-guard-1` erfolgreich verifiziert
+
+## 2026-04-11 Phase-2D Shot Prompt Variation
+- `VariationPlan` in die Schemas aufgenommen
+- Planner erzeugt jetzt pro Szene mehrere regelbasierte kreative Varianten mit `variation_id`, `shot_type`, Kamera-Hinweis, `framing_hint`, `prompt_delta` und `prompt_variant_text`
+- pro Variation koennen mehrere Takes geplant werden; der bestehende Take-Vertrag bleibt kompatibel
+- Takes und Resultate dokumentieren jetzt auch ihre Quell-Variation
+- `scene_plan.json`, `takes.json` und `state.json` dokumentieren jetzt Varianten, Variantenzuordnung und die ausgewaehlte Variation pro Szene
+- Quality-Guard, Retry-Regeln und Assembler bleiben mit dem Variantenvertrag kompatibel
+- neue Tests fuer Variations-Erzeugung, stabile Plan-Struktur, Multi-Take-Kompatibilitaet und Persistenz hinzugefuegt
+- Tests erneut erfolgreich ausgefuehrt: `python -m unittest discover -s /workspace/tests -v` -> 25 Tests gruen
+- echter Phase-2D-Lauf `real-phase2d-variation-1` erfolgreich verifiziert
+
+## 2026-04-11 Phase-2E Creative Selection
+- Take-Selektion um eine kleine regelbasierte kreative Heuristik ueber dem bestehenden technischen Guard-Vertrag erweitert
+- kreative Auswahl beruecksichtigt jetzt Szenenposition, `shot_type`, `framing_hint`, Prompt-Variante, grobe Szenenziel-Passung und Abwechslung gegenueber benachbarten Szenen
+- pro selektiertem Take und pro Szene werden jetzt `technical_score`, `creative_score`, `selection_reason` und `selected_by_rule` persistiert
+- Tie-Break zwischen technisch und kreativ gleichwertigen Kandidaten faellt weiterhin kontrolliert auf `first_successful_take`
+- neue Tests fuer kreative Auswahlregeln, Shot-Diversitaet benachbarter Szenen, Tie-Break und Persistenz hinzugefuegt
+- Tests erneut erfolgreich ausgefuehrt: `python -m unittest discover -s /workspace/tests -v` -> 28 Tests gruen
+- echter Phase-2E-Lauf `real-phase2e-creative-selection-1` erfolgreich verifiziert
+
+## 2026-04-11 Phase-3A Storyboard Keyframes
+- vorhandenen Pod-Bildpfad bewertet und Z-Image als kleinsten produktiven Storyboard-Adapter integriert
+- `StoryboardConfig`, `KeyframeCandidatePlan`, `KeyframeCandidateResult`, `SelectedKeyframe` und Bildvalidierung in die Core-Schemas aufgenommen
+- Planner plant jetzt optional pro Szene Storyboard-Konfiguration, priorisierte Keyframe-Kandidaten und bevorzugte Variationen
+- neuer produktiver Adapter `zimage_storyboard` ueber die vorhandenen FastAPI-Endpunkte eingebunden
+- `storyboard_plan.json` als neues Artefakt eingefuehrt
+- Keyframe-Kandidaten werden technisch validiert, leicht selektiert und in `state.json`, `result.json` und `takes.json` dokumentiert
+- der bestehende Video-Flow bleibt intakt; Storyboard-Ergebnisse werden nur als Kontext durchgereicht
+- neue Tests fuer Storyboard-Planung, Persistenz, Fallback und Auswahl hinzugefuegt
+- Tests erneut erfolgreich ausgefuehrt: `python -m unittest discover -s /workspace/tests -v` -> 33 Tests gruen
+- echter Phase-3A-Lauf `real-phase3a-storyboard-1` erfolgreich verifiziert
+
 ## 2026-04-11 Tagesabschluss
-- kanonisches Projektgedaechtnis unter `/workspace/codex` auf den echten Phase-2B-Endstand geschaerft
+- kanonisches Projektgedaechtnis unter `/workspace/codex` auf den echten Phase-3A-Endstand geschaerft
 - `HANDOFF.md` fuer die naechste Session angelegt
 - `.gitignore` vorsichtig um Laufzeit-/Artefaktordner, lokale Logs, Checkpoints, Legacy-Ordner und Egg-Info erweitert
-- aktueller Tagesendstand erneut per `python -m unittest discover -s /workspace/tests -v` verifiziert -> 18 Tests gruen
+- aktueller Tagesendstand erneut per `python -m unittest discover -s /workspace/tests -v` verifiziert -> 33 Tests gruen

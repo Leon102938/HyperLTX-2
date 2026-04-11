@@ -18,6 +18,7 @@ class StateStore:
             "input": self.job_dir(job_id) / "input_job.json",
             "plan": self.job_dir(job_id) / "plan.json",
             "scene_plan": self.job_dir(job_id) / "scene_plan.json",
+            "storyboard_plan": self.job_dir(job_id) / "storyboard_plan.json",
             "takes": self.job_dir(job_id) / "takes.json",
             "state": self.job_dir(job_id) / "state.json",
             "result": self.job_dir(job_id) / "result.json",
@@ -163,6 +164,26 @@ class StateStore:
                 exists=True,
                 metadata={
                     "scene_count": payload.get("scene_count"),
+                    "selection_mode": payload.get("selection_mode"),
+                },
+            ),
+        )
+        self.save_state(state)
+        return path
+
+    def save_storyboard_report(self, state: JobState, payload: dict[str, object]) -> Path:
+        path = write_json(self.path_for(state.job_id, "storyboard_plan"), payload)
+        self._upsert_artifact(
+            state,
+            ArtifactRef(
+                key="storyboard_plan_file",
+                kind="json",
+                path=str(path),
+                origin="agent_core",
+                exists=True,
+                metadata={
+                    "scene_count": payload.get("scene_count"),
+                    "candidate_count": payload.get("candidate_count"),
                     "selection_mode": payload.get("selection_mode"),
                 },
             ),

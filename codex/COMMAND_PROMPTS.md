@@ -114,13 +114,142 @@ PY
 ```bash
 python - <<'PY'
 import json, pathlib
-job_id = "real-phase2b-multitake-1"
+job_id = "real-phase2c-quality-guard-1"
 base = pathlib.Path("/workspace/agent_runs") / job_id
 takes = json.loads(base.joinpath("takes.json").read_text())
 state = json.loads(base.joinpath("state.json").read_text())
 print("takes_per_scene:", takes["takes_per_scene"])
 print("selected_take_ids:", [scene["selected_take_id"] for scene in takes["scene_outputs"]])
 print("selection_mode:", state["steps"]["video"]["details"]["selection_mode"])
+print("total_retry_count:", takes["total_retry_count"])
+for scene in takes["scene_outputs"]:
+    print(
+        scene["scene_id"],
+        "selected=",
+        scene["selected_take"]["review_status"],
+        "valid=",
+        scene["selected_take"]["validation"]["validation_status"],
+        "retries=",
+        len(scene["retry_history"]),
+    )
+PY
+```
+
+### Quality-Guard im Detail pruefen
+```bash
+python - <<'PY'
+import json, pathlib
+job_id = "real-phase2c-quality-guard-1"
+base = pathlib.Path("/workspace/agent_runs") / job_id
+takes = json.loads(base.joinpath("takes.json").read_text())
+for scene in takes["scene_outputs"]:
+    print("scene:", scene["scene_id"])
+    for take in scene["takes"]:
+        validation = take.get("validation") or {}
+        print(
+            " ",
+            take["take_id"],
+            take["review_status"],
+            validation.get("validation_status"),
+            validation.get("width"),
+            validation.get("height"),
+            validation.get("fps"),
+            validation.get("duration_sec"),
+            validation.get("duration_delta_sec"),
+            validation.get("issues"),
+        )
+PY
+```
+
+### Varianten im Detail pruefen
+```bash
+python - <<'PY'
+import json, pathlib
+job_id = "real-phase2d-variation-1"
+base = pathlib.Path("/workspace/agent_runs") / job_id
+takes = json.loads(base.joinpath("takes.json").read_text())
+scene = takes["scene_outputs"][0]
+print("variations_per_scene:", takes["variations_per_scene"])
+print("takes_per_variation:", takes["takes_per_variation"])
+print("selected_take_id:", scene["selected_take_id"])
+print("selected_variation_id:", scene["selected_variation_id"])
+for variation in scene["variations"]:
+    print(
+        variation["variation_id"],
+        variation["shot_type"],
+        variation.get("camera_style"),
+        variation.get("camera_motion"),
+        variation["framing_hint"],
+    )
+for take in scene["takes"]:
+    print(
+        take["take_id"],
+        take["variation_id"],
+        take["review_status"],
+        take["validation"]["validation_status"],
+    )
+PY
+```
+
+### Kreative Auswahl im Detail pruefen
+```bash
+python - <<'PY'
+import json, pathlib
+job_id = "real-phase2e-creative-selection-1"
+base = pathlib.Path("/workspace/agent_runs") / job_id
+takes = json.loads(base.joinpath("takes.json").read_text())
+state = json.loads(base.joinpath("state.json").read_text())
+print("selection_mode:", takes["selection_mode"])
+print("creative_selection_mode:", takes["creative_selection_mode"])
+for scene in takes["scene_outputs"]:
+    print(
+        scene["scene_id"],
+        scene["selected_take_id"],
+        scene["selected_take"]["shot_type"],
+        scene["technical_score"],
+        scene["creative_score"],
+        scene["selected_by_rule"],
+        scene["selection_reason"],
+    )
+    for candidate in scene["selection"]["scored_candidates"]:
+        print(
+            " ",
+            candidate["take_id"],
+            candidate["shot_type"],
+            candidate["technical_score"],
+            candidate["creative_score"],
+            candidate["selected_by_rule"],
+        )
+print("state-selected:", state["steps"]["video"]["details"]["selected_scene_outputs"])
+PY
+```
+
+### Storyboard-/Keyframe-Details pruefen
+```bash
+python - <<'PY'
+import json, pathlib
+job_id = "real-phase3a-storyboard-1"
+base = pathlib.Path("/workspace/agent_runs") / job_id
+story = json.loads(base.joinpath("storyboard_plan.json").read_text())
+takes = json.loads(base.joinpath("takes.json").read_text())
+state = json.loads(base.joinpath("state.json").read_text())
+print("storyboard_backend:", state["steps"]["storyboard"]["backend_name"])
+print("selection_mode:", story["selection_mode"])
+for scene in story["scene_storyboards"]:
+    print("scene:", scene["scene_id"])
+    print(" selected_keyframe:", scene["selected_keyframe"]["candidate_id"] if scene["selected_keyframe"] else None)
+    print(" selected_variation:", scene["selected_keyframe"]["variation_id"] if scene["selected_keyframe"] else None)
+    for candidate in scene["generated_candidates"]:
+        validation = candidate.get("validation") or {}
+        print(
+            " ",
+            candidate["candidate_id"],
+            candidate["review_status"],
+            validation.get("validation_status"),
+            validation.get("width"),
+            validation.get("height"),
+        )
+print("take-keyframe-relation:", takes["scene_outputs"][0]["selected_take"]["metadata"]["selected_keyframe"])
 PY
 ```
 
@@ -268,6 +397,137 @@ result = VideoAgent().run_job(job, raise_on_error=False)
 print(result.model_dump())
 PY
 ffprobe -v error -show_entries format=duration -show_entries stream=index,codec_type,codec_name,width,height,sample_rate,channels,r_frame_rate,duration -of json /workspace/agent_runs/manual-real-multitake-run/final.mp4
+```
+
+### Phase-2C-End-to-End-Lauf
+```bash
+python - <<'PY'
+from agent_core.agent import VideoAgent
+job = {
+    "job_id": "manual-real-phase2c-run",
+    "idea": "A compact cinematic GPU-pod teaser.",
+    "script": "Scene one shows the pod waking up. Scene two shows the render completing cleanly.",
+    "duration_sec": 6,
+    "orientation": "landscape",
+    "resolution": "768x448",
+    "use_voice": False,
+    "style": "cinematic tech trailer",
+    "extra_llm_instruction": "Grounded visuals only.",
+    "pipeline_preference": "auto",
+    "metadata": {"scene_count": 2, "takes_per_scene": 2, "max_take_retries_per_scene": 1},
+    "backend_overrides": {
+        "ltx2": {
+            "num_inference_steps": 8,
+            "video_cfg_guidance_scale": 3.0,
+            "audio_cfg_guidance_scale": 3.0
+        }
+    }
+}
+result = VideoAgent().run_job(job, raise_on_error=False)
+print(result.model_dump())
+PY
+ffprobe -v error -show_entries format=duration -show_entries stream=index,codec_type,codec_name,width,height,r_frame_rate,duration -of json /workspace/agent_runs/manual-real-phase2c-run/final.mp4
+```
+
+### Phase-2D-End-to-End-Lauf
+```bash
+python - <<'PY'
+from agent_core.agent import VideoAgent
+job = {
+    "job_id": "manual-real-phase2d-run",
+    "idea": "A compact cinematic GPU-pod teaser.",
+    "script": "One scene shows the pod waking up and settling into a clean hero state.",
+    "duration_sec": 4,
+    "orientation": "landscape",
+    "resolution": "768x448",
+    "use_voice": False,
+    "style": "cinematic tech trailer",
+    "extra_llm_instruction": "Grounded visuals only.",
+    "pipeline_preference": "auto",
+    "metadata": {"force_single_scene": True, "variations_per_scene": 2, "takes_per_scene": 1, "max_take_retries_per_scene": 1},
+    "backend_overrides": {
+        "ltx2": {
+            "num_inference_steps": 8,
+            "video_cfg_guidance_scale": 3.0,
+            "audio_cfg_guidance_scale": 3.0
+        }
+    }
+}
+result = VideoAgent().run_job(job, raise_on_error=False)
+print(result.model_dump())
+PY
+ffprobe -v error -show_entries format=duration -show_entries stream=index,codec_type,codec_name,width,height,r_frame_rate,duration -of json /workspace/agent_runs/manual-real-phase2d-run/final.mp4
+```
+
+### Phase-2E-End-to-End-Lauf
+```bash
+python - <<'PY'
+from agent_core.agent import VideoAgent
+job = {
+    "job_id": "manual-real-phase2e-run",
+    "idea": "A compact cinematic GPU-pod teaser.",
+    "script": "Scene one shows the pod waking up. Scene two shows render progress moving across the interface before a clean resolve.",
+    "duration_sec": 6,
+    "orientation": "landscape",
+    "resolution": "768x448",
+    "use_voice": False,
+    "style": "cinematic tech trailer",
+    "extra_llm_instruction": "Grounded visuals only.",
+    "pipeline_preference": "auto",
+    "metadata": {"scene_count": 2, "variations_per_scene": 2, "takes_per_scene": 1, "max_take_retries_per_scene": 1},
+    "backend_overrides": {
+        "ltx2": {
+            "num_inference_steps": 8,
+            "video_cfg_guidance_scale": 3.0,
+            "audio_cfg_guidance_scale": 3.0
+        }
+    }
+}
+result = VideoAgent().run_job(job, raise_on_error=False)
+print(result.model_dump())
+PY
+ffprobe -v error -show_entries format=duration -show_entries stream=index,codec_type,codec_name,width,height,r_frame_rate,duration -of json /workspace/agent_runs/manual-real-phase2e-run/final.mp4
+```
+
+### Phase-3A-End-to-End-Lauf
+```bash
+python - <<'PY'
+from agent_core.agent import VideoAgent
+job = {
+    "job_id": "manual-real-phase3a-run",
+    "idea": "A compact cinematic GPU-pod storyboard check.",
+    "script": "One scene shows the pod waking up and settling into a clear readable frame.",
+    "duration_sec": 4,
+    "orientation": "landscape",
+    "resolution": "768x448",
+    "use_voice": False,
+    "use_storyboard": True,
+    "style": "cinematic tech trailer",
+    "extra_llm_instruction": "Grounded visuals only.",
+    "pipeline_preference": "auto",
+    "metadata": {
+        "force_single_scene": True,
+        "variations_per_scene": 2,
+        "takes_per_scene": 1,
+        "storyboard_candidates_per_scene": 2,
+        "max_take_retries_per_scene": 1
+    },
+    "backend_overrides": {
+        "ltx2": {
+            "num_inference_steps": 8,
+            "video_cfg_guidance_scale": 3.0,
+            "audio_cfg_guidance_scale": 3.0
+        },
+        "zimage": {
+            "steps": 6,
+            "guidance_scale": 0.0
+        }
+    }
+}
+result = VideoAgent().run_job(job, raise_on_error=False)
+print(result.model_dump())
+PY
+ffprobe -v error -show_entries format=duration -show_entries stream=index,codec_type,codec_name,width,height,r_frame_rate,duration -of json /workspace/agent_runs/manual-real-phase3a-run/final.mp4
 ```
 
 ### Agent-Core Struktur pruefen

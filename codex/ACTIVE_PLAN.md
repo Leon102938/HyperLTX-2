@@ -4,19 +4,24 @@
 Phase 1: Agent-Core-Kern
 Phase 2A: Scene-/Shot-Planung
 Phase 2B: Mehrfach-Takes und Auswahl pro Szene
-Phase 3: optionale API-Schicht fuer den Core
+Phase 2C: technischer Quality-Guard, validierte Auswahl und leichte Retries pro Szene
+Phase 2D: Shot-/Prompt-Variation-Engine pro Szene
+Phase 2E: leichte inhaltliche Varianten-/Take-Auswahl ueber dem technischen Vertrag
+Phase 3A: optionale Storyboard-/Keyframe-Pipeline
+Phase 3B: optionale API-Schicht fuer den Core
 Phase 4: n8n-Anbindung
 Phase 5: Ausbau, Optimierung, Spezialisierung
 
-## Phase 2B Ziel
-Den abgeschlossenen Phase-2A-Multi-Scene-Flow um Mehrfach-Takes und eine stabile Auswahl pro Szene erweitern, ohne den bestehenden Single-Flow oder die Kernvertraege zu zerlegen.
+## Phase 3A Ziel
+Eine optionale Storyboard-/Keyframe-Pipeline auf Basis des vorhandenen Pod-Bildpfads bauen, die visuelle Vorsteuerung pro Szene ermoeglicht, sauber persistiert und den bestehenden Video-Flow nicht bricht.
 
-## Phase 2B Arbeitsplan
-1. Take-Datenstruktur in den bestehenden Scene-Vertrag integrieren.
-2. Mehrere Takes pro Szene rendern und im Job-Workspace spiegeln.
-3. Erste stabile Auswahlregel `first_successful_take` implementieren.
-4. `takes.json`, State-Persistenz und Assembly auf selektierte Takes erweitern.
-5. Einen echten Multi-Take-Lauf verifizieren.
+## Phase 3A Arbeitsplan
+1. Bestehenden Bildpfad im Pod bewerten und den kleinsten produktiven Storyboard-Adapter waehlen.
+2. Storyboard-/Keyframe-Schemas in Plan, State und Result einfuehren.
+3. Optionale Planner-Logik fuer Storyboard-Konfiguration, Kandidaten und bevorzugte Variationen bauen.
+4. Produktiven Storyboard-Adapter sowie leichte Keyframe-Auswahl und Persistenz implementieren.
+5. Storyboard-Ergebnisse als optionalen Kontext an den bestehenden Video-Flow durchreichen.
+6. Tests und mindestens einen echten Storyboard-Lauf verifizieren.
 
 ## Empfohlener Minimal-Vertical-Slice
 - Eingabe: einfacher Job mit `prompt`, optional `tts`, optional `audio`, optional `video`
@@ -28,7 +33,7 @@ Den abgeschlossenen Phase-2A-Multi-Scene-Flow um Mehrfach-Takes und eine stabile
   5. LTX-2 Step ausfuehren
   6. finales MP4 assembliert speichern
 
-## Phase-2B-Ist-Stand
+## Phase-3A-Ist-Stand
 - gebaut:
   - Core-Paket `agent_core/`
   - Job-Schema, Plan-Schema, State-Schema, Result-Schema
@@ -42,8 +47,17 @@ Den abgeschlossenen Phase-2A-Multi-Scene-Flow um Mehrfach-Takes und eine stabile
   - Scene-/Shot-Schemas
   - regelbasierte Scene-Segmentierung
   - Take-Planung pro Szene
-  - Auswahlregel `first_successful_take`
+  - Auswahlregel `quality_guarded_best_valid_take`
   - `takes.json` als Take-Artefakt
+  - technischer Quality-Guard pro Take
+  - begrenzte Retry-Regeln pro Szene
+  - regelbasierte Shot-/Prompt-Variations-Engine pro Szene
+  - Variantenvertrag fuer Szene, Take und Persistenz
+  - regelbasierte kreative Auswahlheuristik ueber technisch gleichwertigen validen Kandidaten
+  - neue Auswahlmetadaten `technical_score`, `creative_score`, `selection_reason`, `selected_by_rule`
+  - optionaler Storyboard-Step auf Basis von Z-Image
+  - `storyboard_plan.json` als neues Storyboard-Artefakt
+  - Storyboard-Konfiguration, Keyframe-Kandidaten und selektierte Keyframes pro Szene
 - verifiziert:
   - Tests laufen gruen
   - Voice-Dauer beeinflusst die geplante Videolaenge
@@ -73,6 +87,21 @@ Den abgeschlossenen Phase-2A-Multi-Scene-Flow um Mehrfach-Takes und eine stabile
   - die finale Assembly verwendet nur selektierte Takes
   - `takes.json` wird geschrieben und `state.json` enthaelt die Take-/Selection-Details des Video-Steps
   - echter Multi-Take-Lauf erfolgreich mit `real-phase2b-multitake-1`
+  - jeder erfolgreiche Take traegt jetzt `review_status` plus `validation`-Block
+  - nur validierte selektierte Takes werden assembliert
+  - Retry-Historie wird pro Szene in `takes.json` und `state.json` dokumentiert
+  - echter Phase-2C-Lauf erfolgreich mit `real-phase2c-quality-guard-1`
+  - pro Szene koennen mehrere kreative Varianten geplant werden
+  - jede Variation fuehrt zu eigenen renderbaren Takes
+  - `scene_plan.json` und `takes.json` dokumentieren jetzt Varianten und die ausgewaehlte Variation
+  - echter Phase-2D-Lauf erfolgreich mit `real-phase2d-variation-1`
+  - kreativ gleichwertige technische Kandidaten koennen jetzt regelbasiert aufgeloest werden
+  - benachbarte Szenen vermeiden unnoetige Shot-Typ-Wiederholung
+  - Auswahlmetadaten werden in `takes.json`, `state.json` und Result-Metadaten persistiert
+  - echter Phase-2E-Lauf erfolgreich mit `real-phase2e-creative-selection-1`
+  - echter Phase-3A-Lauf erfolgreich mit `real-phase3a-storyboard-1`
+  - Storyboard-Kandidaten werden technisch validiert und selektiert
+  - selektierte Keyframes werden in `storyboard_plan.json`, `state.json`, `result.json` und `takes.json` dokumentiert
   - Tagesabschluss-Doku und Handoff werden in `/workspace/codex` gepflegt
 
 ## Reale Validierungsnotizen
@@ -109,7 +138,7 @@ Den abgeschlossenen Phase-2A-Multi-Scene-Flow um Mehrfach-Takes und eine stabile
 - Multi-Agent-Swarm
 - DB, Queue-Cluster, Event-Bus
 - tiefe Umbauten in `LTX-2`, `ACE-Step-1.5` oder `Qwen3-TTS`
-- vollwertige Musik-, Storyboard-, Hook- oder Quality-Subsysteme
+- vollwertige Musik-, Hook- oder Quality-Subsysteme
 - produktive `a2vid`-Freigabe ohne weitere reale Backend-Validierung
 - weitere grosse Umbauten am Core nur fuer kosmetische Assembler-Erweiterungen
 
@@ -122,8 +151,8 @@ Den abgeschlossenen Phase-2A-Multi-Scene-Flow um Mehrfach-Takes und eine stabile
   - finales MP4 erzeugen
   - State, Result und Artefakte nachvollziehbar speichern
 
-## Phase-2B-Abschlusskriterium
-- Mehrfach-Takes pro Szene sind implementiert, der Single-Flow funktioniert weiter, selektierte Takes werden sauber persistiert und mindestens ein realer Multi-Take-Lauf ist erfolgreich verifiziert.
+## Phase-3A-Abschlusskriterium
+- Eine optionale Storyboard-/Keyframe-Pipeline arbeitet auf bestehender Pod-Infrastruktur, persistiert Kandidaten und selektierte Keyframes sauber, bleibt mit dem Video-Flow kompatibel und ist durch Tests sowie mindestens einen realen Phase-3A-Lauf verifiziert.
 
 ## Tagesabschluss
 - Commit-wuerdig sind aktuell die Quellordner `agent_core/`, `tests/`, `examples/`, die geschraefte `.gitignore` und der kanonische Projekt-Memory unter `/workspace/codex`.

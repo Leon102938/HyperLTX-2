@@ -24,9 +24,27 @@
 - Der reale stabile Phase-1-Renderpfad ist aktuell `ti2vid`; Voice beeinflusst die geplante Videolaenge und wird danach in `final.mp4` gemuxt.
 - Phase 2A verbessert Produktionsqualitaet zuerst ueber strukturierte Planung und mehrere Segmente, nicht ueber neue Backends.
 - Multi-Segment-Jobs rendern pro Szene eigene Rohclips und fuehren diese vor dem finalen Mux zu `assembled_video.mp4` zusammen.
-- Phase 2B fuehrt mehrere Takes pro Szene ein; die aktuelle stabile Auswahlregel ist `first_successful_take`.
+- Phase 2B fuehrt mehrere Takes pro Szene ein; die aktuelle stabile Auswahlregel war zuerst `first_successful_take`.
+- Phase 2C fuehrt einen technischen Quality-Guard pro Take ein; die aktuelle stabile Auswahlregel ist `quality_guarded_best_valid_take`.
+- Phase 2D fuehrt mehrere regelbasierte kreative Varianten pro Szene ein; Varianten und Takes sind jetzt explizit miteinander verknuepft.
+- Phase 2E fuehrt eine kleine regelbasierte kreative Auswahlheuristik ueber dem technischen Guard-Vertrag ein.
+- Phase 3A fuehrt eine optionale Storyboard-/Keyframe-Pipeline ueber das vorhandene Z-Image-Backend ein.
 - Erfolgreiche Take-Videos werden in den Job-Workspace unter `scenes/<scene_id>/takes/` gespiegelt, auch wenn das Backend seine Originaldateien extern unter `/workspace/jobs` schreibt.
 - Die finale Assembly arbeitet ab Phase 2B nur noch mit den selektierten Takes.
+- Die finale Assembly darf ab Phase 2C nur noch mit validierten selektierten Takes arbeiten.
+- Jeder Take dokumentiert jetzt `review_status`, `validation`, `attempt_number` und optional Retry-Metadaten.
+- Jeder Take dokumentiert jetzt auch `variation_id`, `variation_index`, Shot-Hinweise und den variantenbezogenen Prompt.
+- `scene_plan.json` und `takes.json` dokumentieren jetzt auch die ausgewaehlte Variation pro Szene.
+- `takes.json`, `state.json` und `ResultSummary.metadata` dokumentieren jetzt auch `technical_score`, `creative_score`, `selection_reason` und `selected_by_rule`.
+- `storyboard_plan.json` dokumentiert jetzt Storyboard-Konfiguration, Keyframe-Kandidaten und selektierte Keyframes pro Szene.
+- Selektierte Keyframes werden auch in `takes.json`, `state.json` und `ResultSummary.metadata` gespiegelt.
+- Der technische Guard prueft mindestens Dateiexistenz, Dateigroesse, `ffprobe`, Decode-Faehigkeit, erwartete Aufloesung, FPS und plausible Dauer.
+- Der Bild-Guard fuer Storyboard prueft mindestens Dateiexistenz, Dateigroesse, Bildoeffnung und erwartete Aufloesung.
+- Retry-Regeln bleiben bewusst klein: pro Szene nur ein kleines begrenztes Zusatzbudget fuer technisch abgelehnte Takes.
+- Die kreative Auswahl darf nur auf technisch validen Kandidaten arbeiten; technische Validitaet bleibt harte Voraussetzung.
+- Die aktuelle kreative Heuristik bevorzugt u. a. Opening-Establishing, grobe Szenenziel-Passung und Abwechslung gegenueber der vorher selektierten Szene.
+- Z-Image ist fuer Phase 3A der kleinste produktive Bildpfad im vorhandenen Pod-Stack: echte PNGs, lokale FastAPI, kein neuer Backend-Zweig.
+- Phase 3A reicht selektierte Keyframes nur als Kontext an den Video-Flow weiter; es gibt noch keinen harten keyframe-konditionierten i2v-Vertrag.
 - Commit-wuerdig sind primaer `agent_core/`, `tests/`, `examples/`, `.gitignore` und der kanonische Projekt-Memory unter `/workspace/codex`.
 - Laufzeit- und Artefaktordner wie `agent_runs/`, `exports/`, `jobs/`, `status/`, `venvs/`, Checkpoints und lokale Pod-Logs sollen nicht Teil eines normalen Code-Commits sein.
 - Der Single-Flow bleibt als `single_scene`-Fallback explizit erhalten.
@@ -44,4 +62,6 @@
 - Ein erfolgreicher TTS-Lauf bedeutet nicht automatisch, dass `a2vid` mit derselben Audio-Datei stabil funktioniert.
 - Der Randfall `Voice laenger als Video` ist im regulaeren Agent-Pfad absichtlich schwer erreichbar, weil der Planner das inzwischen verhindert; fuer reale Validierung muss er daher gezielt auf Assembler-Ebene mit echten Artefakten provoziert werden.
 - Bei Multi-Segment-Jobs kann durch MP4-Concat noch ein kleines Timing-Delta gegenueber der geplanten Szenensumme entstehen; im realen Lauf `real-phase2a-multiscene-1` lag es bei etwa `0.023s`.
-- Ein Mehrfach-Take-Run kann alle Takes erfolgreich beenden; die aktuelle Selektion ist dann trotzdem bewusst konservativ und nimmt den ersten erfolgreichen Take statt spaeterer Bewertung.
+- Ein Mehrfach-Take-Run kann alle Takes erfolgreich und technisch valide beenden; Phase 2C faellt dann nur noch als Tie-Break auf den ersten erfolgreichen validen Take zurueck.
+- Ein Mehrvarianten-Run kann mehrere technisch valide kreative Kandidaten erzeugen; Phase 2E loest diese jetzt erst regelbasiert kreativ auf und faellt nur bei echtem Gleichstand weiterhin auf den ersten technisch gleichwertigen validen Kandidaten zurueck.
+- Ein Storyboard-Run kann echte PNG-Artefakte liefern, ohne den Video-Pfad umzubauen; der aktuelle Ausbaupunkt ist spaeter die echte Nutzung dieser Keyframes fuer Video-Steuerung.

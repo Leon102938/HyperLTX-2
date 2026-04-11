@@ -200,24 +200,61 @@ class AssemblerMuxTest(unittest.TestCase):
                                 "scene_id": "scene_01",
                                 "output_path": str(scene_a),
                                 "selected_take_id": "scene_01_take_02",
+                                "review_status": "selected",
+                                "validation": {"passed": True},
                             },
                             {
                                 "scene_id": "scene_02",
                                 "output_path": str(scene_b),
                                 "selected_take_id": "scene_02_take_03",
+                                "review_status": "selected",
+                                "validation": {"passed": True},
                             },
                         ],
-                        "selection_mode": "first_successful_take",
+                        "selection_mode": "quality_guarded_best_valid_take",
                     },
                 ),
             )
 
-            self.assertEqual(result.metadata["selection_mode"], "first_successful_take")
+            self.assertEqual(result.metadata["selection_mode"], "quality_guarded_best_valid_take")
             self.assertEqual(
                 [scene["selected_take_id"] for scene in result.metadata["selected_scene_outputs"]],
                 ["scene_01_take_02", "scene_02_take_03"],
             )
             self.assertTrue((workspace / "assembled_video.mp4").exists())
+
+    def test_multi_scene_assembly_rejects_non_valid_selected_take(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            scene_a = workspace / "scene_a.mp4"
+            _build_video(scene_a, 1.0)
+
+            with self.assertRaises(RuntimeError):
+                ResultAssembler().assemble(
+                    JobInput(job_id="invalid-selected-take", idea="invalid"),
+                    _build_plan("invalid-selected-take", 1.0),
+                    _build_state("invalid-selected-take"),
+                    workspace,
+                    None,
+                    ExecutionResult(
+                        step_name="video",
+                        success=True,
+                        status="succeeded",
+                        backend_name="fake_video",
+                        duration_sec=1.0,
+                        metadata={
+                            "selected_scene_outputs": [
+                                {
+                                    "scene_id": "scene_01",
+                                    "output_path": str(scene_a),
+                                    "selected_take_id": "scene_01_take_01",
+                                    "review_status": "rejected",
+                                    "validation": {"passed": False},
+                                }
+                            ]
+                        },
+                    ),
+                )
 
 
 if __name__ == "__main__":

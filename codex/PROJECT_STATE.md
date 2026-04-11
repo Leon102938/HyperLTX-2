@@ -1,7 +1,7 @@
 # PROJECT_STATE.md
 
 ## Projektstatus
-Status: Phase-1-Kern abgeschlossen; Phase 2A und 2B erweitern den Core jetzt um regelbasierte Scene-/Shot-Planung plus Mehrfach-Takes mit Selektion pro Szene
+Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E und 3A erweitern den Core jetzt um regelbasierte Scene-/Shot-Planung, Mehrfach-Takes, technischen Quality-Guard, validierte Take-Selektion, kreative Varianten pro Szene, leichte inhaltliche Auswahlheuristik, optionale Storyboard-/Keyframe-Vorsteuerung und begrenzte Retries
 
 ## Verifizierte Fakten
 - Git-Root ist `/workspace`.
@@ -33,7 +33,7 @@ Status: Phase-1-Kern abgeschlossen; Phase 2A und 2B erweitern den Core jetzt um 
   - `backend_registry.py`
   - `assembler.py`
   - `utils.py`
-  - Adapter fuer `qwen_tts`, `ltx2`, `music_stub`, `storyboard_stub`
+  - Adapter fuer `qwen_tts`, `ltx2`, `zimage_storyboard`, `music_stub`, `storyboard_stub`
 - Der neue Core nutzt in Phase 1 standardmaessig lokale HTTP-Endpunkte der bestehenden FastAPI statt tiefer Eingriffe in Backend-Repos.
 - Der Planner koppelt bei `use_voice=true` die geplante finale Videolaenge an geschaetzte oder echte Voice-Dauer plus Guard-Padding.
 - Beispieljob vorhanden: `/workspace/examples/minimal_job.json`
@@ -42,8 +42,10 @@ Status: Phase-1-Kern abgeschlossen; Phase 2A und 2B erweitern den Core jetzt um 
   - `/workspace/tests/test_planner_rules.py`
   - `/workspace/tests/test_assembler_mux.py`
   - `/workspace/tests/test_scene_planner.py`
+  - `/workspace/tests/test_storyboard_pipeline.py`
+  - `/workspace/tests/test_take_quality_guard.py`
 - Verifiziert ausgefuehrte Tests:
-  - `python -m unittest discover -s /workspace/tests -v` -> aktuell erfolgreich, 18 Tests gruen
+  - `python -m unittest discover -s /workspace/tests -v` -> aktuell erfolgreich, 33 Tests gruen
 - Verifizierter echter End-to-End-Core-Lauf:
   - Job-ID: `real-e2e-check-3`
   - Input: kurzer Real-Job mit Voice aktiv, `768x448`, `num_inference_steps=8`
@@ -99,6 +101,35 @@ Status: Phase-1-Kern abgeschlossen; Phase 2A und 2B erweitern den Core jetzt um 
   - `takes.json` wird pro Job als eigenes Artefakt geschrieben
   - pro Szene wird ein `selected_take` dokumentiert
   - die finale Assembly nutzt nur die ausgewaehlten Takes
+- Verifiziert implementierte Phase 2C:
+  - jeder erfolgreiche Take wird jetzt technisch validiert, bevor er fuer die Auswahl zugelassen wird
+  - der Guard prueft mindestens Dateiexistenz, Dateigroesse, `ffprobe`, Decode-Faehigkeit, Aufloesung, FPS und plausible Dauer
+  - jeder Take dokumentiert jetzt `review_status` plus strukturierten `validation`-Block
+  - die neue Auswahlregel bevorzugt technisch valide Takes und faellt nur bei technischer Gleichheit auf `first_successful_take` als Tie-Break zurueck
+  - technisch abgelehnte Takes koennen pro Szene mit kleinem Retry-Budget erneut gerendert werden
+  - `takes.json` und `state.json` dokumentieren jetzt auch Retry-Historie, Guard-Ergebnis und Auswahlgrund
+  - der Assembler akzeptiert nur noch validierte selektierte Takes
+- Verifiziert implementierte Phase 2D:
+  - jede Szene enthaelt jetzt mehrere regelbasierte kreative `variations`
+  - jede Variation dokumentiert mindestens `variation_id`, `variation_index`, `shot_type`, Kamera-Hinweis, `framing_hint`, `prompt_delta` und `prompt_variant_text`
+  - pro Variation koennen danach mehrere Takes geplant und gerendert werden
+  - jeder Take dokumentiert jetzt auch seine Quell-Variation
+  - `scene_plan.json`, `takes.json` und `state.json` dokumentieren jetzt Varianten, Variantenzuordnung und die ausgewaehlte Variation pro Szene
+  - Quality-Guard, Retry-Regeln und technische Auswahl bleiben mit dem Variantenvertrag kompatibel
+- Verifiziert implementierte Phase 2E:
+  - die Take-Auswahl arbeitet weiter auf dem Phase-2C-Guard-Vertrag, ergaenzt aber eine kleine regelbasierte kreative Heuristik
+  - pro Szene und selektiertem Take werden jetzt `technical_score`, `creative_score`, `selection_reason` und `selected_by_rule` persistiert
+  - die kreative Heuristik beruecksichtigt mindestens Szenenposition, `shot_type`, `framing_hint`, Prompt-Variante, grobe Szenenziel-Passung und Abwechslung gegenueber der vorher selektierten Szene
+  - direkt benachbarte Szenen koennen gleiche technische Scores haben, aber dennoch unterschiedlich selektiert werden, wenn die kreative Regelbasis dies begruendet
+  - technisch ungueltige Takes bleiben trotz kreativer Heuristik strikt ausgeschlossen
+- Verifiziert implementierte Phase 3A:
+  - ein optionaler Storyboard-Step kann jetzt pro Szene regelbasiert Keyframe-Kandidaten planen
+  - `ScenePlan` enthaelt jetzt `storyboard_config`, `keyframe_candidates` und optional `selected_keyframe`
+  - der produktive Storyboard-Adapter nutzt das vorhandene lokale Z-Image-Backend ueber die bestehende FastAPI
+  - `storyboard_plan.json` wird pro Job als neues Artefakt geschrieben
+  - jeder Keyframe-Kandidat dokumentiert Szene, Variation, technischen Bildstatus und Auswahlmetadaten
+  - pro Szene wird jetzt ein `selected_keyframe` dokumentiert, der spaeteren video- oder prompt-gestuetzten Ausbau vorbereitet
+  - der bestehende Video-Flow bleibt intakt; selektierte Keyframes werden nur als strukturierter Kontext in Take-Metadaten und Renderplaene durchgereicht
 - Verifizierter echter Phase-2A-Multi-Segment-Lauf:
   - Job-ID: `real-phase2a-multiscene-1`
   - Segmentierung: `2` Szenen
@@ -133,16 +164,84 @@ Status: Phase-1-Kern abgeschlossen; Phase 2A und 2B erweitern den Core jetzt um 
   - verifiziertes Artefakt `takes.json` vorhanden
   - finales MP4: `/workspace/agent_runs/real-phase2b-multitake-1/final.mp4`
   - verifizierte Finaldauer via `ffprobe`: `6.105s`
+- Verifizierter echter Phase-2C-Quality-Guard-Lauf:
+  - Job-ID: `real-phase2c-quality-guard-1`
+  - Segmentierung: `2` Szenen
+  - Take-Plan: `2` Takes pro Szene
+  - Quality-Guard aktiv auf allen `4` realen Takes
+  - verifizierter Auswahlmodus: `quality_guarded_best_valid_take`
+  - verifizierter Fallback-Modus: `first_successful_take`
+  - verifizierte `selected_take_ids`:
+    - `scene_01_take_01`
+    - `scene_02_take_01`
+  - verifizierte Guard-Ergebnisse fuer die selektierten Takes:
+    - `validation_status=passed`
+    - Aufloesung `768x448`
+    - FPS `24`
+    - Dauer-Delta gegen Plan je Szene `0.001s`
+  - verifizierte Retry-Anzahl: `0`
+  - finales MP4: `/workspace/agent_runs/real-phase2c-quality-guard-1/final.mp4`
+  - verifizierte Finaldauer via `ffprobe`: `6.105s`
+- Verifizierter echter Phase-2D-Variationslauf:
+  - Job-ID: `real-phase2d-variation-1`
+  - Segmentierung: `1` Szene
+  - kreative Varianten pro Szene: `2`
+  - Take-Plan: `1` Take pro Variation, insgesamt `2` Takes fuer die Szene
+  - verifizierte Variation-IDs:
+    - `scene_01_var_01`
+    - `scene_01_var_02`
+  - verifizierte Shot-Typen:
+    - `establishing`
+    - `medium_action`
+  - beide realen Varianten-Takes wurden technisch validiert mit `validation_status=passed`
+  - verifizierte Auswahl:
+    - `selected_take_id=scene_01_var_01_take_01`
+    - `selected_variation_id=scene_01_var_01`
+    - Fallback auf `first_successful_take` als Tie-Break zwischen technisch gleichwertigen Varianten
+  - finales MP4: `/workspace/agent_runs/real-phase2d-variation-1/final.mp4`
+  - verifizierte Finaldaten via `ffprobe`: `768x448`, `24 fps`, Gesamtdauer `4.042s`
+- Verifizierter echter Phase-2E-Kreativauswahl-Lauf:
+  - Job-ID: `real-phase2e-creative-selection-1`
+  - Segmentierung: `2` Szenen
+  - kreative Varianten pro Szene: `2`
+  - Take-Plan: `1` Take pro Variation, insgesamt `2` Takes pro Szene
+  - verifizierter Auswahlmodus: `quality_guarded_best_valid_take`
+  - verifizierter kreativer Auswahlmodus: `rule_based_scene_variation_heuristic`
+  - alle `4` realen Varianten-Takes wurden technisch validiert mit `validation_status=passed`
+  - verifizierte kreative Auswahl:
+    - `scene_01` -> `selected_take_id=scene_01_var_01_take_01`, `shot_type=establishing`, `selected_by_rule=opening_prefers_establishing`, `creative_score=6`
+    - `scene_02` -> `selected_take_id=scene_02_var_02_take_01`, `shot_type=medium_action`, `selected_by_rule=scene_goal_motion_match`, `creative_score=5`
+  - verifiziert: zwei technisch gleichwertige Kandidaten wurden pro Szene kreativ aufgeloest
+  - finales MP4: `/workspace/agent_runs/real-phase2e-creative-selection-1/final.mp4`
+  - verifizierte Finaldaten via `ffprobe`: `768x448`, `24 fps`, Audio `aac`, Gesamtdauer `6.439s`
+- Verifizierter echter Phase-3A-Storyboard-Lauf:
+  - Job-ID: `real-phase3a-storyboard-1`
+  - Storyboard-Backend: `zimage_storyboard`
+  - Segmentierung: `1` Szene
+  - kreative Varianten pro Szene: `2`
+  - Keyframe-Kandidaten: `2`
+  - beide realen Keyframe-Kandidaten wurden technisch validiert mit `validation_status=passed`
+  - verifizierte Keyframe-Auswahl:
+    - `selected_keyframe_id=scene_01_var_01_keyframe_01`
+    - `selected_variation_id=scene_01_var_01`
+    - `selected_by_rule=preferred_variation_match`
+  - verifizierte Keyframe-Artefakte im Job-Workspace:
+    - `/workspace/agent_runs/real-phase3a-storyboard-1/scenes/scene_01/storyboard/scene_01_var_01_keyframe_01.png`
+    - `/workspace/agent_runs/real-phase3a-storyboard-1/scenes/scene_01/storyboard/scene_01_var_02_keyframe_02.png`
+  - verifiziert: `takes.json` dokumentiert die Keyframe-Beziehung auch am selektierten Take
+  - finales MP4: `/workspace/agent_runs/real-phase3a-storyboard-1/final.mp4`
+  - verifizierte Finaldaten via `ffprobe`: `768x448`, `24 fps`, Audio `aac`, Gesamtdauer `4.042s`
 
 ## Verifizierte Luecken
-- ZImage, ACE-Step, Editor und Upscaler sind noch nicht im neuen Core integriert.
-- Music- und Storyboard-Adapter sind bewusst nur Future-ready-Stubs.
+- ACE-Step, Editor und Upscaler sind noch nicht im neuen Core integriert.
+- Music-Adapter bleibt bewusst ein Future-ready-Stub.
 - Es gibt noch keine externe API-Schicht fuer den neuen Core.
 - Es gibt noch keine n8n-Anbindung.
-- Es gibt noch keinen Hook-/Quality-/Storyboard-Produktionspfad im Core.
+- Es gibt noch keinen AI-basierten Hook-/Quality-/Storyboard-Produktionspfad im Core.
+- Storyboard erzeugt aktuell echte Bildartefakte, aber es gibt noch keinen harten keyframe-konditionierten Bild-zu-Video-Pfad im Core.
 - `a2vid` ist fuer generierte TTS-Audio im aktuellen Pod-Setup nicht als stabiler Phase-1-Vertrag verifiziert.
-- Multi-Segment-Qualitaet ist jetzt strukturell besser planbar, aber es gibt noch keine Auswahl-/Retry-Engine, keine Shot-Selektion und keine Quality-Guard-Logik.
-- Die Take-Auswahl ist absichtlich noch einfach: erster erfolgreicher Take pro Szene.
+- Multi-Segment-Qualitaet ist jetzt technisch besser abgesichert und mit leichter kreativer Heuristik selektierbar, aber es gibt noch keine inhaltliche AI-Qualitaetsbewertung.
+- Die neue Take-Auswahl bleibt bewusst klein und regelbasiert; sie ist noch keine vollwertige Bildinhalts- oder Hook-Bewertungsmaschine.
 - Die Concat-Stufe kann bei Multi-Segment-Jobs noch kleine Container-/Timing-Abweichungen gegenueber der geplanten Szenensumme haben.
 - `.gitignore` ignoriert jetzt die bekannten Laufzeit-/Artefaktordner und lokale Runtime-Logs des Pods.
 
@@ -152,6 +251,10 @@ Status: Phase-1-Kern abgeschlossen; Phase 2A und 2B erweitern den Core jetzt um 
 - Der belastbare Phase-1-Pfad ist aktuell `text/script -> qwen_tts -> ti2vid -> final.mp4`.
 - Phase 2A verbessert Qualitaet zuerst ueber bessere Planung, nicht ueber neue Modellfamilien.
 - Phase 2B verbessert die Produktionsrobustheit zuerst ueber Mehrfach-Takes plus einfache Selektion, nicht ueber komplexe AI-Bewertung.
+- Phase 2C verbessert die Produktionsrobustheit zuerst ueber technische Validierung, leichte Retry-Regeln und bessere Auswahl, nicht ueber Content-Scoring.
+- Phase 2D verbessert die Kandidatenvielfalt zuerst ueber regelbasierte kreative Variation, nicht ueber generative AI-Planung oder Content-Scoring.
+- Phase 2E verbessert die Auswahl zuerst ueber kleine nachvollziehbare kreative Regeln ueber dem technischen Vertrag, nicht ueber grosse AI-Bewertung.
+- Phase 3A verbessert die visuelle Vorsteuerung zuerst ueber optionale Keyframes aus vorhandener Bildinfrastruktur, nicht ueber einen grossen Umbau des Video-Pfads.
 - `agent_runs/`, `exports/`, `jobs/`, `status/`, `venvs/`, Checkpoints und lokale `.log`-Dateien sind Laufzeit-/Umgebungsbestand und nicht primaer fuer Commits gedacht.
 
 ## Offene Fragen
@@ -161,12 +264,12 @@ Status: Phase-1-Kern abgeschlossen; Phase 2A und 2B erweitern den Core jetzt um 
 - Soll der LTX2-Adapter spaeter von HTTP auf direkten Python-Aufruf umgestellt werden?
 - Soll `a2vid` spaeter mit strengem Audio-/Frame-Vertrag wieder freigeschaltet werden?
 - Soll fuer spaetere Phasen neben Dauer auch eine explizite Shot-/Clip-Vertragslogik eingefuehrt werden?
-- Soll Phase 2B als naechstes eher Shot-Variation plus Auswahl oder eher ein zweiter produktiver Backend-Pfad werden?
-- Wann soll die Selektion von `first_successful_take` auf echte Scoring-/Quality-Regeln erweitert werden?
+- Wann soll die kleine kreative Heuristik von Phase 2E in spaetere echte Inhaltsbewertung oder Hook-/Narrativ-Scoring uebergehen?
+- Soll der naechste Schritt eher ein keyframe-gestuetzter Video-Pfad oder ein zweiter produktiver Backend-Pfad sein?
 
 ## Empfehlungen
 - Den bestehenden Phase-1-Kern nicht aufblasen, sondern als Basis fuer den zweiten Vertical Slice nutzen.
-- Phase 2B sollte auf diesem Stand nicht in eine Bewertungs-Orgie kippen; der naechste Schritt sollte gezielt ein leichter Quality-Guard oder eine einfache Retry-/Selection-Verfeinerung sein.
+- Phase 3A sollte auf diesem Stand nicht in eine Storyboard-Orgie kippen; der naechste grosse Schritt sollte eher ein vorsichtiger keyframe-gestuetzter Video-Pfad im bestehenden Stack oder spaeter ein zweiter produktiver Backend-Pfad sein.
 - Vor einer externen API zuerst die internen Artefakt- und Fehlervertraege stabilisieren.
 - Phase 1 kann fuer den definierten Scope jetzt als technisch sauber abgeschlossen gelten.
 - Fuer den Tagesabschluss sollte `agent_core/`, `tests/`, `examples/`, `.gitignore` und `/workspace/codex` priorisiert werden; Laufzeitordner sollten draussen bleiben.

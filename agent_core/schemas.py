@@ -18,6 +18,10 @@ JobPhase = Literal[
 
 StepStatus = Literal["pending", "planned", "running", "succeeded", "skipped", "failed"]
 BackendKind = Literal["voice", "video", "music", "storyboard"]
+TakeReviewStatus = Literal["passed", "failed", "rejected", "selected"]
+TakeValidationStatus = Literal["passed", "failed", "rejected"]
+KeyframeReviewStatus = Literal["passed", "failed", "rejected", "selected"]
+ImageValidationStatus = Literal["passed", "failed", "rejected"]
 
 
 class ArtifactRef(BaseModel):
@@ -201,16 +205,153 @@ class ShotPlan(BaseModel):
     notes: list[str] = Field(default_factory=list)
 
 
+class VariationPlan(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    variation_id: str
+    scene_id: str
+    variation_index: int
+    shot_type: str
+    camera_style: str | None = None
+    camera_motion: str | None = None
+    framing_hint: str
+    prompt_delta: str | None = None
+    prompt_variant_text: str
+    style_bias: str | None = None
+    notes: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_camera_hint(self) -> "VariationPlan":
+        if not self.camera_style and not self.camera_motion:
+            raise ValueError("variation requires at least camera_style or camera_motion")
+        return self
+
+
+class StoryboardConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scene_id: str
+    enabled: bool = False
+    required: bool = False
+    candidate_count: int = 0
+    preferred_variation_id: str | None = None
+    preferred_variation_index: int | None = None
+    priority_rule: str | None = None
+    selection_mode: str = "preferred_variation_then_first_valid"
+    notes: list[str] = Field(default_factory=list)
+
+
+class KeyframeCandidatePlan(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    candidate_id: str
+    scene_id: str
+    candidate_index: int
+    variation_id: str | None = None
+    variation_index: int | None = None
+    shot_type: str | None = None
+    prompt_text: str
+    width: int
+    height: int
+    priority_rank: int = 0
+    relation_type: str = "scene_variation"
+    render_params: dict[str, Any] = Field(default_factory=dict)
+    notes: list[str] = Field(default_factory=list)
+
+
+class ImageValidationReport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    validation_status: ImageValidationStatus
+    passed: bool = False
+    file_exists: bool = False
+    file_size_bytes: int | None = None
+    minimum_size_bytes: int | None = None
+    image_open_ok: bool = False
+    width: int | None = None
+    height: int | None = None
+    format_name: str | None = None
+    color_mode: str | None = None
+    expected_width: int | None = None
+    expected_height: int | None = None
+    issues: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class SelectedKeyframe(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    candidate_id: str
+    scene_id: str
+    candidate_index: int
+    variation_id: str | None = None
+    variation_index: int | None = None
+    shot_type: str | None = None
+    output_path: str | None = None
+    output_url: str | None = None
+    selected_by_rule: str | None = None
+    selection_reason: str | None = None
+    technical_status: str | None = None
+    validation: ImageValidationReport | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class TakePlan(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     take_id: str
     scene_id: str
     take_index: int
+    variation_id: str | None = None
+    variation_index: int | None = None
+    shot_type: str | None = None
+    camera_style: str | None = None
+    camera_motion: str | None = None
+    framing_hint: str | None = None
+    prompt_variant_text: str | None = None
+    style_bias: str | None = None
     seed: int
     prompt_text: str
     render_params: dict[str, Any] = Field(default_factory=dict)
     notes: list[str] = Field(default_factory=list)
+
+
+class TakeValidationReport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    validation_status: TakeValidationStatus
+    passed: bool = False
+    file_exists: bool = False
+    file_size_bytes: int | None = None
+    minimum_size_bytes: int | None = None
+    ffprobe_ok: bool = False
+    decode_ok: bool = False
+    width: int | None = None
+    height: int | None = None
+    fps: float | None = None
+    duration_sec: float | None = None
+    duration_delta_sec: float | None = None
+    codec_name: str | None = None
+    format_name: str | None = None
+    expected_width: int | None = None
+    expected_height: int | None = None
+    expected_fps: float | None = None
+    expected_duration_sec: float | None = None
+    issues: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class TakeRetryRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scene_id: str
+    source_take_id: str
+    retry_take_id: str
+    retry_index: int
+    seed: int
+    reason: str
+    source_variation_id: str | None = None
+    retry_variation_id: str | None = None
 
 
 class TakeResultRecord(BaseModel):
@@ -219,12 +360,45 @@ class TakeResultRecord(BaseModel):
     take_id: str
     scene_id: str
     take_index: int
+    variation_id: str | None = None
+    variation_index: int | None = None
+    shot_type: str | None = None
+    camera_style: str | None = None
+    camera_motion: str | None = None
+    framing_hint: str | None = None
+    prompt_variant_text: str | None = None
+    style_bias: str | None = None
     seed: int
     status: StepStatus
+    review_status: TakeReviewStatus = "failed"
     output_path: str | None = None
     output_url: str | None = None
     duration_sec: float | None = None
     selected: bool = False
+    attempt_number: int = 1
+    is_retry: bool = False
+    retry_of_take_id: str | None = None
+    retry_reason: str | None = None
+    validation: TakeValidationReport | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    error: str | None = None
+
+
+class KeyframeCandidateResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    candidate_id: str
+    scene_id: str
+    candidate_index: int
+    variation_id: str | None = None
+    variation_index: int | None = None
+    shot_type: str | None = None
+    status: StepStatus
+    review_status: KeyframeReviewStatus = "failed"
+    output_path: str | None = None
+    output_url: str | None = None
+    selected: bool = False
+    validation: ImageValidationReport | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     error: str | None = None
 
@@ -244,6 +418,10 @@ class ScenePlan(BaseModel):
     narration_end_sec: float | None = None
     render_params: dict[str, Any] = Field(default_factory=dict)
     shots: list[ShotPlan] = Field(default_factory=list)
+    variations: list[VariationPlan] = Field(default_factory=list)
+    storyboard_config: StoryboardConfig | None = None
+    keyframe_candidates: list[KeyframeCandidatePlan] = Field(default_factory=list)
+    selected_keyframe: SelectedKeyframe | None = None
     takes: list[TakePlan] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
 

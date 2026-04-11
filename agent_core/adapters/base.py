@@ -40,6 +40,15 @@ class VideoAdapter(BackendAdapter):
         raise NotImplementedError
 
 
+class StoryboardAdapter(BackendAdapter):
+    kind = "storyboard"
+    phase1_enabled = True
+
+    @abstractmethod
+    def generate_storyboard(self, job: JobInput, plan: ProductionPlan, workspace: Path) -> ExecutionResult:
+        raise NotImplementedError
+
+
 class StubAdapter(BackendAdapter):
     phase1_enabled = False
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Iterable
 
-from agent_core.adapters import LTX2Adapter, MusicAdapter, QwenTTSAdapter, StoryboardAdapter
+from agent_core.adapters import LTX2Adapter, MusicAdapter, QwenTTSAdapter, StoryboardStubAdapter, ZImageStoryboardAdapter
 from agent_core.adapters.base import BackendAdapter
 from agent_core.schemas import BackendCapabilities
 
@@ -52,7 +52,8 @@ def build_default_registry(base_url: str = "http://127.0.0.1:8000") -> BackendRe
         adapters=[
             QwenTTSAdapter(base_url=base_url),
             LTX2Adapter(base_url=base_url),
+            ZImageStoryboardAdapter(base_url=base_url),
             MusicAdapter(),
-            StoryboardAdapter(),
+            StoryboardStubAdapter(),
         ]
     )
