@@ -158,6 +158,13 @@ class ResultAssembler:
                 "selected_scene_storyboards": (
                     storyboard_result.metadata.get("selected_scene_storyboards", []) if storyboard_result else []
                 ),
+                "video_mode_requested": plan.metadata.get("video_mode_requested", "auto"),
+                "planned_render_mode": plan.metadata.get("planned_render_mode", "text_only"),
+                "render_mode_counts": video_result.metadata.get(
+                    "render_mode_counts",
+                    {"text_only": 0, "storyboard_reference": 0, "keyframe_conditioned": 0},
+                ),
+                "fallback_reasons": video_result.metadata.get("fallback_reasons", []),
                 "selection_mode": video_result.metadata.get("selection_mode", "quality_guarded_best_valid_take"),
                 "creative_selection_mode": video_result.metadata.get(
                     "creative_selection_mode", "rule_based_scene_variation_heuristic"

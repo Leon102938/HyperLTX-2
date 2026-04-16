@@ -27,6 +27,7 @@ curl -sS http://127.0.0.1:8000/DW/ready
 curl -sS http://127.0.0.1:8000/DW/qwen_tts_ready
 curl -sS http://127.0.0.1:8000/DW/ace_step_1_5_ready
 curl -sS http://127.0.0.1:8000/DW/zimage_ready
+curl -sS http://127.0.0.1:8000/agent-core/jobs/does-not-exist
 ```
 
 ### Repo-Recon
@@ -67,6 +68,51 @@ from agent_core.agent import VideoAgent
 result = VideoAgent().run_job('/workspace/examples/minimal_job.json')
 print(result.model_dump())
 PY
+```
+
+### Phase-4A-Bridge lokal pruefen
+```bash
+curl -sS -X POST http://127.0.0.1:8000/agent-core/run \
+  -H 'Content-Type: application/json' \
+  --data @/workspace/examples/agent_core_bridge_request.json
+
+curl -sS http://127.0.0.1:8000/agent-core/jobs/bridge-demo-job
+```
+
+### Phase-4B-Bridge lokal pruefen
+```bash
+curl -sS -X POST http://127.0.0.1:8000/agent-core/jobs \
+  -H 'Content-Type: application/json' \
+  --data @/workspace/examples/agent_core_bridge_request.json
+
+curl -sS http://127.0.0.1:8000/agent-core/jobs/<job_id>
+```
+
+### Phase-4C-Response-Haertung lokal pruefen
+```bash
+curl -sS http://127.0.0.1:8000/agent-core/jobs/<job_id> | python - <<'PY'
+import json, sys
+payload = json.load(sys.stdin)
+print("status:", payload["status"])
+print("status_summary:", payload["status_summary"])
+print("is_terminal:", payload["is_terminal"])
+print("should_poll:", payload["should_poll"])
+print("retry_after_sec:", payload["retry_after_sec"])
+print("artifacts_ready:", payload["artifacts_ready"])
+print("result_json_ready:", payload["result_json_ready"])
+print("final_mp4_ready:", payload["final_mp4_ready"])
+print("public_result_json_url:", payload["public_refs"]["result_json_url"])
+print("public_final_mp4_url:", payload["public_refs"]["final_mp4_url"])
+PY
+```
+
+### Phase-4B-Bridge ueber Proxy pruefen
+```bash
+curl -sS -X POST https://mvwg65x59mc01e-8000.proxy.runpod.net/agent-core/jobs \
+  -H 'Content-Type: application/json' \
+  --data @/workspace/examples/agent_core_bridge_request.json
+
+curl -sS https://mvwg65x59mc01e-8000.proxy.runpod.net/agent-core/jobs/<job_id>
 ```
 
 ### Finales MP4 pruefen
@@ -253,6 +299,37 @@ print("take-keyframe-relation:", takes["scene_outputs"][0]["selected_take"]["met
 PY
 ```
 
+### Phase-3B-Rendermodus pruefen
+```bash
+python - <<'PY'
+import json, pathlib
+job_id = "real-phase3b-keyframe-1"
+base = pathlib.Path("/workspace/agent_runs") / job_id
+takes = json.loads(base.joinpath("takes.json").read_text())
+result = json.loads(base.joinpath("result.json").read_text())
+scene = takes["scene_outputs"][0]
+print("video_mode:", scene["video_mode"])
+print("render_mode:", scene["render_mode"])
+print("fallback_reason:", scene["fallback_reason"])
+print("selected_keyframe_usage:", scene["selected_keyframe_usage"])
+print("render_mode_counts:", result["metadata"]["render_mode_counts"])
+PY
+```
+
+### Phase-4A-Bridge-Artefakte pruefen
+```bash
+python - <<'PY'
+import json, pathlib
+job_id = "bridge-demo-job"
+base = pathlib.Path("/workspace/agent_runs") / job_id
+result = json.loads(base.joinpath("result.json").read_text())
+print("success:", result["success"])
+print("output_final_path:", result["output_final_path"])
+print("result_json:", base / "result.json")
+print("state_json:", base / "state.json")
+PY
+```
+
 ### Realen End-to-End-Lauf fahren
 ```bash
 python - <<'PY'
@@ -427,6 +504,69 @@ result = VideoAgent().run_job(job, raise_on_error=False)
 print(result.model_dump())
 PY
 ffprobe -v error -show_entries format=duration -show_entries stream=index,codec_type,codec_name,width,height,r_frame_rate,duration -of json /workspace/agent_runs/manual-real-phase2c-run/final.mp4
+```
+
+### Phase-3B-End-to-End-Lauf
+```bash
+python - <<'PY'
+from agent_core.agent import VideoAgent
+job = {
+    "job_id": "manual-real-phase3b-run",
+    "idea": "A cinematic GPU pod render starts from a selected storyboard keyframe.",
+    "script": "The pod wakes up and the render interface comes alive.",
+    "duration_sec": 4,
+    "orientation": "landscape",
+    "resolution": "768x448",
+    "use_voice": False,
+    "use_storyboard": True,
+    "video_mode": "keyframe_conditioned",
+    "style": "cinematic tech trailer",
+    "extra_llm_instruction": "Grounded visuals, clean composition, readable first frame.",
+    "pipeline_preference": "auto",
+    "metadata": {
+        "force_single_scene": True,
+        "variations_per_scene": 2,
+        "takes_per_scene": 1,
+        "storyboard_candidates_per_scene": 2
+    },
+    "backend_overrides": {
+        "ltx2": {
+            "num_inference_steps": 8,
+            "video_cfg_guidance_scale": 3.0,
+            "audio_cfg_guidance_scale": 3.0
+        },
+        "zimage": {
+            "steps": 9,
+            "guidance_scale": 0.0
+        }
+    }
+}
+result = VideoAgent().run_job(job, raise_on_error=False)
+print(result.model_dump())
+PY
+python - <<'PY'
+import json, pathlib
+job_id = "manual-real-phase3b-run"
+base = pathlib.Path("/workspace/agent_runs") / job_id
+takes = json.loads(base.joinpath("takes.json").read_text())
+scene = takes["scene_outputs"][0]
+print("render_mode:", scene["render_mode"])
+print("selected_keyframe_usage:", scene["selected_keyframe_usage"])
+PY
+ffprobe -v error -show_entries format=duration -show_entries stream=index,codec_type,codec_name,width,height,r_frame_rate,duration -of json /workspace/agent_runs/manual-real-phase3b-run/final.mp4
+```
+
+### Phase-4A-End-to-End-Lauf ueber HTTP
+```bash
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8010
+```
+
+```bash
+curl -sS -X POST http://127.0.0.1:8010/agent-core/run \
+  -H 'Content-Type: application/json' \
+  --data @/workspace/examples/agent_core_bridge_request.json
+
+curl -sS http://127.0.0.1:8010/agent-core/jobs/bridge-demo-job
 ```
 
 ### Phase-2D-End-to-End-Lauf

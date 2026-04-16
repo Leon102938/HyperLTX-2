@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import re
+from pathlib import Path
 from typing import Any
 
 from agent_core.backend_registry import BackendRegistry
@@ -29,6 +30,9 @@ class ProductionPlanner:
     MAX_STORYBOARD_CANDIDATES = 4
     VOICE_PADDING_SEC = 1.0
     DEFAULT_FRAME_RATE = 24
+    DEFAULT_KEYFRAME_FRAME_IDX = 0
+    DEFAULT_KEYFRAME_STRENGTH = 1.0
+    DEFAULT_KEYFRAME_CRF = 33
 
     def __init__(self, registry: BackendRegistry) -> None:
         self.registry = registry
@@ -41,6 +45,7 @@ class ProductionPlanner:
         voice_capability = self.registry.primary_capability("voice")
         storyboard_capability = self.registry.primary_capability("storyboard")
         music_capability = self.registry.primary_capability("music")
+        storyboard_requested = self._storyboard_requested(job)
 
         warnings: list[str] = []
         rules_applied: list[str] = []
@@ -52,6 +57,7 @@ class ProductionPlanner:
         selected_pipeline = self._resolve_pipeline(job, job.use_voice)
         if not self.registry.supports_video_pipeline(selected_pipeline):
             raise ValueError(f"Video backend does not support planned pipeline '{selected_pipeline}'")
+        keyframe_video_available = self._supports_keyframe_conditioned_video(video_capability, selected_pipeline)
 
         width, height, resolution_label = choose_resolution(job.orientation or "landscape", job.resolution)
         requested_duration = round(job.duration_sec, 2) if job.duration_sec else None
@@ -95,6 +101,8 @@ class ProductionPlanner:
             selected_pipeline=selected_pipeline,
             target_duration_sec=target_duration,
             frame_rate=self.DEFAULT_FRAME_RATE,
+            storyboard_requested=storyboard_requested,
+            keyframe_video_available=keyframe_video_available,
         )
         scene_total_duration = round(sum(scene.target_duration_sec for scene in scenes), 3)
         if scene_total_duration != target_duration:
@@ -106,6 +114,8 @@ class ProductionPlanner:
         variations_per_scene = max((len(scene.variations) for scene in scenes), default=1)
         storyboard_candidates_per_scene = max((len(scene.keyframe_candidates) for scene in scenes), default=0)
         storyboard_enabled = any(scene.storyboard_config and scene.storyboard_config.enabled for scene in scenes)
+        render_mode_counts = self._render_mode_counts(scenes)
+        planned_render_mode = self._summarize_render_mode(render_mode_counts)
         takes_per_variation = self._determine_take_count(job)
         max_quality_retries_per_scene = self._determine_retry_limit(job)
         storyboard_selection_mode = "preferred_variation_then_first_valid"
@@ -125,9 +135,21 @@ class ProductionPlanner:
             rules_applied.append(
                 "Optional storyboard keyframes are planned per scene to provide visual pre-steering before video rendering."
             )
+        if render_mode_counts.get("keyframe_conditioned", 0):
+            rules_applied.append(
+                "Phase 3B uses selected storyboard keyframes as first-frame image conditioning for the existing ti2vid path when available."
+            )
+        elif render_mode_counts.get("storyboard_reference", 0):
+            rules_applied.append(
+                "Phase 3B keeps storyboard active as render reference while the stable text-driven ti2vid flow remains the actual video fallback."
+            )
 
-        if job.use_storyboard and not storyboard_enabled:
+        if storyboard_requested and not storyboard_enabled:
             warnings.append("Storyboard requested but skipped because no storyboard backend is active.")
+        if job.video_mode == "keyframe_conditioned" and not keyframe_video_available:
+            warnings.append(
+                "video_mode=keyframe_conditioned requested, but the current stable video backend path does not expose verified keyframe image conditioning; planner falls back per scene."
+            )
         if job.use_music:
             warnings.append("Music requested but skipped in Phase 1 because no music backend is active.")
 
@@ -155,6 +177,7 @@ class ProductionPlanner:
                 params={
                     "scene_count": len(scenes),
                     "storyboard_enabled": storyboard_enabled,
+                    "storyboard_requested": storyboard_requested,
                     "candidate_count_per_scene": storyboard_candidates_per_scene,
                     "selection_mode": storyboard_selection_mode,
                     "width": width,
@@ -188,6 +211,10 @@ class ProductionPlanner:
                     "storyboard_candidates_per_scene": storyboard_candidates_per_scene,
                     "takes_per_variation": takes_per_variation,
                     "takes_per_scene": takes_per_scene,
+                    "video_mode_requested": job.video_mode,
+                    "planned_render_mode": planned_render_mode,
+                    "render_mode_counts": render_mode_counts,
+                    "keyframe_video_available": keyframe_video_available,
                     "selection_mode": "quality_guarded_best_valid_take",
                     "creative_selection_mode": "rule_based_scene_variation_heuristic",
                     "fallback_selection_mode": "first_successful_take",
@@ -228,11 +255,16 @@ class ProductionPlanner:
                 "segmentation_mode": "multi_scene" if len(scenes) > 1 else "single_scene",
                 "variations_per_scene": variations_per_scene,
                 "storyboard_enabled": storyboard_enabled,
+                "storyboard_requested": storyboard_requested,
                 "storyboard_candidates_per_scene": storyboard_candidates_per_scene,
                 "storyboard_selection_mode": storyboard_selection_mode,
                 "storyboard_backend": storyboard_capability.name if storyboard_enabled and storyboard_capability else None,
                 "takes_per_variation": takes_per_variation,
                 "takes_per_scene": takes_per_scene,
+                "video_mode_requested": job.video_mode,
+                "planned_render_mode": planned_render_mode,
+                "render_mode_counts": render_mode_counts,
+                "keyframe_video_available": keyframe_video_available,
                 "selection_mode": "quality_guarded_best_valid_take",
                 "creative_selection_mode": "rule_based_scene_variation_heuristic",
                 "fallback_selection_mode": "first_successful_take",
@@ -242,7 +274,7 @@ class ProductionPlanner:
                 "voice_padding_sec": self.VOICE_PADDING_SEC,
                 "voice_enabled": job.use_voice,
                 "music_requested": job.use_music,
-                "storyboard_requested": job.use_storyboard,
+                "storyboard_requested_via_video_mode": storyboard_requested and not job.use_storyboard,
             },
         )
 
@@ -267,6 +299,7 @@ class ProductionPlanner:
         video_step = next(step for step in plan.steps if step.name == "video")
         selected_variation = self._variation_for_take(scene, take)
         selected_keyframe = scene.selected_keyframe.model_dump(mode="json") if scene.selected_keyframe else None
+        render_context = self._resolve_scene_render_context(scene)
         scene_video_step = ProductionStep(
             name="video",
             kind="video",
@@ -290,8 +323,14 @@ class ProductionPlanner:
                 "camera_style": take.camera_style,
                 "camera_motion": take.camera_motion,
                 "framing_hint": take.framing_hint,
+                "video_mode": take.video_mode,
+                "planned_render_mode": take.render_mode,
+                "render_mode": render_context["render_mode"],
+                "fallback_strategy": take.fallback_strategy,
+                "fallback_reason": render_context["fallback_reason"],
                 "selected_keyframe_path": scene.selected_keyframe.output_path if scene.selected_keyframe else None,
                 "selected_keyframe_candidate_id": scene.selected_keyframe.candidate_id if scene.selected_keyframe else None,
+                "selected_keyframe_usage": render_context["selected_keyframe_usage"],
                 "selection_mode": "quality_guarded_best_valid_take",
                 "creative_selection_mode": "rule_based_scene_variation_heuristic",
                 "seed": take.seed,
@@ -343,7 +382,13 @@ class ProductionPlanner:
                 "take_index": take.take_index,
                 "variation_id": take.variation_id,
                 "variation_index": take.variation_index,
+                "video_mode": take.video_mode,
+                "planned_render_mode": take.render_mode,
+                "render_mode": render_context["render_mode"],
+                "fallback_strategy": take.fallback_strategy,
+                "fallback_reason": render_context["fallback_reason"],
                 "selected_keyframe": selected_keyframe,
+                "selected_keyframe_usage": render_context["selected_keyframe_usage"],
                 "selection_mode": "quality_guarded_best_valid_take",
                 "creative_selection_mode": "rule_based_scene_variation_heuristic",
                 "quality_guard_enabled": True,
@@ -447,6 +492,8 @@ class ProductionPlanner:
         selected_pipeline: str,
         target_duration_sec: float,
         frame_rate: int,
+        storyboard_requested: bool,
+        keyframe_video_available: bool,
     ) -> list[ScenePlan]:
         text_units = self._split_text_units(job.primary_text)
         scene_count = self._determine_scene_count(job, target_duration_sec, len(text_units))
@@ -455,13 +502,20 @@ class ProductionPlanner:
         variations_per_scene = self._determine_variation_count(job)
         takes_per_variation = self._determine_take_count(job)
         storyboard_candidate_count = self._determine_storyboard_candidate_count(job)
-        storyboard_enabled = bool(job.use_storyboard and self.registry.primary_capability("storyboard"))
+        storyboard_enabled = bool(storyboard_requested and self.registry.primary_capability("storyboard"))
+        keyframe_conditioning_defaults = self._keyframe_conditioning_defaults(job)
 
         scenes: list[ScenePlan] = []
         narration_cursor = 0.0
         for index, (scene_text, raw_duration_sec) in enumerate(zip(grouped_units, raw_scene_durations), start=1):
             num_frames, quantized_duration_sec = quantize_duration_to_frame_contract(raw_duration_sec, frame_rate)
             scene_id = f"scene_{index:02d}"
+            requested_video_mode = self._resolve_scene_video_mode(job, scene_id, index)
+            render_mode, fallback_strategy, planning_fallback_reason = self._resolve_planned_render_mode(
+                requested_video_mode,
+                storyboard_enabled=storyboard_enabled,
+                keyframe_video_available=keyframe_video_available,
+            )
             title = f"Scene {index}"
             description = self._scene_description(scene_text, job.idea or job.script or "visual beat")
             prompt_text = self._scene_prompt(job, description, scene_text, index, scene_count)
@@ -479,6 +533,11 @@ class ProductionPlanner:
                 "height": height,
                 "orientation": job.orientation or "landscape",
                 "resolution_label": resolution_label,
+                "video_mode": requested_video_mode,
+                "render_mode": render_mode,
+                "fallback_strategy": fallback_strategy,
+                "planning_fallback_reason": planning_fallback_reason,
+                "selected_keyframe_conditioning": keyframe_conditioning_defaults,
             }
             shot = ShotPlan(
                 shot_id=f"{scene_id}_shot_01",
@@ -530,6 +589,9 @@ class ProductionPlanner:
                 variations=variation_plans,
                 takes_per_variation=takes_per_variation,
                 render_params=render_params,
+                video_mode=requested_video_mode,
+                render_mode=render_mode,
+                fallback_strategy=fallback_strategy,
             )
             scenes.append(
                 ScenePlan(
@@ -543,6 +605,9 @@ class ProductionPlanner:
                     narration_text=narration_text,
                     narration_start_sec=narration_start_sec,
                     narration_end_sec=narration_end_sec,
+                    video_mode=requested_video_mode,
+                    render_mode=render_mode,
+                    fallback_strategy=fallback_strategy,
                     render_params=render_params,
                     shots=[shot],
                     variations=variation_plans,
@@ -558,9 +623,12 @@ class ProductionPlanner:
                             if storyboard_config.enabled
                             else "Phase 3A storyboard is inactive for this scene."
                         ),
+                        f"Phase 3B requested video_mode={requested_video_mode} and planned render_mode={render_mode}.",
                     ],
                 )
             )
+            if planning_fallback_reason:
+                scenes[-1].notes.append(f"Planner fallback reason: {planning_fallback_reason}")
         return scenes
 
     def _determine_scene_count(self, job: JobInput, target_duration_sec: float, unit_count: int) -> int:
@@ -626,7 +694,7 @@ class ProductionPlanner:
         return max(0, min(retry_limit, self.MAX_TAKE_RETRIES_PER_SCENE))
 
     def _determine_storyboard_candidate_count(self, job: JobInput) -> int:
-        default_count = 2 if job.use_storyboard else 0
+        default_count = 2 if self._storyboard_requested(job) else 0
         requested = job.metadata.get("storyboard_candidates_per_scene", default_count)
         try:
             candidate_count = int(requested)
@@ -965,6 +1033,9 @@ class ProductionPlanner:
         variations: list[VariationPlan],
         takes_per_variation: int,
         render_params: dict[str, object],
+        video_mode: str,
+        render_mode: str,
+        fallback_strategy: str,
     ) -> list[TakePlan]:
         takes: list[TakePlan] = []
         base_seed_material = f"{job.job_id or job.primary_text}:{scene_id}"
@@ -1011,6 +1082,9 @@ class ProductionPlanner:
                         style_bias=variation.style_bias,
                         seed=seed,
                         prompt_text=variation.prompt_variant_text,
+                        video_mode=video_mode,
+                        render_mode=render_mode,
+                        fallback_strategy=fallback_strategy,
                         render_params=take_render_params,
                         notes=[
                             f"Phase 2D take for variation {variation.variation_id}.",
@@ -1020,6 +1094,143 @@ class ProductionPlanner:
                     )
                 )
         return takes
+
+    @staticmethod
+    def _storyboard_requested(job: JobInput) -> bool:
+        return bool(job.use_storyboard or job.video_mode in {"storyboard_reference", "keyframe_conditioned"})
+
+    @staticmethod
+    def _supports_keyframe_conditioned_video(video_capability, selected_pipeline: str) -> bool:
+        return bool(
+            video_capability
+            and getattr(video_capability, "supports_image_conditioning", False)
+            and selected_pipeline == "ti2vid"
+        )
+
+    @staticmethod
+    def _normalize_video_mode(value: Any, default: str) -> str:
+        normalized = str(value or default).strip().lower()
+        allowed = {"auto", "text_only", "storyboard_reference", "keyframe_conditioned"}
+        return normalized if normalized in allowed else default
+
+    def _resolve_scene_video_mode(self, job: JobInput, scene_id: str, scene_index: int) -> str:
+        overrides = job.metadata.get("scene_video_modes")
+        if isinstance(overrides, dict):
+            for key in (scene_id, str(scene_index), f"scene_{scene_index}"):
+                if key in overrides:
+                    return self._normalize_video_mode(overrides.get(key), job.video_mode)
+        return job.video_mode
+
+    def _resolve_planned_render_mode(
+        self,
+        requested_video_mode: str,
+        *,
+        storyboard_enabled: bool,
+        keyframe_video_available: bool,
+    ) -> tuple[str, str, str | None]:
+        if requested_video_mode == "text_only":
+            return "text_only", "text_only", None
+        if requested_video_mode == "storyboard_reference":
+            if storyboard_enabled:
+                return "storyboard_reference", "text_only", None
+            return "text_only", "text_only", "storyboard_reference requested but storyboard is unavailable"
+        if requested_video_mode == "keyframe_conditioned":
+            if storyboard_enabled and keyframe_video_available:
+                return "keyframe_conditioned", "storyboard_reference_then_text_only", None
+            if storyboard_enabled:
+                return (
+                    "storyboard_reference",
+                    "text_only",
+                    "keyframe_conditioned requested but the active stable video path does not expose image conditioning",
+                )
+            return "text_only", "text_only", "keyframe_conditioned requested but storyboard is unavailable"
+        if storyboard_enabled and keyframe_video_available:
+            return "keyframe_conditioned", "storyboard_reference_then_text_only", None
+        if storyboard_enabled:
+            return "storyboard_reference", "text_only", None
+        return "text_only", "text_only", None
+
+    def _keyframe_conditioning_defaults(self, job: JobInput) -> dict[str, object]:
+        ltx2_overrides = job.backend_overrides.get("ltx2", {})
+        return {
+            "frame_idx": int(ltx2_overrides.get("image_frame_idx", self.DEFAULT_KEYFRAME_FRAME_IDX)),
+            "strength": float(ltx2_overrides.get("image_strength", self.DEFAULT_KEYFRAME_STRENGTH)),
+            "crf": int(ltx2_overrides.get("image_crf", self.DEFAULT_KEYFRAME_CRF)),
+            "relation_type": "selected_keyframe_first_frame_conditioning",
+        }
+
+    @staticmethod
+    def _render_mode_counts(scenes: list[ScenePlan]) -> dict[str, int]:
+        counts = {"text_only": 0, "storyboard_reference": 0, "keyframe_conditioned": 0}
+        for scene in scenes:
+            counts[scene.render_mode] = counts.get(scene.render_mode, 0) + 1
+        return counts
+
+    @staticmethod
+    def _summarize_render_mode(render_mode_counts: dict[str, int]) -> str:
+        active_modes = [mode for mode, count in render_mode_counts.items() if count]
+        if not active_modes:
+            return "text_only"
+        if len(active_modes) == 1:
+            return active_modes[0]
+        return "mixed"
+
+    def _resolve_scene_render_context(self, scene: ScenePlan) -> dict[str, Any]:
+        selected_keyframe = scene.selected_keyframe
+        conditioning = dict(scene.render_params.get("selected_keyframe_conditioning", {}))
+        keyframe_path = selected_keyframe.output_path if selected_keyframe else None
+        keyframe_exists = bool(keyframe_path and Path(keyframe_path).exists())
+        fallback_reason = None
+        render_mode = scene.render_mode
+
+        if render_mode == "keyframe_conditioned" and not keyframe_exists:
+            if scene.storyboard_config and scene.storyboard_config.enabled:
+                render_mode = "storyboard_reference"
+            else:
+                render_mode = "text_only"
+            fallback_reason = "selected_keyframe_unavailable_for_video_conditioning"
+        elif render_mode == "storyboard_reference" and not (scene.storyboard_config and scene.storyboard_config.enabled):
+            render_mode = "text_only"
+            fallback_reason = "storyboard_reference_unavailable_for_scene"
+
+        if render_mode == "keyframe_conditioned" and selected_keyframe and keyframe_path:
+            selected_keyframe_usage = {
+                "applied": True,
+                "usage_mode": "first_frame_conditioning",
+                "relation_type": conditioning.get("relation_type", "selected_keyframe_first_frame_conditioning"),
+                "candidate_id": selected_keyframe.candidate_id,
+                "variation_id": selected_keyframe.variation_id,
+                "path": keyframe_path,
+                "frame_idx": int(conditioning.get("frame_idx", self.DEFAULT_KEYFRAME_FRAME_IDX)),
+                "strength": float(conditioning.get("strength", self.DEFAULT_KEYFRAME_STRENGTH)),
+                "crf": int(conditioning.get("crf", self.DEFAULT_KEYFRAME_CRF)),
+            }
+        elif selected_keyframe and keyframe_path:
+            selected_keyframe_usage = {
+                "applied": False,
+                "usage_mode": "storyboard_reference",
+                "relation_type": "selected_keyframe_context_only",
+                "candidate_id": selected_keyframe.candidate_id,
+                "variation_id": selected_keyframe.variation_id,
+                "path": keyframe_path,
+                "reason": fallback_reason or "render path keeps storyboard as reference only",
+            }
+        else:
+            selected_keyframe_usage = {
+                "applied": False,
+                "usage_mode": "none",
+                "relation_type": "no_selected_keyframe",
+                "candidate_id": selected_keyframe.candidate_id if selected_keyframe else None,
+                "variation_id": selected_keyframe.variation_id if selected_keyframe else None,
+                "path": keyframe_path,
+                "reason": fallback_reason or "no selected storyboard keyframe available for render usage",
+            }
+
+        return {
+            "render_mode": render_mode,
+            "fallback_reason": fallback_reason,
+            "selected_keyframe_usage": selected_keyframe_usage,
+        }
 
     @staticmethod
     def _variation_for_take(scene: ScenePlan, take: TakePlan) -> VariationPlan | None:

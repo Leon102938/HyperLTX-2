@@ -29,6 +29,25 @@
 - Phase 2D fuehrt mehrere regelbasierte kreative Varianten pro Szene ein; Varianten und Takes sind jetzt explizit miteinander verknuepft.
 - Phase 2E fuehrt eine kleine regelbasierte kreative Auswahlheuristik ueber dem technischen Guard-Vertrag ein.
 - Phase 3A fuehrt eine optionale Storyboard-/Keyframe-Pipeline ueber das vorhandene Z-Image-Backend ein.
+- Phase 3B fuehrt `video_mode` als Job-Vertrag und `render_mode` als tatsaechlich geplanten bzw. gelaufenen Video-Pfad pro Szene/Take ein.
+- Der vorhandene LTX2-FastAPI-Wrapper kann im stabilen `ti2vid`-Pfad echtes Image-Conditioning via `--image` nutzen.
+- Der aktuelle produktive Phase-3B-Keyframe-Pfad ist deshalb kein neuer Backend-Zweig, sondern selektierter Storyboard-Keyframe als First-Frame-Conditioning im bestehenden `ti2vid`-Vertrag.
+- Der Planner kann pro Szene optional via `metadata.scene_video_modes` zwischen `text_only`, `storyboard_reference` und `keyframe_conditioned` differenzieren.
+- `takes.json`, `state.json` und `result.json` persistieren jetzt `selected_keyframe_usage`, `render_mode_counts` und `fallback_reasons`.
+- Die kleinste saubere Aussenbruecke im aktuellen Pod-Stack ist eine duenne lokale FastAPI-Integration ueber der bereits laufenden `app.main`, nicht ein neuer separater CLI- oder API-Stack.
+- Phase 4A fuehrt `POST /agent-core/run` und `GET /agent-core/jobs/{job_id}` als minimalen externen Vertrag ein.
+- `/agent-runs` ist jetzt statisch gemountet; dadurch koennen `state.json`, `result.json` und `final.mp4` per URL referenziert werden, ohne den Core umzubauen.
+- Die Phase-4A-Bridge startet den bestehenden `VideoAgent` synchron und fuehrt bewusst noch kein Queue-, Auth- oder Multi-User-Management ein.
+- Phase 4B fuehrt `POST /agent-core/jobs` als bevorzugten produktiven n8n-Submit-Pfad ein; `POST /agent-core/run` bleibt nur als synchroner Dev-/Test-Pfad bestehen.
+- Die Phase-4B-Bridge ist bewusst nur ein kleiner in-process Background-Runner mit Polling ueber `GET /agent-core/jobs/{job_id}`, keine durable Queue und kein restart-sicheres Worker-System.
+- Der Async-Statusvertrag verwendet `accepted`, `queued`, `running`, `done` und `failed`; Detailphasen kommen zusaetzlich ueber `current_phase` bzw. `result.final_phase`.
+- Phase 4C fuehrt fuer n8n explizite Polling-Hinweise ein: `is_terminal`, `should_poll`, `retry_after_sec`, `artifacts_ready`, `final_mp4_ready`, `result_json_ready`, `status_summary` und `public_refs`.
+- `public_refs` ist der n8n-freundliche Teilvertrag fuer externe URLs; `refs` bleibt der vollstaendige Vertrag mit lokalen Pfaden plus URLs.
+- `failed` darf im Polling-Vertrag sichtbar sein, bevor `result.json` fertig geschrieben ist; in diesem Fall bleibt `is_terminal=false` und `should_poll=true`, bis der Failure-Vertrag wirklich bereit ist.
+- `final_mp4_ready` bedeutet nutzbarer finaler Output fuer Caller, nicht nur dass irgendwo lokal eine MP4-Datei liegt; Fehljobs exponieren deshalb keinen `final_mp4`-Public-Link.
+- Der produktive `uvicorn app.main:app` auf Port `8000` laeuft im Pod ohne Auto-Reload; Router- oder App-Aenderungen in `app/main.py` bzw. `app/agent_core_api.py` werden erst nach einem manuellen FastAPI-Neustart live.
+- Fuer die Aussenverifikation der Phase-4A-Bridge zaehlt der echte Live-Server auf `127.0.0.1:8000` bzw. `https://mvwg65x59mc01e-8000.proxy.runpod.net`, nicht nur ein separater Test-`uvicorn` auf einem Nebenport.
+- Beim Polling gegen `state.json` und `result.json` koennen kurzzeitig unvollstaendige JSON-Writes auftreten; der Statuspfad muss solche Momente defensiv abfedern statt hart zu scheitern.
 - Erfolgreiche Take-Videos werden in den Job-Workspace unter `scenes/<scene_id>/takes/` gespiegelt, auch wenn das Backend seine Originaldateien extern unter `/workspace/jobs` schreibt.
 - Die finale Assembly arbeitet ab Phase 2B nur noch mit den selektierten Takes.
 - Die finale Assembly darf ab Phase 2C nur noch mit validierten selektierten Takes arbeiten.
@@ -44,7 +63,8 @@
 - Die kreative Auswahl darf nur auf technisch validen Kandidaten arbeiten; technische Validitaet bleibt harte Voraussetzung.
 - Die aktuelle kreative Heuristik bevorzugt u. a. Opening-Establishing, grobe Szenenziel-Passung und Abwechslung gegenueber der vorher selektierten Szene.
 - Z-Image ist fuer Phase 3A der kleinste produktive Bildpfad im vorhandenen Pod-Stack: echte PNGs, lokale FastAPI, kein neuer Backend-Zweig.
-- Phase 3A reicht selektierte Keyframes nur als Kontext an den Video-Flow weiter; es gibt noch keinen harten keyframe-konditionierten i2v-Vertrag.
+- Phase 3A reichte selektierte Keyframes zunaechst nur als Kontext an den Video-Flow weiter; ab Phase 3B existiert jetzt ein produktiver First-Frame-Keyframe-Vertrag im bestehenden `ti2vid`-Pfad.
+- Phase 3B nutzt selektierte Keyframes jetzt produktiv fuer First-Frame-Conditioning, aber noch nicht fuer Multi-Keyframe-Interpolation, Retake oder einen separaten Keyframe-Interpolations-Backend-Vertrag.
 - Commit-wuerdig sind primaer `agent_core/`, `tests/`, `examples/`, `.gitignore` und der kanonische Projekt-Memory unter `/workspace/codex`.
 - Laufzeit- und Artefaktordner wie `agent_runs/`, `exports/`, `jobs/`, `status/`, `venvs/`, Checkpoints und lokale Pod-Logs sollen nicht Teil eines normalen Code-Commits sein.
 - Der Single-Flow bleibt als `single_scene`-Fallback explizit erhalten.
@@ -65,3 +85,5 @@
 - Ein Mehrfach-Take-Run kann alle Takes erfolgreich und technisch valide beenden; Phase 2C faellt dann nur noch als Tie-Break auf den ersten erfolgreichen validen Take zurueck.
 - Ein Mehrvarianten-Run kann mehrere technisch valide kreative Kandidaten erzeugen; Phase 2E loest diese jetzt erst regelbasiert kreativ auf und faellt nur bei echtem Gleichstand weiterhin auf den ersten technisch gleichwertigen validen Kandidaten zurueck.
 - Ein Storyboard-Run kann echte PNG-Artefakte liefern, ohne den Video-Pfad umzubauen; der aktuelle Ausbaupunkt ist spaeter die echte Nutzung dieser Keyframes fuer Video-Steuerung.
+- Ein Phase-3B-Run kann technisch erfolgreich sein, auch wenn `video_mode=keyframe_conditioned` angefordert wurde, aber kein selektierter Keyframe verfuegbar ist; dann muss der Core ehrlich auf `storyboard_reference` oder `text_only` zurueckfallen und das explizit persistieren.
+- Ein Phase-4A-, 4B- oder 4C-Bridge-Failure soll nach moeglichst demselben Persistenzvertrag aussehen wie ein normaler Core-Run: `result.json` bleibt die kanonische Failure-Quelle, waehrend Request-Validierungsfehler schon auf HTTP-Ebene als `422` scheitern duerfen.

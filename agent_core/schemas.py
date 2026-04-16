@@ -18,6 +18,8 @@ JobPhase = Literal[
 
 StepStatus = Literal["pending", "planned", "running", "succeeded", "skipped", "failed"]
 BackendKind = Literal["voice", "video", "music", "storyboard"]
+VideoMode = Literal["auto", "text_only", "storyboard_reference", "keyframe_conditioned"]
+RenderMode = Literal["text_only", "storyboard_reference", "keyframe_conditioned"]
 TakeReviewStatus = Literal["passed", "failed", "rejected", "selected"]
 TakeValidationStatus = Literal["passed", "failed", "rejected"]
 KeyframeReviewStatus = Literal["passed", "failed", "rejected", "selected"]
@@ -62,6 +64,7 @@ class BackendCapabilities(BaseModel):
     supported_pipelines: list[str] = Field(default_factory=list)
     supported_orientations: list[str] = Field(default_factory=list)
     supported_resolution_labels: list[str] = Field(default_factory=list)
+    supports_image_conditioning: bool = False
     notes: list[str] = Field(default_factory=list)
 
 
@@ -95,6 +98,7 @@ class JobInput(BaseModel):
     voice_id: str = "Ryan"
     use_music: bool = False
     use_storyboard: bool = False
+    video_mode: VideoMode = "auto"
     style: str = "cinematic"
     extra_llm_instruction: str = ""
     pipeline_preference: str = "auto"
@@ -151,6 +155,15 @@ class JobInput(BaseModel):
         allowed = {"auto", "ti2vid", "a2vid", "fast", "balanced", "quality"}
         if normalized not in allowed:
             raise ValueError(f"pipeline_preference must be one of {sorted(allowed)}")
+        return normalized
+
+    @field_validator("video_mode")
+    @classmethod
+    def validate_video_mode(cls, value: str) -> str:
+        normalized = value.lower().strip()
+        allowed = {"auto", "text_only", "storyboard_reference", "keyframe_conditioned"}
+        if normalized not in allowed:
+            raise ValueError(f"video_mode must be one of {sorted(allowed)}")
         return normalized
 
     @model_validator(mode="after")
@@ -312,6 +325,9 @@ class TakePlan(BaseModel):
     style_bias: str | None = None
     seed: int
     prompt_text: str
+    video_mode: VideoMode = "auto"
+    render_mode: RenderMode = "text_only"
+    fallback_strategy: str = "text_only"
     render_params: dict[str, Any] = Field(default_factory=dict)
     notes: list[str] = Field(default_factory=list)
 
@@ -369,6 +385,10 @@ class TakeResultRecord(BaseModel):
     prompt_variant_text: str | None = None
     style_bias: str | None = None
     seed: int
+    video_mode: VideoMode = "auto"
+    render_mode: RenderMode = "text_only"
+    fallback_strategy: str = "text_only"
+    fallback_reason: str | None = None
     status: StepStatus
     review_status: TakeReviewStatus = "failed"
     output_path: str | None = None
@@ -416,6 +436,9 @@ class ScenePlan(BaseModel):
     narration_text: str | None = None
     narration_start_sec: float | None = None
     narration_end_sec: float | None = None
+    video_mode: VideoMode = "auto"
+    render_mode: RenderMode = "text_only"
+    fallback_strategy: str = "text_only"
     render_params: dict[str, Any] = Field(default_factory=dict)
     shots: list[ShotPlan] = Field(default_factory=list)
     variations: list[VariationPlan] = Field(default_factory=list)

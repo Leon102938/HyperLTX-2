@@ -26,6 +26,7 @@ class ScenePlannerVideoAdapter(VideoAdapter):
             available=True,
             phase1_enabled=True,
             supported_pipelines=["ti2vid"],
+            supports_image_conditioning=True,
         )
 
     def generate_video(self, job, plan, workspace, voice_result=None):  # pragma: no cover
@@ -201,11 +202,13 @@ class ScenePlannerTest(unittest.TestCase):
 
         self.assertTrue(plan.metadata["storyboard_enabled"])
         self.assertEqual(plan.metadata["storyboard_candidates_per_scene"], 2)
+        self.assertEqual(plan.metadata["planned_render_mode"], "keyframe_conditioned")
         self.assertTrue(plan.steps[1].enabled)
         for scene in plan.scenes:
             self.assertIsNotNone(scene.storyboard_config)
             self.assertTrue(scene.storyboard_config.enabled)
             self.assertEqual(len(scene.keyframe_candidates), 2)
+            self.assertEqual(scene.render_mode, "keyframe_conditioned")
             self.assertEqual(scene.storyboard_config.preferred_variation_id, scene.keyframe_candidates[0].variation_id)
             self.assertTrue(all(candidate.prompt_text for candidate in scene.keyframe_candidates))
 
@@ -232,6 +235,34 @@ class ScenePlannerTest(unittest.TestCase):
         self.assertEqual(storyboard_plan.steps[0].params["variation_id"], candidate.variation_id)
         self.assertEqual(storyboard_plan.scenes[0].keyframe_candidates[0].candidate_id, candidate.candidate_id)
         self.assertEqual(storyboard_plan.prompt_text, candidate.prompt_text)
+
+    def test_scene_video_mode_override_can_force_storyboard_reference_or_text_only(self) -> None:
+        job = JobInput(
+            idea="A teaser with per-scene video-mode overrides.",
+            script="Scene one opens on the pod. Scene two shows render progress.",
+            duration_sec=8,
+            use_voice=False,
+            use_storyboard=True,
+            resolution="draft",
+            orientation="landscape",
+            metadata={
+                "scene_count": 2,
+                "variations_per_scene": 2,
+                "storyboard_candidates_per_scene": 2,
+                "scene_video_modes": {
+                    "scene_01": "storyboard_reference",
+                    "scene_02": "text_only",
+                },
+            },
+        )
+
+        plan = self.planner.build_plan(job)
+
+        self.assertEqual(plan.scenes[0].video_mode, "storyboard_reference")
+        self.assertEqual(plan.scenes[0].render_mode, "storyboard_reference")
+        self.assertEqual(plan.scenes[1].video_mode, "text_only")
+        self.assertEqual(plan.scenes[1].render_mode, "text_only")
+        self.assertEqual(plan.metadata["planned_render_mode"], "mixed")
 
 
 if __name__ == "__main__":

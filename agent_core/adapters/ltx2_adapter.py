@@ -41,6 +41,7 @@ class LTX2Adapter(VideoAdapter):
             supported_pipelines=["ti2vid"],
             supported_orientations=["landscape", "portrait", "square"],
             supported_resolution_labels=["draft", "standard", "high", "custom"],
+            supports_image_conditioning=True,
             notes=notes + ["Underlying backend supports more modes, but Phase 1 core uses ti2vid as the stable contract."],
         )
 
@@ -79,6 +80,28 @@ class LTX2Adapter(VideoAdapter):
             overrides["audio_path"] = voice_result.output_path
 
         overrides.update(job.backend_overrides.get("ltx2", {}))
+        render_mode = str(video_step.params.get("render_mode") or plan.metadata.get("render_mode") or "text_only")
+        video_mode = str(video_step.params.get("video_mode") or plan.metadata.get("video_mode_requested") or "auto")
+        selected_keyframe_usage = dict(video_step.params.get("selected_keyframe_usage") or {})
+        explicit_image_override = self._has_explicit_image_override(overrides)
+        keyframe_conditioning_status = "not_requested"
+        if render_mode == "keyframe_conditioned" and selected_keyframe_usage.get("applied") and selected_keyframe_usage.get("path"):
+            if explicit_image_override:
+                keyframe_conditioning_status = "skipped_explicit_image_override"
+                selected_keyframe_usage["applied"] = False
+                selected_keyframe_usage["reason"] = "ltx2 backend overrides already define explicit image conditioning"
+            else:
+                overrides["images"] = [
+                    {
+                        "path": selected_keyframe_usage["path"],
+                        "frame_idx": int(selected_keyframe_usage.get("frame_idx", 0)),
+                        "strength": float(selected_keyframe_usage.get("strength", 1.0)),
+                        "crf": int(selected_keyframe_usage.get("crf", 33)),
+                    }
+                ]
+                keyframe_conditioning_status = "applied"
+        elif selected_keyframe_usage:
+            keyframe_conditioning_status = str(selected_keyframe_usage.get("usage_mode") or "unused")
         effective_num_frames = int(overrides.get("num_frames", planned_num_frames))
         expected_duration_sec = frame_count_to_duration_sec(effective_num_frames, frame_rate)
         payload = {
@@ -133,6 +156,10 @@ class LTX2Adapter(VideoAdapter):
                     metadata={
                         "video_url": result_payload.get("video_url"),
                         "backend": result_payload.get("backend"),
+                        "video_mode": video_mode,
+                        "render_mode": render_mode,
+                        "selected_keyframe_usage": selected_keyframe_usage,
+                        "keyframe_conditioning_status": keyframe_conditioning_status,
                         "planned_duration_sec": plan.target_duration_sec,
                         "expected_duration_sec": expected_duration_sec,
                         "planned_num_frames": planned_num_frames,
@@ -155,6 +182,10 @@ class LTX2Adapter(VideoAdapter):
                 "submit": submit,
                 "status": latest_status,
                 "result": result_payload,
+                "video_mode": video_mode,
+                "render_mode": render_mode,
+                "selected_keyframe_usage": selected_keyframe_usage,
+                "keyframe_conditioning_status": keyframe_conditioning_status,
                 "duration_contract": {
                     "planned_duration_sec": plan.target_duration_sec,
                     "expected_duration_sec": expected_duration_sec,
@@ -164,3 +195,11 @@ class LTX2Adapter(VideoAdapter):
                 },
             },
         )
+
+    @staticmethod
+    def _has_explicit_image_override(overrides: dict[str, object]) -> bool:
+        for key in ("image", "images", "image_path", "img_path", "keyframes"):
+            value = overrides.get(key)
+            if value not in (None, "", [], {}):
+                return True
+        return False

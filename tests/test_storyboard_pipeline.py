@@ -50,6 +50,7 @@ class StoryboardFakeVideoAdapter(VideoAdapter):
             available=True,
             phase1_enabled=True,
             supported_pipelines=["ti2vid"],
+            supports_image_conditioning=True,
         )
 
     def generate_video(
@@ -90,6 +91,7 @@ class StoryboardFakeVideoAdapter(VideoAdapter):
             backend_job_id=f"{job.job_id}_video",
             output_path=str(video_path),
             artifacts=[ArtifactRef(key="final_video", kind="video", path=str(video_path), origin=self.name, exists=True)],
+            metadata={"render_step": plan.steps[0].params},
         )
 
 
@@ -167,9 +169,20 @@ class StoryboardPipelineTest(unittest.TestCase):
             self.assertEqual(len(storyboard_payload["selected_scene_storyboards"]), 1)
             self.assertIsNotNone(takes_payload["scene_outputs"][0]["selected_keyframe"])
             self.assertIsNotNone(takes_payload["scene_outputs"][0]["selected_take"]["metadata"]["selected_keyframe"])
+            self.assertEqual(takes_payload["scene_outputs"][0]["render_mode"], "keyframe_conditioned")
+            self.assertEqual(takes_payload["scene_outputs"][0]["video_mode"], "auto")
+            self.assertTrue(takes_payload["scene_outputs"][0]["selected_keyframe_usage"]["applied"])
+            self.assertEqual(
+                takes_payload["scene_outputs"][0]["selected_keyframe_usage"]["usage_mode"],
+                "first_frame_conditioning",
+            )
             self.assertEqual(
                 state_payload["steps"]["storyboard"]["details"]["selected_scene_storyboards"][0]["scene_id"],
                 "scene_01",
+            )
+            self.assertEqual(
+                state_payload["steps"]["video"]["details"]["planned_render_mode"],
+                "keyframe_conditioned",
             )
 
     def test_storyboard_step_is_skipped_cleanly_when_not_requested(self) -> None:
@@ -222,6 +235,84 @@ class StoryboardPipelineTest(unittest.TestCase):
             self.assertTrue(result.success)
             self.assertEqual(scene_storyboard["selected_keyframe"]["candidate_id"], "scene_01_var_02_keyframe_02")
             self.assertEqual(scene_storyboard["selection"]["selected_by_rule"], "priority_rank_first_valid")
+
+    def test_keyframe_conditioned_video_falls_back_cleanly_when_no_selected_keyframe_exists(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            agent, store = self._agent(tmpdir)
+            result = agent.run_job(
+                {
+                    "job_id": "storyboard-keyframe-fallback",
+                    "idea": "A modular agent keeps storyboard as reference when no keyframe survives.",
+                    "script": "Scene one opens on the pod waking up.",
+                    "duration_sec": 6,
+                    "use_voice": False,
+                    "use_storyboard": True,
+                    "video_mode": "keyframe_conditioned",
+                    "resolution": "320x256",
+                    "orientation": "landscape",
+                    "metadata": {
+                        "force_single_scene": True,
+                        "variations_per_scene": 2,
+                        "takes_per_scene": 1,
+                        "storyboard_candidates_per_scene": 2,
+                        "reject_storyboard_candidate_ids": [
+                            "scene_01_var_01_keyframe_01",
+                            "scene_01_var_02_keyframe_02",
+                        ],
+                    },
+                }
+            )
+
+            job_dir = store.job_dir("storyboard-keyframe-fallback")
+            takes_payload = json.loads((job_dir / "takes.json").read_text())
+            state_payload = json.loads((job_dir / "state.json").read_text())
+            scene_output = takes_payload["scene_outputs"][0]
+
+            self.assertTrue(result.success)
+            self.assertIsNone(scene_output["selected_keyframe"])
+            self.assertEqual(scene_output["video_mode"], "keyframe_conditioned")
+            self.assertEqual(scene_output["render_mode"], "storyboard_reference")
+            self.assertEqual(
+                scene_output["fallback_reason"],
+                "selected_keyframe_unavailable_for_video_conditioning",
+            )
+            self.assertFalse(scene_output["selected_keyframe_usage"]["applied"])
+            self.assertEqual(scene_output["selected_keyframe_usage"]["usage_mode"], "none")
+            self.assertEqual(
+                state_payload["steps"]["video"]["details"]["fallback_reasons"][0]["fallback_reason"],
+                "selected_keyframe_unavailable_for_video_conditioning",
+            )
+
+    def test_keyframe_conditioned_mode_stays_compatible_with_multi_scene_multi_take_flow(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            agent, store = self._agent(tmpdir)
+            result = agent.run_job(
+                {
+                    "job_id": "storyboard-multi-scene",
+                    "idea": "A modular agent keeps keyframe-aware rendering compatible with multi-scene multi-take flow.",
+                    "script": "Scene one opens on the pod waking up. Scene two shows render progress moving across the interface.",
+                    "duration_sec": 8,
+                    "use_voice": False,
+                    "use_storyboard": True,
+                    "resolution": "320x256",
+                    "orientation": "landscape",
+                    "metadata": {
+                        "scene_count": 2,
+                        "variations_per_scene": 2,
+                        "takes_per_scene": 2,
+                        "storyboard_candidates_per_scene": 2,
+                    },
+                }
+            )
+
+            takes_payload = json.loads((store.job_dir("storyboard-multi-scene") / "takes.json").read_text())
+
+            self.assertTrue(result.success)
+            self.assertEqual(takes_payload["scene_count"], 2)
+            self.assertEqual(takes_payload["takes_per_scene"], 4)
+            self.assertEqual(takes_payload["render_mode_counts"]["keyframe_conditioned"], 2)
+            self.assertTrue(all(scene["render_mode"] == "keyframe_conditioned" for scene in takes_payload["scene_outputs"]))
+            self.assertTrue(all(scene["selected_take"]["render_mode"] == "keyframe_conditioned" for scene in takes_payload["scene_outputs"]))
 
 
 if __name__ == "__main__":

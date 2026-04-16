@@ -1,7 +1,7 @@
 # PROJECT_STATE.md
 
 ## Projektstatus
-Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E und 3A erweitern den Core jetzt um regelbasierte Scene-/Shot-Planung, Mehrfach-Takes, technischen Quality-Guard, validierte Take-Selektion, kreative Varianten pro Szene, leichte inhaltliche Auswahlheuristik, optionale Storyboard-/Keyframe-Vorsteuerung und begrenzte Retries
+Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E, 3A, 3B, 4A, 4B und 4C erweitern den Core jetzt um regelbasierte Scene-/Shot-Planung, Mehrfach-Takes, technischen Quality-Guard, validierte Take-Selektion, kreative Varianten pro Szene, leichte inhaltliche Auswahlheuristik, optionale Storyboard-/Keyframe-Vorsteuerung, produktive First-Frame-Keyframe-Konditionierung im bestehenden `ti2vid`-Pfad, eine minimale produktive Worker-/n8n-Bridge ueber FastAPI, einen polling-faehigen Async-Submit-Pfad, n8n-freundliche Polling-Hinweise und begrenzte Retries
 
 ## Verifizierte Fakten
 - Git-Root ist `/workspace`.
@@ -25,6 +25,7 @@ Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E und 3A erweitern de
   - `/workspace/models/qwen3-tts` ca. `4.9G`
 - Bisheriger Projekt-Memory-Stand lag in `/workspace/Codex`; kanonisch gepflegt wird ab jetzt `/workspace/codex`.
 - Ein neues Paket `/workspace/agent_core` wurde gebaut.
+- Die bestehende lokale FastAPI enthaelt jetzt zusaetzlich einen duennen `agent_core`-Bridge-Router unter `/agent-core`.
 - Der neue Core enthaelt:
   - `agent.py`
   - `schemas.py`
@@ -37,6 +38,7 @@ Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E und 3A erweitern de
 - Der neue Core nutzt in Phase 1 standardmaessig lokale HTTP-Endpunkte der bestehenden FastAPI statt tiefer Eingriffe in Backend-Repos.
 - Der Planner koppelt bei `use_voice=true` die geplante finale Videolaenge an geschaetzte oder echte Voice-Dauer plus Guard-Padding.
 - Beispieljob vorhanden: `/workspace/examples/minimal_job.json`
+- Bridge-Beispielrequest vorhanden: `/workspace/examples/agent_core_bridge_request.json`
 - Tests vorhanden:
   - `/workspace/tests/test_core_smoke.py`
   - `/workspace/tests/test_planner_rules.py`
@@ -44,8 +46,9 @@ Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E und 3A erweitern de
   - `/workspace/tests/test_scene_planner.py`
   - `/workspace/tests/test_storyboard_pipeline.py`
   - `/workspace/tests/test_take_quality_guard.py`
+  - `/workspace/tests/test_agent_core_api.py`
 - Verifiziert ausgefuehrte Tests:
-  - `python -m unittest discover -s /workspace/tests -v` -> aktuell erfolgreich, 33 Tests gruen
+  - `python -m unittest discover -s /workspace/tests -v` -> aktuell erfolgreich, 41 Tests gruen
 - Verifizierter echter End-to-End-Core-Lauf:
   - Job-ID: `real-e2e-check-3`
   - Input: kurzer Real-Job mit Voice aktiv, `768x448`, `num_inference_steps=8`
@@ -130,6 +133,34 @@ Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E und 3A erweitern de
   - jeder Keyframe-Kandidat dokumentiert Szene, Variation, technischen Bildstatus und Auswahlmetadaten
   - pro Szene wird jetzt ein `selected_keyframe` dokumentiert, der spaeteren video- oder prompt-gestuetzten Ausbau vorbereitet
   - der bestehende Video-Flow bleibt intakt; selektierte Keyframes werden nur als strukturierter Kontext in Take-Metadaten und Renderplaene durchgereicht
+- Verifiziert implementierte Phase 3B:
+  - `JobInput` enthaelt jetzt `video_mode`; `ScenePlan`, `TakePlan` und `TakeResultRecord` dokumentieren `video_mode`, `render_mode`, `fallback_strategy` und bei Laufzeit-Fallbacks auch `fallback_reason`
+  - der Planner entscheidet jetzt pro Job oder optional pro Szene via `metadata.scene_video_modes`, ob der Video-Pfad `text_only`, `storyboard_reference` oder `keyframe_conditioned` laeuft
+  - der vorhandene stabile LTX2-`ti2vid`-Pfad kann selektierte Storyboard-Keyframes jetzt produktiv als First-Frame-Image-Conditioning nutzen
+  - der LTX2-Adapter injiziert den selektierten Keyframe nur auf dem bestehenden `ti2vid`-Vertrag und dokumentiert `selected_keyframe_usage` sowie `keyframe_conditioning_status`
+  - `takes.json`, `state.json` und `result.json` persistieren jetzt klar, welcher Rendermodus aktiv war, ob der selektierte Keyframe angewendet wurde und warum gegebenenfalls auf `storyboard_reference` oder `text_only` zurueckgefallen wurde
+  - der textgetriebene Flow bleibt unveraendert als harter Fallback erhalten
+- Verifiziert implementierte Phase 4A:
+  - die bestehende lokale FastAPI bietet jetzt einen minimalen synchronen Einstieg unter `/agent-core/run`
+  - ein zweiter Endpunkt `/agent-core/jobs/{job_id}` liefert den zuletzt persistierten Status bzw. Result-Vertrag fuer bekannte Jobs
+  - die Bridge nimmt strukturierte Jobdaten als JSON entgegen, ruft den bestehenden `VideoAgent` ohne neue Produktionslogik auf und gibt ein kleines stabiles Antwortobjekt mit `job_id`, `status`, `success`, `result` und `refs` zurueck
+  - `/agent-runs` ist jetzt als statischer Pfad gemountet, damit `state.json`, `result.json` und `final.mp4` auch als URL referenzierbar sind
+  - Request-Validierungsfehler werden sauber von FastAPI als `422` zurueckgegeben; echte Core-Laeufe liefern einen strukturierten Erfolg- oder Failure-Vertrag zurueck
+  - der produktive FastAPI-Prozess auf Port `8000` wurde nach den Bridge-Aenderungen manuell neu geladen; danach war `/agent-core/run` real auf dem Live-Server verfuegbar
+- Verifiziert implementierte Phase 4B:
+  - die bestehende lokale FastAPI bietet jetzt zusaetzlich einen asynchronen Submit-Pfad unter `POST /agent-core/jobs`
+  - der neue Submit-Pfad nimmt strukturierte Jobdaten an, gibt sofort `202 Accepted` mit `job_id` und `poll_url` zurueck und blockiert nicht bis zum finalen Video
+  - `GET /agent-core/jobs/{job_id}` liefert jetzt einen polling-faehigen Statusvertrag mit mindestens `accepted`, `queued`, `running`, `done` und `failed`
+  - der Statuspfad nutzt weiter die vorhandenen `state.json`- und `result.json`-Artefakte; nur fruehe Pre-State-Zustaende werden klein in-process gespiegelt
+  - `POST /agent-core/run` bleibt als synchroner Dev-/Test-Pfad erhalten, ist aber nicht mehr der bevorzugte produktive n8n-Einstieg
+  - der produktive FastAPI-Prozess auf Port `8000` wurde nach den Phase-4B-Aenderungen erneut manuell neu geladen; danach war `POST /agent-core/jobs` real auf dem Live-Server verfuegbar
+- Verifiziert implementierte Phase 4C:
+  - der bestehende Async-/Polling-Vertrag wurde klein und n8n-freundlich gehaertet, ohne den Core umzubauen
+  - `GET /agent-core/jobs/{job_id}` liefert jetzt zusaetzlich `status_summary`, `is_terminal`, `should_poll`, `retry_after_sec`, `artifacts_ready`, `final_mp4_ready`, `result_json_ready` und `public_refs`
+  - `public_refs` enthaelt nur die extern nutzbaren URLs fuer `state.json`, `result.json` und `final.mp4`
+  - terminale Zustande sind jetzt expliziter: `done` und `failed` koennen sichtbar sein, aber `is_terminal` haengt sauber an der tatsaechlichen Artefakt-Readiness
+  - fehlgeschlagene Jobs exponieren keinen irrefuehrenden `final.mp4`-Public-Link mehr, auch wenn lokal Zwischenartefakte existieren
+  - der produktive FastAPI-Prozess auf Port `8000` wurde nach den Phase-4C-Aenderungen erneut manuell neu geladen; danach waren die neuen Felder real im Live-Vertrag sichtbar
 - Verifizierter echter Phase-2A-Multi-Segment-Lauf:
   - Job-ID: `real-phase2a-multiscene-1`
   - Segmentierung: `2` Szenen
@@ -231,14 +262,77 @@ Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E und 3A erweitern de
   - verifiziert: `takes.json` dokumentiert die Keyframe-Beziehung auch am selektierten Take
   - finales MP4: `/workspace/agent_runs/real-phase3a-storyboard-1/final.mp4`
   - verifizierte Finaldaten via `ffprobe`: `768x448`, `24 fps`, Audio `aac`, Gesamtdauer `4.042s`
+- Verifizierter echter Phase-3B-Keyframe-Video-Lauf:
+  - Job-ID: `real-phase3b-keyframe-1`
+  - Storyboard-Backend: `zimage_storyboard`
+  - Video-Backend: `ltx2`
+  - Segmentierung: `1` Szene
+  - kreative Varianten pro Szene: `2`
+  - verifizierter `video_mode_requested=keyframe_conditioned`
+  - verifizierter `render_mode=keyframe_conditioned`
+  - verifiziert: der reale LTX2-Job wurde mit `--image ... 0 1.0 33` aus dem selektierten Storyboard-Keyframe gestartet
+  - verifizierte selektierte Keyframe-Nutzung:
+    - `selected_keyframe_candidate_id=scene_01_var_01_keyframe_01`
+    - `selected_keyframe_usage.usage_mode=first_frame_conditioning`
+    - `selected_keyframe_usage.applied=true`
+  - verifizierte Take-Auswahl:
+    - `selected_take_id=scene_01_var_01_take_01`
+    - `selected_variation_id=scene_01_var_01`
+    - kreative Aufloesung gegen eine zweite technisch valide keyframe-konditionierte Variation
+  - verifizierte Artefakte:
+    - `/workspace/agent_runs/real-phase3b-keyframe-1/storyboard_plan.json`
+    - `/workspace/agent_runs/real-phase3b-keyframe-1/takes.json`
+    - `/workspace/agent_runs/real-phase3b-keyframe-1/final.mp4`
+  - verifizierte Finaldaten via `ffprobe`/Result: `768x448`, `24 fps`, Gesamtdauer `4.042s`
+- Verifizierter echter Phase-4A-Bridge-Lauf:
+  - Job-ID: `bridge-demo-job`
+  - echter lokaler HTTP-Start ueber separaten `uvicorn app.main:app --port 8010`
+  - verifizierter erfolgreicher Aufruf: `POST /agent-core/run`
+  - verifizierter Statusabruf: `GET /agent-core/jobs/bridge-demo-job`
+  - verifizierter Rueckgabevertrag:
+    - `status=assembled`
+    - `success=true`
+    - `result.output_final_path=/workspace/agent_runs/bridge-demo-job/final.mp4`
+    - `refs.result_json_url` und `refs.final_mp4_url` zeigen auf den gemounteten `/agent-runs`-Pfad
+  - verifiziertes Finalartefakt: `/workspace/agent_runs/bridge-demo-job/final.mp4`
+- Verifizierter echter Phase-4A-Live-Bridge-Lauf:
+  - Job-ID: `phase4a-live-verify-1776342448`
+  - Ursache des frueheren `404`: der laufende `uvicorn` auf Port `8000` war vor den Bridge-Dateiaenderungen gestartet und hatte den neuen Router noch nicht geladen
+  - produktiver FastAPI-Prozess auf `8000` wurde deshalb manuell mit aktuellem Code neu gestartet
+  - verifizierter erfolgreicher Live-Aufruf: `POST http://127.0.0.1:8000/agent-core/run`
+  - verifizierter Live-Statusabruf: `GET http://127.0.0.1:8000/agent-core/jobs/phase4a-live-verify-1776342448`
+  - verifizierter Proxy-Abruf: `GET https://mvwg65x59mc01e-8000.proxy.runpod.net/agent-core/jobs/phase4a-live-verify-1776342448`
+  - verifizierter Proxy-POST-Pfad: `POST https://mvwg65x59mc01e-8000.proxy.runpod.net/agent-core/run` liefert fuer leeres JSON korrekt `422`
+  - verifiziertes Finalartefakt: `/workspace/agent_runs/phase4a-live-verify-1776342448/final.mp4`
+  - verifizierte Finaldaten via `ffprobe`: `768x448`, `24 fps`, Gesamtdauer `4.042s`
+- Verifizierter echter Phase-4B-Live-Bridge-Lauf:
+  - Job-ID: `phase4b-live-verify-1776343554`
+  - verifizierter produktiver Submit: `POST http://127.0.0.1:8000/agent-core/jobs`
+  - verifizierter Polling-Status: `GET http://127.0.0.1:8000/agent-core/jobs/phase4b-live-verify-1776343554`
+  - verifizierter Statusverlauf: `accepted` -> `running` -> `done`
+  - verifizierter Endstatus: `status=done`, `current_phase=done`, `result.final_phase=assembled`
+  - verifizierter Proxy-Statusabruf: `GET https://mvwg65x59mc01e-8000.proxy.runpod.net/agent-core/jobs/phase4b-live-verify-1776343554`
+  - verifizierter Proxy-Submit-Pfad: `POST https://mvwg65x59mc01e-8000.proxy.runpod.net/agent-core/jobs` liefert fuer `{}` korrekt `422`
+  - verifiziertes Finalartefakt: `/workspace/agent_runs/phase4b-live-verify-1776343554/final.mp4`
+  - verifizierte Finaldaten via `ffprobe`: `768x448`, `24 fps`, Gesamtdauer `4.042s`
+- Verifizierter echter Phase-4C-Live-Response-Lauf:
+  - Job-ID: `phase4c-live-verify-1776348348`
+  - verifizierter produktiver Submit: `POST http://127.0.0.1:8000/agent-core/jobs`
+  - verifizierte Submit-Felder: `status=accepted`, `is_terminal=false`, `should_poll=true`, `retry_after_sec=2`, `artifacts_ready=false`
+  - verifizierter Mid-Poll: `status=running`, `should_poll=true`, `result_json_ready=false`, `final_mp4_ready=false`
+  - verifizierter terminaler Poll: `status=done`, `is_terminal=true`, `should_poll=false`, `artifacts_ready=true`, `result_json_ready=true`, `final_mp4_ready=true`
+  - verifizierter Proxy-Statusabruf: `GET https://mvwg65x59mc01e-8000.proxy.runpod.net/agent-core/jobs/phase4c-live-verify-1776348348`
+  - verifizierte `public_refs` auf dem Proxy zeigen auf `result.json` und `final.mp4`
+  - verifiziertes Finalartefakt: `/workspace/agent_runs/phase4c-live-verify-1776348348/final.mp4`
+  - verifizierte Finaldaten via `ffprobe`: `768x448`, `24 fps`, Gesamtdauer `4.042s`
 
 ## Verifizierte Luecken
 - ACE-Step, Editor und Upscaler sind noch nicht im neuen Core integriert.
 - Music-Adapter bleibt bewusst ein Future-ready-Stub.
-- Es gibt noch keine externe API-Schicht fuer den neuen Core.
-- Es gibt noch keine n8n-Anbindung.
+- Es gibt jetzt eine minimale lokale Worker-/n8n-Bridge, aber noch keine groessere externe API-Plattform fuer den neuen Core.
+- Es gibt noch keine eigentliche n8n-spezifische Orchestrierung oder Queue-Anbindung.
 - Es gibt noch keinen AI-basierten Hook-/Quality-/Storyboard-Produktionspfad im Core.
-- Storyboard erzeugt aktuell echte Bildartefakte, aber es gibt noch keinen harten keyframe-konditionierten Bild-zu-Video-Pfad im Core.
+- Phase 3B nutzt jetzt einen echten produktiven First-Frame-Keyframe-Pfad ueber `ti2vid`, aber es gibt noch keinen separaten Multi-Keyframe-Interpolations- oder Retake-Vertrag im Core.
 - `a2vid` ist fuer generierte TTS-Audio im aktuellen Pod-Setup nicht als stabiler Phase-1-Vertrag verifiziert.
 - Multi-Segment-Qualitaet ist jetzt technisch besser abgesichert und mit leichter kreativer Heuristik selektierbar, aber es gibt noch keine inhaltliche AI-Qualitaetsbewertung.
 - Die neue Take-Auswahl bleibt bewusst klein und regelbasiert; sie ist noch keine vollwertige Bildinhalts- oder Hook-Bewertungsmaschine.
@@ -255,6 +349,9 @@ Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E und 3A erweitern de
 - Phase 2D verbessert die Kandidatenvielfalt zuerst ueber regelbasierte kreative Variation, nicht ueber generative AI-Planung oder Content-Scoring.
 - Phase 2E verbessert die Auswahl zuerst ueber kleine nachvollziehbare kreative Regeln ueber dem technischen Vertrag, nicht ueber grosse AI-Bewertung.
 - Phase 3A verbessert die visuelle Vorsteuerung zuerst ueber optionale Keyframes aus vorhandener Bildinfrastruktur, nicht ueber einen grossen Umbau des Video-Pfads.
+- Phase 3B verbessert den bestehenden Video-Pfad vorsichtig ueber First-Frame-Keyframe-Conditioning im vorhandenen `ti2vid`-Stack, nicht ueber einen neuen Backend-Zweig.
+- Phase 4A verbessert die Aussenanbindung zuerst ueber eine duenne lokale FastAPI-Bridge ueber dem bestehenden synchronen Core, nicht ueber Queue-, Auth- oder Multi-User-Architektur.
+- Phase 4B verbessert die Aussenanbindung jetzt ueber einen kleinen polling-faehigen Async-Submit-Pfad, aber bewusst noch nicht ueber eine durable Queue- oder Worker-Architektur.
 - `agent_runs/`, `exports/`, `jobs/`, `status/`, `venvs/`, Checkpoints und lokale `.log`-Dateien sind Laufzeit-/Umgebungsbestand und nicht primaer fuer Commits gedacht.
 
 ## Offene Fragen
@@ -266,10 +363,12 @@ Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E und 3A erweitern de
 - Soll fuer spaetere Phasen neben Dauer auch eine explizite Shot-/Clip-Vertragslogik eingefuehrt werden?
 - Wann soll die kleine kreative Heuristik von Phase 2E in spaetere echte Inhaltsbewertung oder Hook-/Narrativ-Scoring uebergehen?
 - Soll der naechste Schritt eher ein keyframe-gestuetzter Video-Pfad oder ein zweiter produktiver Backend-Pfad sein?
+- Soll der naechste Schritt den produktiven First-Frame-Keyframe-Pfad weiter in Richtung staerkerer Prompt-/Look-Konsistenz absichern oder eher einen zweiten produktiven Backend-Pfad erschliessen?
 
 ## Empfehlungen
 - Den bestehenden Phase-1-Kern nicht aufblasen, sondern als Basis fuer den zweiten Vertical Slice nutzen.
-- Phase 3A sollte auf diesem Stand nicht in eine Storyboard-Orgie kippen; der naechste grosse Schritt sollte eher ein vorsichtiger keyframe-gestuetzter Video-Pfad im bestehenden Stack oder spaeter ein zweiter produktiver Backend-Pfad sein.
+- Phase 3B ist jetzt als vorsichtiger produktiver First-Frame-Keyframe-Pfad gebaut; der naechste Ausbau sollte eher auf Absicherung, feinere Regeln oder einen zweiten produktiven Backend-Pfad zielen als auf einen grossen Refactor.
+- Phase 4B sollte klein bleiben: naechster Ausbau eher n8n-taugliche Doku, optionale Webhook-Konvention oder sehr kontrollierte Restart-Haertung, nicht sofort eine grosse API-Plattform.
 - Vor einer externen API zuerst die internen Artefakt- und Fehlervertraege stabilisieren.
 - Phase 1 kann fuer den definierten Scope jetzt als technisch sauber abgeschlossen gelten.
 - Fuer den Tagesabschluss sollte `agent_core/`, `tests/`, `examples/`, `.gitignore` und `/workspace/codex` priorisiert werden; Laufzeitordner sollten draussen bleiben.

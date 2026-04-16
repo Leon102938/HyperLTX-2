@@ -8,20 +8,22 @@ Phase 2C: technischer Quality-Guard, validierte Auswahl und leichte Retries pro 
 Phase 2D: Shot-/Prompt-Variation-Engine pro Szene
 Phase 2E: leichte inhaltliche Varianten-/Take-Auswahl ueber dem technischen Vertrag
 Phase 3A: optionale Storyboard-/Keyframe-Pipeline
-Phase 3B: optionale API-Schicht fuer den Core
-Phase 4: n8n-Anbindung
-Phase 5: Ausbau, Optimierung, Spezialisierung
+Phase 3B: produktive Keyframe-Nutzung im bestehenden Video-Pfad
+Phase 4A: minimale Worker-/n8n-Bridge fuer den bestehenden Core
+Phase 4B: minimale asynchrone Job-Bridge mit Polling-Vertrag
+Phase 4C: kleine n8n-friendly Polling-Haertung
+Phase 5: n8n-Anbindung und Ausbau der Aussenorchestrierung
+Phase 6: Ausbau, Optimierung, Spezialisierung
 
-## Phase 3A Ziel
-Eine optionale Storyboard-/Keyframe-Pipeline auf Basis des vorhandenen Pod-Bildpfads bauen, die visuelle Vorsteuerung pro Szene ermoeglicht, sauber persistiert und den bestehenden Video-Flow nicht bricht.
+## Phase 4C Ziel
+Den bestehenden Async-/Polling-Vertrag klein und n8n-freundlich haerten, damit Polling-Antworten fuer `accepted`, `queued`, `running`, `done` und `failed` klarer, stabiler und leichter in n8n auswertbar sind.
 
-## Phase 3A Arbeitsplan
-1. Bestehenden Bildpfad im Pod bewerten und den kleinsten produktiven Storyboard-Adapter waehlen.
-2. Storyboard-/Keyframe-Schemas in Plan, State und Result einfuehren.
-3. Optionale Planner-Logik fuer Storyboard-Konfiguration, Kandidaten und bevorzugte Variationen bauen.
-4. Produktiven Storyboard-Adapter sowie leichte Keyframe-Auswahl und Persistenz implementieren.
-5. Storyboard-Ergebnisse als optionalen Kontext an den bestehenden Video-Flow durchreichen.
-6. Tests und mindestens einen echten Storyboard-Lauf verifizieren.
+## Phase 4C Arbeitsplan
+1. Den bestehenden Response-Vertrag klein um klare Polling-Hinweise und Artefakt-Readiness erweitern.
+2. `POST /agent-core/jobs` und `GET /agent-core/jobs/{job_id}` voll kompatibel halten.
+3. Fuer n8n explizit `is_terminal`, `should_poll`, `retry_after_sec`, `artifacts_ready`, `final_mp4_ready`, `result_json_ready` und `public_refs` anbieten.
+4. Fehl- und Terminalzustaende so schaerfen, dass keine irrefuehrenden Final-Refs ausgegeben werden.
+5. Kleine Vertrags-Tests und einen kurzen echten Live-Response-Check ausfuehren.
 
 ## Empfohlener Minimal-Vertical-Slice
 - Eingabe: einfacher Job mit `prompt`, optional `tts`, optional `audio`, optional `video`
@@ -33,7 +35,7 @@ Eine optionale Storyboard-/Keyframe-Pipeline auf Basis des vorhandenen Pod-Bildp
   5. LTX-2 Step ausfuehren
   6. finales MP4 assembliert speichern
 
-## Phase-3A-Ist-Stand
+## Phase-4C-Ist-Stand
 - gebaut:
   - Core-Paket `agent_core/`
   - Job-Schema, Plan-Schema, State-Schema, Result-Schema
@@ -58,6 +60,19 @@ Eine optionale Storyboard-/Keyframe-Pipeline auf Basis des vorhandenen Pod-Bildp
   - optionaler Storyboard-Step auf Basis von Z-Image
   - `storyboard_plan.json` als neues Storyboard-Artefakt
   - Storyboard-Konfiguration, Keyframe-Kandidaten und selektierte Keyframes pro Szene
+  - `video_mode` auf Job-Ebene plus `render_mode`-/Fallback-Vertrag auf Szene- und Take-Ebene
+  - produktive Keyframe-Nutzung im bestehenden LTX2-`ti2vid`-Pfad via First-Frame-Image-Conditioning
+  - Persistenz fuer `selected_keyframe_usage`, `render_mode_counts` und `fallback_reasons`
+  - neuer duennner FastAPI-Router `app/agent_core_api.py`
+  - synchroner Run-Endpunkt `POST /agent-core/run`
+  - asynchroner Submit-Endpunkt `POST /agent-core/jobs`
+  - Status-/Result-Endpunkt `GET /agent-core/jobs/{job_id}`
+  - statische Referenzierung von `agent_runs` ueber `/agent-runs`
+  - Beispielrequest `examples/agent_core_bridge_request.json`
+  - kleiner in-process Background-Runner fuer Async-Submits
+  - n8n-freundliche Polling-Felder `status_summary`, `is_terminal`, `should_poll`, `retry_after_sec`
+  - explizite Artefakt-Readiness `artifacts_ready`, `final_mp4_ready`, `result_json_ready`
+  - neues `public_refs`-Objekt nur fuer extern nutzbare URLs
 - verifiziert:
   - Tests laufen gruen
   - Voice-Dauer beeinflusst die geplante Videolaenge
@@ -102,6 +117,21 @@ Eine optionale Storyboard-/Keyframe-Pipeline auf Basis des vorhandenen Pod-Bildp
   - echter Phase-3A-Lauf erfolgreich mit `real-phase3a-storyboard-1`
   - Storyboard-Kandidaten werden technisch validiert und selektiert
   - selektierte Keyframes werden in `storyboard_plan.json`, `state.json`, `result.json` und `takes.json` dokumentiert
+  - echter Phase-3B-Lauf erfolgreich mit `real-phase3b-keyframe-1`
+  - der reale LTX2-Job wurde dabei mit dem selektierten Storyboard-Keyframe als `--image` im bestehenden `ti2vid`-Pfad gestartet
+  - `takes.json`, `state.json` und `result.json` dokumentieren jetzt produktiv, ob `keyframe_conditioned`, `storyboard_reference` oder `text_only` aktiv war
+  - neuer Bridge-Test `tests/test_agent_core_api.py` ist gruen
+  - echter lokaler HTTP-Lauf ueber `POST /agent-core/run` erfolgreich mit `bridge-demo-job`
+  - echter lokaler Statusabruf ueber `GET /agent-core/jobs/bridge-demo-job` erfolgreich
+  - `POST /agent-core/jobs` liefert jetzt sofort `202 Accepted`, `job_id` und `poll_url`
+  - `GET /agent-core/jobs/{job_id}` liefert jetzt polling-faehig `accepted`, `queued`, `running`, `done` oder `failed`
+  - der Statuspfad ist gegen kurzzeitig unvollstaendige JSON-Writes gehaertet
+  - echter produktiver Async-Lauf erfolgreich mit `phase4b-live-verify-1776343554`
+  - echter Proxy-Statusabruf fuer den Async-Pfad erfolgreich
+  - Polling-Antworten liefern jetzt stabil `is_terminal` und `should_poll` fuer n8n
+  - `done`- und `failed`-Antworten exponieren Artefakt-Readiness jetzt explizit statt nur implizit ueber `null`
+  - ein verifizierter Fehljob zeigt kein irrefuehrendes `final.mp4` mehr als public ready an
+  - echter Live-Response-Check erfolgreich mit `phase4c-live-verify-1776348348`
   - Tagesabschluss-Doku und Handoff werden in `/workspace/codex` gepflegt
 
 ## Reale Validierungsnotizen
@@ -132,8 +162,10 @@ Eine optionale Storyboard-/Keyframe-Pipeline auf Basis des vorhandenen Pod-Bildp
 - `examples/minimal_job.json`
 
 ## Bewusst noch nicht bauen
-- n8n-Integration
-- neue HTTP-API fuer den Core
+- grosse Multi-User-API fuer den Core
+- Queue-System oder asynchrones Job-Management fuer die Bridge
+- Auth-System
+- n8n-spezifische Speziallogik
 - GUI
 - Multi-Agent-Swarm
 - DB, Queue-Cluster, Event-Bus
@@ -151,8 +183,8 @@ Eine optionale Storyboard-/Keyframe-Pipeline auf Basis des vorhandenen Pod-Bildp
   - finales MP4 erzeugen
   - State, Result und Artefakte nachvollziehbar speichern
 
-## Phase-3A-Abschlusskriterium
-- Eine optionale Storyboard-/Keyframe-Pipeline arbeitet auf bestehender Pod-Infrastruktur, persistiert Kandidaten und selektierte Keyframes sauber, bleibt mit dem Video-Flow kompatibel und ist durch Tests sowie mindestens einen realen Phase-3A-Lauf verifiziert.
+## Phase-4C-Abschlusskriterium
+- Ein externer Caller kann den bestehenden `agent_core` ueber `POST /agent-core/jobs` asynchron starten, ueber `GET /agent-core/jobs/{job_id}` mit klaren Polling-Hinweisen auswerten, und terminale Antworten dokumentieren explizit, ob `result.json` und `final.mp4` wirklich bereit sind.
 
 ## Tagesabschluss
 - Commit-wuerdig sind aktuell die Quellordner `agent_core/`, `tests/`, `examples/`, die geschraefte `.gitignore` und der kanonische Projekt-Memory unter `/workspace/codex`.

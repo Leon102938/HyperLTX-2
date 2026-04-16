@@ -227,3 +227,31 @@ Auswirkung:
 - der Core erzeugt echte PNG-Keyframes pro Szene bzw. Variation
 - Keyframes werden selektiert und sauber persistiert
 - der Video-Flow bekommt Storyboard-Kontext, aber noch keinen grossen i2v-Umbau
+
+## D-018
+Datum: 2026-04-16
+
+Entscheidung:
+Phase 3B nutzt selektierte Storyboard-Keyframes produktiv nur ueber den bereits vorhandenen First-Frame-Image-Conditioning-Pfad des stabilen LTX2-`ti2vid`-Stacks.
+
+Begruendung:
+Der vorhandene Pod-Stack und FastAPI-Wrapper koennen reales Image-Conditioning im bestehenden `ti2vid`-Vertrag bereits sauber durchreichen. Ein neuer separater Keyframe-Interpolations- oder Retake-Pfad waere fuer diesen Schritt unnoetig gross und lokal noch nicht als stabiler Produktionsvertrag verifiziert.
+
+Auswirkung:
+- `video_mode=keyframe_conditioned` ist jetzt produktiv moeglich, aber nur im bestehenden `ti2vid`-Pfad
+- bei fehlendem selektierten Keyframe oder nicht verfuegbarer Storyboard-/Image-Conditioning-Lage faellt der Core ehrlich auf `storyboard_reference` oder `text_only` zurueck
+- keine Fake-Freigabe fuer Multi-Keyframe-Interpolation, neuen Backend-Zweig oder grossen Refactor
+
+## D-019
+Datum: 2026-04-16
+
+Entscheidung:
+Phase 4A nutzt die bereits laufende lokale FastAPI als duenne Worker-/n8n-Bridge fuer den bestehenden `agent_core`.
+
+Begruendung:
+Im aktuellen Pod existiert bereits eine produktiv genutzte lokale FastAPI mit bestehenden Medienendpunkten. Ein kleiner zusaetzlicher Router ist daher die kleinste saubere Aussenintegration fuer externe Caller wie n8n. Ein neuer separater API-Stack oder eine neue CLI-Familie wuerde fuer diesen Schritt keinen Mehrwert bringen und den Systemrand unnoetig verbreitern.
+
+Auswirkung:
+- externer Einstieg erfolgt jetzt ueber `POST /agent-core/run` und `GET /agent-core/jobs/{job_id}`
+- der bestehende `VideoAgent` bleibt die eigentliche Produktionslogik; die Bridge fuegt nur Request-/Response-Vertrag und Referenzen hinzu
+- Queue, Auth, Multi-User-Management und grosse API-Plattform bleiben explizit spaetere Schritte

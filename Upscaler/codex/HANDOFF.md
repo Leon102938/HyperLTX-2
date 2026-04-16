@@ -39,10 +39,30 @@
   - optionale Storyboard-/Keyframe-Pipeline ueber Z-Image
   - `storyboard_plan.json` sowie Keyframe-Kandidaten und selektierte Keyframes pro Szene
   - selektierte Keyframes werden in State, Result und Take-Metadaten gespiegelt
+- Phase 3B ist abgeschlossen:
+  - produktiver First-Frame-Keyframe-Pfad im bestehenden LTX2-`ti2vid`-Stack
+  - `video_mode`, `render_mode`, `fallback_strategy` und `selected_keyframe_usage` werden pro Job/Szene/Take persistiert
+  - ehrlicher Fallback auf `storyboard_reference` oder `text_only`, wenn der selektierte Keyframe nicht nutzbar ist
+- Phase 4A ist abgeschlossen:
+  - minimale produktive Worker-/n8n-Bridge ueber die bestehende FastAPI
+  - `POST /agent-core/run` startet den bestehenden `VideoAgent` synchron
+  - `GET /agent-core/jobs/{job_id}` liefert den persistierten Status-/Result-Vertrag
+  - `/agent-runs` ist als Referenzpfad fuer `state.json`, `result.json` und `final.mp4` gemountet
+  - der Live-Server auf Port `8000` wurde nach den Bridge-Dateiaenderungen manuell neu geladen und der Endpunkt ist dort jetzt real verifiziert
+- Phase 4B ist abgeschlossen:
+  - produktiver Async-Submit-Pfad `POST /agent-core/jobs` ist gebaut
+  - `GET /agent-core/jobs/{job_id}` liefert jetzt polling-faehig `accepted`, `queued`, `running`, `done` oder `failed`
+  - `POST /agent-core/run` bleibt als synchroner Dev-/Test-Pfad erhalten
+  - der Live-Server auf Port `8000` wurde nach den Phase-4B-Aenderungen erneut manuell neu geladen und der Async-Pfad ist dort jetzt real verifiziert
+- Phase 4C ist abgeschlossen:
+  - die Polling-Antworten sind jetzt n8n-freundlicher gehaertet
+  - `status_summary`, `is_terminal`, `should_poll`, `retry_after_sec`, `artifacts_ready`, `final_mp4_ready`, `result_json_ready` und `public_refs` sind jetzt im Vertrag
+  - Fehljobs exponieren keinen irrefuehrenden finalen Public-Link mehr
+  - der Live-Server auf Port `8000` wurde nach den Phase-4C-Aenderungen erneut manuell neu geladen und die neuen Felder sind dort jetzt real verifiziert
 
 ## Was real verifiziert wurde
 - Tests:
-  - `python -m unittest discover -s /workspace/tests -v` -> 33 Tests gruen
+  - `python -m unittest discover -s /workspace/tests -v` -> 41 Tests gruen
 - Reale Core-/Backend-Laeufe:
   - `real-e2e-check-3`
   - `real-e2e-mux-2`
@@ -55,6 +75,11 @@
   - `real-phase2d-variation-1`
   - `real-phase2e-creative-selection-1`
   - `real-phase3a-storyboard-1`
+  - `real-phase3b-keyframe-1`
+  - `bridge-demo-job` via `POST /agent-core/run`
+  - `phase4a-live-verify-1776342448` via `POST http://127.0.0.1:8000/agent-core/run`
+  - `phase4b-live-verify-1776343554` via `POST http://127.0.0.1:8000/agent-core/jobs`
+  - `phase4c-live-verify-1776348348` via `POST http://127.0.0.1:8000/agent-core/jobs`
 - Reale lokale Backends verifiziert:
   - Qwen TTS ueber vorhandene FastAPI-Endpunkte
   - LTX2 `ti2vid` ueber vorhandene FastAPI-Endpunkte
@@ -70,21 +95,25 @@
   - Phase 2D
   - Phase 2E
   - Phase 3A
+  - Phase 3B
+  - Phase 4A
+  - Phase 4B
+  - Phase 4C
 - Noch nicht gebaut:
-  - externe API-Schicht
-  - n8n-Anbindung
+  - groessere API-Plattform
+  - eigentliche n8n-Orchestrierung/Queue-Integration
   - Musik-Pipeline
   - Hook-/Quality-Subsysteme
   - zweiter produktiver Backend-Pfad im neuen Core
 
 ## Was als Naechstes sinnvoll ist
 - Kleinster sinnvoller naechster Schritt:
-  - keyframe-gestuetzten Video-Pfad im bestehenden Stack vorsichtig vorbereiten
+  - nach Phase 4C ist eher ein sauberer Tagesabschluss oder hoechstens sehr kleine n8n-freundliche Doku/Webhook-Konvention sinnvoll
 - Alternative:
   - zweiten produktiven Backend-Pfad gezielt waehlen oder spaeter kontrollierte Hook-/Narrativ-Regeln definieren
 - Nicht sinnvoll als naechster Schritt:
-  - neue API-Schicht
-  - n8n
+  - sofortige grosse Multi-User-API
+  - sofortige Queue-/Auth-/Frontend-Schicht
   - GUI
   - grosser Refactor des bestehenden Kernflusses
 
@@ -145,7 +174,8 @@
 ## Offene Risiken
 - `a2vid` ist im aktuellen Setup nicht als stabiler Produktionsvertrag verifiziert.
 - die Phase-2E-Auswahl ist bewusst klein und regelbasiert, aber noch keine tiefe Bildinhalts- oder Hook-Bewertung.
-- Phase 3A erzeugt echte Storyboard-Keyframes, aber nutzt sie noch nicht als harten i2v-Vertrag.
+- Phase 3B nutzt selektierte Keyframes jetzt produktiv fuer First-Frame-Conditioning, aber noch nicht fuer Multi-Keyframe-Interpolation oder einen separaten Interpolations-/Retake-Vertrag.
+- Phase 4A/4B/4C bleiben kleine Minimal-Bridges; Phase 4B ist zwar polling-faehig und 4C macht den Vertrag n8n-freundlicher, aber es gibt weiterhin keine durable Queue, keine Auth und keine eigentliche n8n-spezifische Steuerlogik.
 - Multi-Segment-Concat kann noch kleine Timing-Deltas erzeugen.
 - Der Worktree ist lokal deutlich verschmutzt durch Runtime- und Modellordner; saubere Commits muessen gezielt nur Code und Doku umfassen.
 - `init.sh` ist bereits lokal modifiziert und nicht von dieser Session bereinigt worden.
@@ -156,7 +186,7 @@ Lies zuerst in /workspace/codex:
 AGENTS.md, MISSION.md, USER_PREFERENCES.md, PROJECT_STATE.md, ACTIVE_PLAN.md, MEMORY.md, DECISIONS.md, CHANGELOG.md, TASK_BOARD.md, COMMAND_PROMPTS.md und HANDOFF.md.
 
 Behandle nur /workspace/codex als kanonisches Projektgedaechtnis.
-Nutze den bestehenden Phase-1-, 2A-, 2B-, 2C-, 2D-, 2E- und 3A-Stand unveraendert als Basis.
+Nutze den bestehenden Phase-1-, 2A-, 2B-, 2C-, 2D-, 2E-, 3A-, 3B- und 4A-Stand unveraendert als Basis.
 Keine n8n-Anbindung, keine externe API-Schicht, keine GUI und kein grosser Refactor, ausser der neue Auftrag verlangt das explizit.
 
 Arbeite danach auf Basis verifizierter Fakten und aktualisiere die Memory-Dateien sauber.

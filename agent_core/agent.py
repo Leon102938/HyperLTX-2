@@ -347,7 +347,11 @@ class VideoAgent:
         planned_takes_per_scene = max((len(scene.takes) for scene in plan.scenes), default=1)
         planned_variations_per_scene = max((len(scene.variations) for scene in plan.scenes), default=1)
         storyboard_enabled = bool(plan.metadata.get("storyboard_enabled", False))
-        if len(plan.scenes) <= 1 and planned_takes_per_scene <= 1 and not storyboard_enabled:
+        has_render_mode_context = any(
+            scene.render_mode != "text_only" or scene.video_mode in {"storyboard_reference", "keyframe_conditioned"}
+            for scene in plan.scenes
+        )
+        if len(plan.scenes) <= 1 and planned_takes_per_scene <= 1 and not storyboard_enabled and not has_render_mode_context:
             return video_adapter.generate_video(
                 job,
                 plan,
@@ -367,6 +371,8 @@ class VideoAgent:
         max_quality_retries_per_scene = int(plan.metadata.get("max_quality_retries_per_scene", 1) or 0)
         total_retry_count = 0
         previous_selected_shot_type: str | None = None
+        render_mode_counts = {"text_only": 0, "storyboard_reference": 0, "keyframe_conditioned": 0}
+        fallback_reasons: list[dict[str, Any]] = []
 
         for scene in plan.scenes:
             self.state_store.append_log(state.job_id, f"scene {scene.scene_id} started")
@@ -383,6 +389,12 @@ class VideoAgent:
                 take_job = self._build_take_job(job, scene, take)
                 take_workspace = scene_workspace / "takes" / take.take_id
                 take_plan = self.planner.build_take_render_plan(plan, scene, take)
+                take_video_step = next(step for step in take_plan.steps if step.name == "video")
+                take_render_mode = str(take_video_step.params.get("render_mode", take.render_mode))
+                take_video_mode = str(take_video_step.params.get("video_mode", take.video_mode))
+                take_fallback_strategy = str(take_video_step.params.get("fallback_strategy", take.fallback_strategy))
+                take_fallback_reason = take_video_step.params.get("fallback_reason")
+                selected_keyframe_usage = dict(take_video_step.params.get("selected_keyframe_usage") or {})
                 take_result = video_adapter.generate_video(take_job, take_plan, take_workspace, voice_result=None)
                 mirrored_output_path = None
                 if take_result.output_path and Path(take_result.output_path).exists():
@@ -424,6 +436,10 @@ class VideoAgent:
                     prompt_variant_text=take.prompt_variant_text,
                     style_bias=take.style_bias,
                     seed=take.seed,
+                    video_mode=take_video_mode,
+                    render_mode=take_render_mode,
+                    fallback_strategy=take_fallback_strategy,
+                    fallback_reason=str(take_fallback_reason) if take_fallback_reason else None,
                     status=take_result.status,
                     review_status=review_status,
                     output_path=mirrored_output_path or take_result.output_path,
@@ -438,6 +454,7 @@ class VideoAgent:
                     metadata={
                         "prompt_text": take.prompt_text,
                         "selected_keyframe": scene.selected_keyframe.model_dump(mode="json") if scene.selected_keyframe else None,
+                        "selected_keyframe_usage": selected_keyframe_usage,
                         "backend_metadata": take_result.metadata,
                         "quality_guard": validation.model_dump(mode="json") if validation else None,
                     },
@@ -528,6 +545,16 @@ class VideoAgent:
             selected_take.metadata["selection"] = selection_details
             aggregate_duration_sec += selected_take.duration_sec or scene.target_duration_sec
             previous_selected_shot_type = selected_take.shot_type
+            render_mode_counts[selected_take.render_mode] = render_mode_counts.get(selected_take.render_mode, 0) + 1
+            if selected_take.fallback_reason:
+                fallback_reasons.append(
+                    {
+                        "scene_id": scene.scene_id,
+                        "take_id": selected_take.take_id,
+                        "render_mode": selected_take.render_mode,
+                        "fallback_reason": selected_take.fallback_reason,
+                    }
+                )
             scene_output = {
                 "scene_id": scene.scene_id,
                 "scene_index": scene.index,
@@ -540,6 +567,12 @@ class VideoAgent:
                 "selected_variation_id": selected_take.variation_id,
                 "selected_variation": self._scene_variation_payload(scene, selected_take.variation_id),
                 "selected_keyframe": scene.selected_keyframe.model_dump(mode="json") if scene.selected_keyframe else None,
+                "video_mode": selected_take.video_mode,
+                "planned_render_mode": scene.render_mode,
+                "render_mode": selected_take.render_mode,
+                "fallback_strategy": selected_take.fallback_strategy,
+                "fallback_reason": selected_take.fallback_reason,
+                "selected_keyframe_usage": selected_take.metadata.get("selected_keyframe_usage"),
                 "selected_take": selected_take.model_dump(mode="json"),
                 "take_count": len(take_records),
                 "variation_count": len(scene.variations),
@@ -570,6 +603,12 @@ class VideoAgent:
                     "selected_take_id": selected_take.take_id,
                     "selected_variation_id": selected_take.variation_id,
                     "selected_keyframe": scene.selected_keyframe.model_dump(mode="json") if scene.selected_keyframe else None,
+                    "video_mode": selected_take.video_mode,
+                    "planned_render_mode": scene.render_mode,
+                    "render_mode": selected_take.render_mode,
+                    "fallback_strategy": selected_take.fallback_strategy,
+                    "fallback_reason": selected_take.fallback_reason,
+                    "selected_keyframe_usage": selected_take.metadata.get("selected_keyframe_usage"),
                     "review_status": selected_take.review_status,
                     "technical_score": selection_details.get("technical_score"),
                     "creative_score": selection_details.get("creative_score"),
@@ -616,6 +655,10 @@ class VideoAgent:
                 "variations_per_scene": planned_variations_per_scene,
                 "takes_per_scene": planned_takes_per_scene,
                 "takes_per_variation": plan.metadata.get("takes_per_variation", 1),
+                "video_mode_requested": plan.metadata.get("video_mode_requested", "auto"),
+                "planned_render_mode": plan.metadata.get("planned_render_mode", "text_only"),
+                "render_mode_counts": render_mode_counts,
+                "fallback_reasons": fallback_reasons,
                 "selection_mode": selection_mode,
                 "creative_selection_mode": creative_selection_mode,
                 "storyboard_enabled": storyboard_enabled,
@@ -640,6 +683,13 @@ class VideoAgent:
             "variations_per_scene": video_result.metadata.get("variations_per_scene", 1),
             "takes_per_scene": video_result.metadata.get("takes_per_scene", 1),
             "takes_per_variation": video_result.metadata.get("takes_per_variation", 1),
+            "video_mode_requested": video_result.metadata.get("video_mode_requested", "auto"),
+            "planned_render_mode": video_result.metadata.get("planned_render_mode", "text_only"),
+            "render_mode_counts": video_result.metadata.get(
+                "render_mode_counts",
+                {"text_only": 0, "storyboard_reference": 0, "keyframe_conditioned": 0},
+            ),
+            "fallback_reasons": video_result.metadata.get("fallback_reasons", []),
             "selection_mode": video_result.metadata.get("selection_mode", "quality_guarded_best_valid_take"),
             "creative_selection_mode": video_result.metadata.get(
                 "creative_selection_mode", "rule_based_scene_variation_heuristic"
@@ -670,6 +720,9 @@ class VideoAgent:
                 "camera_motion": take.camera_motion,
                 "framing_hint": take.framing_hint,
                 "style_bias": take.style_bias,
+                "video_mode": take.video_mode,
+                "render_mode": take.render_mode,
+                "fallback_strategy": take.fallback_strategy,
                 "selected_keyframe_candidate_id": scene.selected_keyframe.candidate_id if scene.selected_keyframe else None,
                 "selected_keyframe_variation_id": scene.selected_keyframe.variation_id if scene.selected_keyframe else None,
                 "selected_keyframe_path": scene.selected_keyframe.output_path if scene.selected_keyframe else None,

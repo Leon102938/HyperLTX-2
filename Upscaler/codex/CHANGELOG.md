@@ -129,3 +129,92 @@
 - `HANDOFF.md` fuer die naechste Session angelegt
 - `.gitignore` vorsichtig um Laufzeit-/Artefaktordner, lokale Logs, Checkpoints, Legacy-Ordner und Egg-Info erweitert
 - aktueller Tagesendstand erneut per `python -m unittest discover -s /workspace/tests -v` verifiziert -> 33 Tests gruen
+
+## 2026-04-16 Phase-3B Keyframe Video Path
+- vorhandenen Pod- und Backend-Stack gezielt auf ehrlichen keyframe-gestuetzten Video-Pfad geprueft
+- bestaetigt: der bestehende FastAPI-/LTX2-Wrapper unterstuetzt im stabilen `ti2vid`-Pfad produktives Image-Conditioning via `--image`
+- bewusst kein neuer Backend-Zweig und keine Fake-Keyframe-Interpolation gebaut
+- `JobInput` um `video_mode` erweitert; `ScenePlan`, `TakePlan` und `TakeResultRecord` dokumentieren jetzt `video_mode`, `render_mode`, `fallback_strategy` und Laufzeit-`fallback_reason`
+- Planner entscheidet jetzt pro Job oder optional pro Szene via `metadata.scene_video_modes`, ob `text_only`, `storyboard_reference` oder `keyframe_conditioned` geplant wird
+- LTX2-Adapter injiziert den selektierten Storyboard-Keyframe jetzt produktiv als First-Frame-Image-Conditioning in den bestehenden `ti2vid`-Pfad
+- Agent und Persistenz schreiben jetzt `selected_keyframe_usage`, `render_mode_counts` und `fallback_reasons` in `takes.json`, `state.json` und `result.json`
+- neue Tests fuer keyframe-aware Planung, Fallback, Rendermodus-Persistenz und Multi-Scene-/Multi-Take-Kompatibilitaet hinzugefuegt
+- Tests erneut erfolgreich ausgefuehrt: `python -m unittest discover -s /workspace/tests -v` -> 36 Tests gruen
+- echter Phase-3B-Lauf `real-phase3b-keyframe-1` erfolgreich verifiziert:
+  - Z-Image erzeugte zwei reale Keyframe-Kandidaten
+  - LTX2 wurde real mit `--image` aus dem selektierten Keyframe gestartet
+  - `render_mode=keyframe_conditioned` und `selected_keyframe_usage.applied=true` wurden im Job-Workspace persistiert
+
+## 2026-04-16 Phase-4A Minimal Worker Bridge
+- bestehenden Pod- und FastAPI-Stack auf kleinste saubere Aussenintegration geprueft
+- bewusst eine duenne lokale FastAPI-Bridge statt neuer CLI-Familie oder grosser API-Plattform gewaehlt
+- neuen Router `app/agent_core_api.py` eingefuehrt
+- neuer synchroner Endpunkt `POST /agent-core/run` nimmt strukturierte Jobdaten entgegen und startet den bestehenden `VideoAgent`
+- neuer Status-/Result-Endpunkt `GET /agent-core/jobs/{job_id}` liest den persistierten Jobzustand sauber zurueck
+- `app.main` um den neuen Router und den statischen Mount `/agent-runs` erweitert, damit `state.json`, `result.json` und `final.mp4` auch direkt referenzierbar sind
+- Beispielrequest `examples/agent_core_bridge_request.json` hinzugefuegt
+- neue API-Tests fuer Job-Entry, Erfolg, Fehler und Validierungsfehler hinzugefuegt
+- Tests erneut erfolgreich ausgefuehrt: `python -m unittest discover -s /workspace/tests -v` -> 40 Tests gruen
+- echter lokaler HTTP-Lauf erfolgreich verifiziert:
+  - `uvicorn app.main:app --port 8010`
+  - `POST /agent-core/run` mit `bridge-demo-job`
+  - `GET /agent-core/jobs/bridge-demo-job`
+  - Rueckgabevertrag enthielt `result.output_final_path`, `refs.result_json_url` und `refs.final_mp4_url`
+
+## 2026-04-16 Phase-4A Live Bridge Activation
+- Ursache des Live-Problems auf Port `8000` verifiziert: der laufende `uvicorn app.main:app` war vor den Bridge-Aenderungen gestartet und kann im Pod nicht automatisch reloaden
+- Codezustand gegen Live-Prozess gegengeprueft:
+  - `app/agent_core_api.py` enthielt den Router korrekt
+  - `app/main.py` band den Router korrekt ein
+  - ein frischer Python-Import sah `/agent-core/run`, der Live-Server auf `8000` aber noch nicht
+- produktiven FastAPI-Prozess auf Port `8000` manuell mit aktuellem Code neu gestartet
+- Live-Router danach real verifiziert:
+  - `GET /agent-core/run` auf `127.0.0.1:8000` liefert korrekt `405`, also kein `404` mehr
+  - echter synchroner Run `POST http://127.0.0.1:8000/agent-core/run` erfolgreich mit `phase4a-live-verify-1776342448`
+  - echter Statusabruf `GET http://127.0.0.1:8000/agent-core/jobs/phase4a-live-verify-1776342448` erfolgreich
+  - Proxy-Pruefung erfolgreich:
+    - `GET https://mvwg65x59mc01e-8000.proxy.runpod.net/agent-core/jobs/phase4a-live-verify-1776342448`
+    - `POST https://mvwg65x59mc01e-8000.proxy.runpod.net/agent-core/run` liefert fuer `{}` korrekt `422`
+- reales Finalartefakt bestaetigt: `/workspace/agent_runs/phase4a-live-verify-1776342448/final.mp4` mit `768x448`, `24 fps`, `4.042s`
+
+## 2026-04-16 Phase-4B Async Polling Bridge
+- bestehende Phase-4A-Bridge gezielt in Richtung minimalem Async-/Polling-Vertrag erweitert, ohne den `agent_core` umzubauen
+- neuer produktiver Submit-Endpunkt `POST /agent-core/jobs` eingefuehrt
+- `POST /agent-core/run` bewusst als synchroner Dev-/Test-Pfad beibehalten
+- kleiner in-process Background-Runner im FastAPI-Router eingefuehrt; bewusst keine Queue-, Auth- oder Multi-User-Schicht gebaut
+- Statusvertrag von `GET /agent-core/jobs/{job_id}` auf `accepted`, `queued`, `running`, `done` und `failed` geschaerft
+- Statusantworten enthalten jetzt zusaetzlich `current_phase` und `poll_url`
+- Polling-Pfad gegen kurzzeitig unvollstaendige JSON-Writes auf `state.json`/`result.json` gehaertet
+- API-Tests auf Async-Annahme, laufenden Status, Erfolg und Fehlerpfad erweitert
+- Tests erneut erfolgreich ausgefuehrt: `python -m unittest discover -s /workspace/tests -v` -> 41 Tests gruen
+- produktiven FastAPI-Prozess auf Port `8000` nach den Phase-4B-Aenderungen manuell neu geladen
+- echter produktiver Async-Lauf erfolgreich verifiziert:
+  - `POST http://127.0.0.1:8000/agent-core/jobs` mit `phase4b-live-verify-1776343554`
+  - Polling ueber `GET http://127.0.0.1:8000/agent-core/jobs/phase4b-live-verify-1776343554`
+  - Endstatus `done`, `current_phase=done`, `result.final_phase=assembled`
+  - Proxy-Statusabruf ueber `https://mvwg65x59mc01e-8000.proxy.runpod.net/agent-core/jobs/phase4b-live-verify-1776343554` erfolgreich
+  - reales Finalartefakt bestaetigt: `/workspace/agent_runs/phase4b-live-verify-1776343554/final.mp4`
+
+## 2026-04-16 Phase-4C n8n-Friendly Polling Hardening
+- bestehenden Async-/Polling-Vertrag gezielt fuer n8n gehaertet, ohne den Core oder die Produktionslogik umzubauen
+- `GET /agent-core/jobs/{job_id}` liefert jetzt zusaetzlich:
+  - `status_summary`
+  - `is_terminal`
+  - `should_poll`
+  - `retry_after_sec`
+  - `artifacts_ready`
+  - `final_mp4_ready`
+  - `result_json_ready`
+  - `public_refs`
+- `public_refs` fuehrt nur die extern nutzbaren URLs fuer `state.json`, `result.json` und `final.mp4`
+- Fehljobs exponieren keinen irrefuehrenden `final_mp4`-Public-Link mehr, auch wenn lokal Zwischenartefakte liegen
+- `failed` kann jetzt im Polling-Vertrag frueh sichtbar sein, bleibt aber fuer n8n erst terminal, wenn der Failure-Vertrag wirklich bereit ist
+- API-Tests um Assertions fuer Terminal-Flags, Polling-Hinweise und Artefakt-Readiness geschaerft
+- Tests erneut erfolgreich ausgefuehrt: `python -m unittest discover -s /workspace/tests -v` -> 41 Tests gruen
+- produktiven FastAPI-Prozess auf Port `8000` nach den Phase-4C-Aenderungen manuell neu geladen
+- realer Live-Response-Check erfolgreich:
+  - `POST http://127.0.0.1:8000/agent-core/jobs` mit `phase4c-live-verify-1776348348`
+  - verifizierte Submit-Felder: `accepted`, `is_terminal=false`, `should_poll=true`, `retry_after_sec=2`
+  - verifizierter Mid-Poll: `running`, `result_json_ready=false`, `final_mp4_ready=false`
+  - verifizierter Final-Poll: `done`, `is_terminal=true`, `should_poll=false`, `artifacts_ready=true`
+  - Proxy-Response ueber `https://mvwg65x59mc01e-8000.proxy.runpod.net/agent-core/jobs/phase4c-live-verify-1776348348` erfolgreich

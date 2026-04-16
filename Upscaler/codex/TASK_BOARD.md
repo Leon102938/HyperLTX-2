@@ -6,13 +6,17 @@
 - optionalen direkten Python-Zugriff pro Adapter evaluieren
 - Integration von ACE-Step oder ZImage als naechsten Vertical Slice entscheiden
 - `a2vid` spaeter separat und gezielt wieder evaluieren
-- keyframe-gestuetzten Video-Pfad auf Basis des jetzigen Storyboard-Vertrags vorsichtig planen
+- keyframe-gestuetzten Video-Pfad nach Phase 3B weiter absichern oder feinere Szenenregeln definieren
+- per-Keyframe-Conditioning-Tuning wie Staerke, Frame-Index oder spaetere Mehr-Keyframe-Strategien nur nach gezielter Realvalidierung ausbauen
+- Phase-4B-Bridge nur bei echtem Bedarf in Richtung dauerhafte Queue-, Restart- oder Worker-Persistenz erweitern
+- pruefen, ob eine kleine n8n-freundliche Dokumentation oder Webhook-Konvention als naechster Mini-Schritt sinnvoll ist
 - spaetere hoehere Inhaltsbewertung erst nach klarer Definition von Hook-/Narrativ- oder Bildqualitaetszielen planen
 - Concat-/Assembly-Timing fuer Multi-Segment-Jobs weiter beobachten
 - vor dem naechsten grossen Ausbau einen sauberen Commit nur fuer Code, Tests und kanonische Doku schneiden
+- sauberer Tagesabschluss fuer Phase 4C ist jetzt sinnvoll
 
 ## IN PROGRESS
-- naechsten grossen Schritt nach Phase 3A festlegen
+- naechsten sinnvollen Schritt nach Phase 4C festlegen
 
 ## BLOCKED
 - noch leer
@@ -65,5 +69,23 @@
 - `storyboard_plan.json` sowie Keyframe-Kandidaten und selektierte Keyframes im Job-Workspace eingefuehrt
 - neue Tests fuer Storyboard-Planung, Persistenz, Fallback und Keyframe-Auswahl implementiert und erfolgreich ausgefuehrt
 - echter Phase-3A-Lauf gegen reales Z-Image erfolgreich verifiziert
+- Phase 3B produktive First-Frame-Keyframe-Nutzung im bestehenden `ti2vid`-Pfad implementiert
+- Planner, Agent und LTX2-Adapter um `video_mode`, `render_mode`, `fallback_strategy` und `selected_keyframe_usage` erweitert
+- neue Tests fuer keyframe-aware Planung, Fallback, Persistenz und Multi-Scene-/Multi-Take-Kompatibilitaet implementiert und erfolgreich ausgefuehrt
+- echter Phase-3B-Lauf gegen reale Z-Image- und LTX2-Backends erfolgreich verifiziert
+- Phase 4A minimale Worker-/n8n-Bridge ueber die bestehende FastAPI implementiert
+- neuer Router mit `POST /agent-core/run` und `GET /agent-core/jobs/{job_id}` baut auf dem bestehenden `VideoAgent` auf
+- `agent_runs` als statischer Referenzpfad fuer `state.json`, `result.json` und `final.mp4` gemountet
+- neue Tests fuer Job-Entry, Erfolg, Fehler und Ergebnisvertrag implementiert und erfolgreich ausgefuehrt
+- echter lokaler HTTP-Lauf der Bridge mit `bridge-demo-job` erfolgreich verifiziert
+- Phase 4B minimale Async-/Polling-Bridge ueber denselben Router implementiert
+- neuer produktiver Submit-Pfad `POST /agent-core/jobs` startet Jobs nicht blockierend im Hintergrund
+- Statusvertrag von `GET /agent-core/jobs/{job_id}` auf `accepted/queued/running/done/failed` geschaerft
+- neue Tests fuer Async-Annahme, Polling-Erfolg und Fehlerpfad implementiert und erfolgreich ausgefuehrt
+- echter Live-Lauf der Async-Bridge mit `phase4b-live-verify-1776343554` erfolgreich verifiziert
+- Phase 4C kleine n8n-friendly Polling-Haertung implementiert
+- Polling-Antworten liefern jetzt `status_summary`, `is_terminal`, `should_poll`, `retry_after_sec`, `artifacts_ready`, `final_mp4_ready`, `result_json_ready` und `public_refs`
+- Fehljobs exponieren keinen irrefuehrenden finalen Public-Link mehr
+- bestehende Tests bleiben gruen und der echte Live-Response-Check mit `phase4c-live-verify-1776348348` ist erfolgreich
 - `.gitignore` fuer Laufzeit-/Artefaktordner geschaerft
 - `HANDOFF.md` fuer die naechste Session angelegt
