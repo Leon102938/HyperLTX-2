@@ -2,10 +2,12 @@
 
 ## Dauerhafte Erkenntnisse
 - Kanonischer Projekt-Memory-Pfad ist `/workspace/codex`.
+- Die kanonische Capability-/System-Uebersicht liegt in `/workspace/codex/CAPABILITY_MAP.md`.
 - Legacy-Notizen existieren in `/workspace/Codex`; nicht automatisch als Wahrheit bevorzugen.
 - Git-Root des eigentlichen Projekts ist `/workspace`, nicht `/workspace/codex`.
 - Das Root-Repo ist bereits ein RunPod-Medien-Template mit FastAPI-Wrappern und lokalen Modell-/Tool-Bereichen.
 - Basisdienste laufen standardmaessig ueber `start.sh`: Jupyter auf `8888`, FastAPI auf `8000`, Init im Hintergrund.
+- FastAPI darf beim Pod-Start nicht voraussetzen, dass `/workspace/agent_runs` schon existiert; `app.main`, `start.sh` und `init.sh` sichern die Basis-Laufzeitordner jetzt bewusst vor dem ersten Mount bzw. Dienststart ab.
 - Das Root-Python ist nicht die einzige relevante Runtime; wichtige Audio-/ACE-Step-Abhaengigkeiten leben im separaten Venv `/workspace/venvs/qwen3-tts`.
 - Vorhandene lokale Medien-Backends sind nutzbar, aber noch nicht als eigener Agent-Core abstrahiert.
 - Der Nutzer will zuerst einen starken modularen Agent-Core, nicht sofort API, n8n oder GUI.
@@ -40,10 +42,10 @@
 - Die Phase-4A-Bridge startet den bestehenden `VideoAgent` synchron und fuehrt bewusst noch kein Queue-, Auth- oder Multi-User-Management ein.
 - Phase 4B fuehrt `POST /agent-core/jobs` als bevorzugten produktiven n8n-Submit-Pfad ein; `POST /agent-core/run` bleibt nur als synchroner Dev-/Test-Pfad bestehen.
 - Die Phase-4B-Bridge ist bewusst nur ein kleiner in-process Background-Runner mit Polling ueber `GET /agent-core/jobs/{job_id}`, keine durable Queue und kein restart-sicheres Worker-System.
-- Der Async-Statusvertrag verwendet `accepted`, `queued`, `running`, `done` und `failed`; Detailphasen kommen zusaetzlich ueber `current_phase` bzw. `result.final_phase`.
+- Der aktuelle Async-Statusvertrag emittiert real `accepted`, `running`, `done` und `failed`; Detailphasen kommen zusaetzlich ueber `current_phase` bzw. `result.final_phase`.
 - Phase 4C fuehrt fuer n8n explizite Polling-Hinweise ein: `is_terminal`, `should_poll`, `retry_after_sec`, `artifacts_ready`, `final_mp4_ready`, `result_json_ready`, `status_summary` und `public_refs`.
 - `public_refs` ist der n8n-freundliche Teilvertrag fuer externe URLs; `refs` bleibt der vollstaendige Vertrag mit lokalen Pfaden plus URLs.
-- `/workspace/codex` existiert im aktuellen Workspace jetzt real als Symlink auf `/workspace/Upscaler/codex`.
+- `/workspace/codex` ist im aktuellen Workspace ein reales Verzeichnis; ein Legacy-Duplikat unter `/workspace/Upscaler/codex` kann weiter existieren, ist aber nicht der kanonische Pfad.
 - Phase 5A fuehrt eine Director-/Brain-Schicht vor der bisherigen Varianten-/Storyboard-/Take-Planung ein.
 - `director_output.json` ist ab Phase 5A ein eigenes Artefakt pro Job.
 - `ProductionPlan` enthaelt jetzt optional `director_output`; `ScenePlan` enthaelt `scene_intent` und `prompt_build_metadata`.
@@ -55,14 +57,22 @@
 - Der reale lokale Director-Serve liegt jetzt unter:
   - Binary: `/workspace/tools/llama.cpp/build/bin/llama-server`
   - Modellpfad: `/workspace/models/director/qwen3.6-35b-a3b/gguf/Qwen_Qwen3.6-35B-A3B-Q4_K_M.gguf`
+- Nach einem Pod-Restore kann das Build-Artefakt fuer `llama-server` fehlen, obwohl das GGUF-Modell noch vorhanden ist; der produktive Wiederherstellungspfad ist dann `scripts/serve_director_llm.sh`, das `llama.cpp` bei Bedarf neu baut.
 - Das produktive lokale Profil fuer den Director heisst `qwen36_llama_cpp_local`.
+- `config/director_llm.env` ist jetzt real vorhanden und bildet den lokalen Director-Defaultpfad fuer Host, Port, Modell, Timeouts und Readiness-Checks ab.
+- `start.sh`, `init.sh`, `app.main` und `scripts/check_director_llm.py` laden diese Director-Defaults jetzt konsistent; lokale Sonderwerte bleiben ueber `config/director_llm.env.local` moeglich.
 - Der Director-Adapter fragt fuer `llama.cpp` bewusst einen kleineren `scene_map`-JSON-Vertrag ab und normalisiert diesen danach in den bestehenden `DirectorOutput`-Vertrag.
 - Der Director-Adapter extrahiert JSON fuer den lokalen Qwen-Pfad jetzt defensiv auch dann, wenn das Modell vor dem JSON noch Begruendungstext oder `<think>`-Fragmente ausgibt.
 - `DirectorOutput` dokumentiert jetzt explizit `llm_active`, `llm_provider`, `llm_model` und `llm_endpoint`.
 - `result.json` dokumentiert den aktiven Director-LLM-Pfad jetzt ebenfalls explizit.
 - Das verifizierte koexistenzfaehige Pod-Profil fuer Director + LTX ist aktuell `-ngl 8 -c 2048 --reasoning off --no-warmup`.
+- `scripts/serve_director_llm.sh` startet den lokalen Director jetzt standardmaessig mit `--no-warmup`, damit der reale Startpfad zum dokumentierten Koexistenzprofil passt.
+- `scripts/serve_director_llm.sh` nutzt jetzt kleine operative Guards fuer konfigurierbare Health-Timeouts, Readiness-Retries, stale PID-Bereinigung und fruehes Scheitern bei vorzeitig beendetem `llama-server`.
+- `scripts/check_director_llm.py` ist Teil des realen Smoke-Pfads und muss syntaktisch lauffaehig bleiben; ein Syntaxfehler dort blockiert sonst die ehrliche Director-Verifikation trotz laufendem Server.
+- `scripts/check_director_llm.py` nutzt jetzt konfigurierbare Timeouts und kleine Retries statt eines harten Einmalversuchs.
 - `init.sh` ist fuer den Director-Pfad jetzt idempotent: vorhandenes GGUF wird wiederverwendet, fehlendes GGUF wird geladen, optional kann der lokale Serve-Prozess gestartet werden.
 - `init.sh` loescht vor dem Director-Setup alte `director_llm_model_ready`- und `director_llm_server_ready`-Flags, damit ein frueher Erfolg keinen falschen aktuellen Ready-Zustand signalisiert.
+- `scripts/ensure_llama_cpp.sh` sollte bei Restore-Rebuilds nicht nur `cmake`, sondern jetzt auch `ninja` sicherstellen.
 - Der reale verifizierte Modell-Download fuer den Director lief ueber `bartowski/Qwen_Qwen3.6-35B-A3B-GGUF`.
 - Der zuerst vermutete Dateiname ohne `Qwen_`-Praefix existierte nicht; der reale Dateiname ist `Qwen_Qwen3.6-35B-A3B-Q4_K_M.gguf`.
 - Echter erfolgreicher Phase-5B-Run:
@@ -98,6 +108,7 @@
 - Commit-wuerdig sind primaer `agent_core/`, `tests/`, `examples/`, `.gitignore` und der kanonische Projekt-Memory unter `/workspace/codex`.
 - Laufzeit- und Artefaktordner wie `agent_runs/`, `exports/`, `jobs/`, `status/`, `venvs/`, Checkpoints und lokale Pod-Logs sollen nicht Teil eines normalen Code-Commits sein.
 - Der Single-Flow bleibt als `single_scene`-Fallback explizit erhalten.
+- Beim naechsten Abschluss oder Backup muss der Director-/Startup-Pfad vollstaendig erfasst werden; besonders `tools/llama.cpp`, `config/director_llm.env`, neue Director-Skripte sowie Fixes in `start.sh`, `init.sh` und `app/main.py` duerfen nicht vergessen werden.
 - Rohe LTX2-MP4s koennen bereits einen Audio-Stream enthalten; der Assembler soll fuer Phase 1 trotzdem immer die eigene Voice-Spur bevorzugen.
 - Wenn kein nutzbares Voice-Artefakt vorliegt, soll `final.mp4` trotzdem als Kopie des Render-Videos entstehen statt den Job unnoetig scheitern zu lassen.
 - Der LTX2-Adapter darf `num_frames` nicht noch einmal aus einer gerundeten Plan-Dauer neu berechnen; sonst driftet der Dauervertrag.

@@ -22,6 +22,11 @@ Eine kleine Director-/Brain-Schicht vor dem bestehenden Planner bauen, die Jobs 
 ## Phase 5B Ziel
 Den bereits vorbereiteten Director-Layer produktiv an ein echtes lokales Director-Modell anbinden, bevorzugt Qwen3.6-35B-A3B in praktikabler quantisierter Form als GGUF `Q4_K_M`, ohne Fake-Integration, ohne neuen Mega-Stack und mit sauberem Fallback auf den bisherigen regelbasierten Flow.
 
+## Aktueller Operativer Fokus
+- Restore-/Startup-/Environment-Check nach Repo-Update und Pod-Neustart ist real verifiziert und fuer den lokalen Director-Pfad jetzt sauber geglaettet.
+- Naechster sinnvolle Ausbaupunkt bleibt unveraendert: weitere echte Multi-Scene-/Storyboard-Validierung des bestehenden Qwen-Director-Pfads, kein neuer Feature-Sprung.
+- Vor dem naechsten Abschluss oder Backup muss die Dateiliste explizit auf Vollstaendigkeit gegen den realen Director-/Startup-Pfad geprueft werden, insbesondere `tools/llama.cpp`, `config/director_llm.env`, neue Director-Skripte sowie Fixes in `start.sh`, `init.sh` und `app/main.py`.
+
 ## Phase 5A Arbeitsplan
 1. Kleinste saubere Integrationsstelle im `ProductionPlanner` nutzen, statt den bestehenden `agent_core` gross zu refactoren.
 2. Neue Module fuer `director`, `llm_adapter`, `prompt_builder` und `style_memory` einfuehren.
@@ -74,7 +79,7 @@ Den bereits vorbereiteten Director-Layer produktiv an ein echtes lokales Directo
   - asynchroner Submit-Endpunkt `POST /agent-core/jobs`
   - Status-/Result-Endpunkt `GET /agent-core/jobs/{job_id}`
   - statische Referenzierung von `agent_runs` ueber `/agent-runs`
-  - Beispielrequest `examples/agent_core_bridge_request.json`
+  - kanonische Bridge-Beispielaufrufe jetzt direkt in `codex/COMMAND_PROMPTS.md` als Inline-JSON
   - kleiner in-process Background-Runner fuer Async-Submits
   - n8n-freundliche Polling-Felder `status_summary`, `is_terminal`, `should_poll`, `retry_after_sec`
   - explizite Artefakt-Readiness `artifacts_ready`, `final_mp4_ready`, `result_json_ready`
@@ -144,7 +149,7 @@ Den bereits vorbereiteten Director-Layer produktiv an ein echtes lokales Directo
   - ein verifizierter Fehljob zeigt kein irrefuehrendes `final.mp4` mehr als public ready an
   - echter Live-Response-Check erfolgreich mit `phase4c-live-verify-1776348348`
   - Director-Ausgabe-Struktur, Fallback, Prompt-Building, Persistenz und Flow-Kompatibilitaet sind durch `tests/test_director_layer.py` plus die bestehenden Planner-/Smoke-/Storyboard-Tests abgesichert
-  - kompletter Testlauf aktuell erfolgreich: `python -m unittest discover -s /workspace/tests -v` -> 48 Tests gruen
+  - kompletter Testlauf aktuell erfolgreich: `python -m unittest discover -s /workspace/tests -v` -> 49 Tests gruen
   - echter Phase-5A-Live-Fallback erfolgreich mit `phase5a-live-fallback-1776420785`
   - der reale Director-Modus dieses Live-Laufs war `rule_based_fallback`; ein lokaler Director-LLM-Dienst war im Pod nicht produktiv verfuegbar
   - Tagesabschluss-Doku und Handoff werden in `/workspace/codex` gepflegt
@@ -156,10 +161,13 @@ Den bereits vorbereiteten Director-Layer produktiv an ein echtes lokales Directo
   - Modellpfad-Konvention unter `/workspace/models/director/qwen3.6-35b-a3b/gguf/`
   - `scripts/download_director_model.py`, `scripts/serve_director_llm.sh`, `scripts/check_director_llm.py`
   - `config/director_llm.env.example`
+  - reale lokale Default-Konfiguration `config/director_llm.env`
   - neues lokales Director-Profil `qwen36_llama_cpp_local` im `llm_adapter`
   - explizite Director-LLM-Statusfelder `llm_active`, `llm_provider`, `llm_model`, `llm_endpoint`
   - echte Normalisierung eines kleineren `scene_map`-LLM-Outputs in den bestehenden `DirectorOutput`-Vertrag
   - idempotente Director-Modell-Vorbereitung in `init.sh` mit optionalem Auto-Start des lokalen Serve-Diensts
+  - kleine Serve-Haertung fuer `llama-server`: konfigurierbare Health-Checks, Readiness-Retries, PID-Bereinigung und fruehes Abbrechen bei Startfehlern
+  - kleiner Rebuild-Guard in `scripts/ensure_llama_cpp.sh`, der bei Bedarf auch `ninja` installiert
 - verifiziert:
   - lokaler OpenAI-kompatibler Endpoint antwortet real auf `http://127.0.0.1:8011/v1/chat/completions`
   - Qwen3.6 laeuft real als `Qwen_Qwen3.6-35B-A3B-Q4_K_M.gguf`
@@ -167,6 +175,8 @@ Den bereits vorbereiteten Director-Layer produktiv an ein echtes lokales Directo
   - ein Low-Memory-Profil `-ngl 8 -c 2048 --reasoning off --no-warmup` erlaubt echten erfolgreichen Agent-Run mit aktivem Director-LLM
   - echter erfolgreicher Live-Run: `phase5b-qwen-live-1776506522`
   - `result.json` exponiert dort real `director_llm_active`, `director_llm_provider`, `director_llm_model` und `director_llm_endpoint`
+  - Restore-/Startup-Check nach Repo-Update und Pod-Neustart ist mit realem Async-FastAPI-Lauf erneut verifiziert: `restore-startup-check-20260418` via `POST /agent-core/jobs`, Director-Modus `llm_augmented`, finales MP4 `/workspace/agent_runs/restore-startup-check-20260418/final.mp4`
+  - Director-Defaultpfad aus `config/director_llm.env` ist ebenfalls real verifiziert: `director-stability-check-20260418` via `POST /agent-core/jobs`, Director-Modus `llm_augmented`, finales MP4 `/workspace/agent_runs/director-stability-check-20260418/final.mp4`
 
 ## Reale Validierungsnotizen
 - Fehlversuch 1:

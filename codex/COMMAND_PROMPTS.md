@@ -74,7 +74,7 @@ PY
 ```bash
 curl -sS -X POST http://127.0.0.1:8000/agent-core/run \
   -H 'Content-Type: application/json' \
-  --data @/workspace/examples/agent_core_bridge_request.json
+  --data '{"job":{"job_id":"bridge-demo-job","idea":"A modular bridge accepts a job.","duration_sec":4,"use_voice":false,"resolution":"320x256","orientation":"landscape"}}'
 
 curl -sS http://127.0.0.1:8000/agent-core/jobs/bridge-demo-job
 ```
@@ -83,7 +83,7 @@ curl -sS http://127.0.0.1:8000/agent-core/jobs/bridge-demo-job
 ```bash
 curl -sS -X POST http://127.0.0.1:8000/agent-core/jobs \
   -H 'Content-Type: application/json' \
-  --data @/workspace/examples/agent_core_bridge_request.json
+  --data '{"job":{"job_id":"bridge-accepted","idea":"A modular bridge accepts async jobs.","duration_sec":4,"use_voice":false,"resolution":"320x256","orientation":"landscape"}}'
 
 curl -sS http://127.0.0.1:8000/agent-core/jobs/<job_id>
 ```
@@ -110,9 +110,40 @@ PY
 ```bash
 curl -sS -X POST https://mvwg65x59mc01e-8000.proxy.runpod.net/agent-core/jobs \
   -H 'Content-Type: application/json' \
-  --data @/workspace/examples/agent_core_bridge_request.json
+  --data '{"job":{"job_id":"bridge-proxy","idea":"A modular bridge accepts async jobs.","duration_sec":4,"use_voice":false,"resolution":"320x256","orientation":"landscape"}}'
 
 curl -sS https://mvwg65x59mc01e-8000.proxy.runpod.net/agent-core/jobs/<job_id>
+```
+
+### Director-Env und Serve pruefen
+```bash
+sed -n '1,200p' /workspace/config/director_llm.env
+python /workspace/scripts/check_director_llm.py
+curl -sS http://127.0.0.1:8011/v1/models
+ps -eo pid,ppid,cmd | rg 'llama-server|uvicorn app.main:app'
+```
+
+### Director-Defaultpfad klein verifizieren
+```bash
+curl -sS -X POST http://127.0.0.1:8000/agent-core/jobs \
+  -H 'Content-Type: application/json' \
+  --data '{"job":{"job_id":"director-stability-check-20260418","idea":"A short verification clip confirms the restored workspace is stable and the local director responds coherently.","duration_sec":4,"use_voice":false,"resolution":"320x256","orientation":"landscape","style":"clean technical verification clip","pipeline_preference":"fast"}}'
+
+curl -sS http://127.0.0.1:8000/agent-core/jobs/director-stability-check-20260418
+```
+
+### Naechsten Abschluss vorbereiten
+```bash
+printf '%s\n' \
+  /workspace/tools/llama.cpp \
+  /workspace/config/director_llm.env \
+  /workspace/scripts/download_director_model.py \
+  /workspace/scripts/serve_director_llm.sh \
+  /workspace/scripts/check_director_llm.py \
+  /workspace/scripts/ensure_llama_cpp.sh \
+  /workspace/start.sh \
+  /workspace/init.sh \
+  /workspace/app/main.py
 ```
 
 ### Finales MP4 pruefen
@@ -564,7 +595,7 @@ python -m uvicorn app.main:app --host 127.0.0.1 --port 8010
 ```bash
 curl -sS -X POST http://127.0.0.1:8010/agent-core/run \
   -H 'Content-Type: application/json' \
-  --data @/workspace/examples/agent_core_bridge_request.json
+  --data '{"job":{"job_id":"bridge-demo-job","idea":"A modular bridge accepts a job.","duration_sec":4,"use_voice":false,"resolution":"320x256","orientation":"landscape"}}'
 
 curl -sS http://127.0.0.1:8010/agent-core/jobs/bridge-demo-job
 ```

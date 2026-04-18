@@ -9,11 +9,12 @@
 - Phase-4B-Bridge nur bei echtem Bedarf in Richtung dauerhafte Queue-, Restart- oder Worker-Persistenz erweitern
 - n8n-Arbeit bleibt bewusst spaeter; erst nach klarer Priorisierung wieder aufnehmen
 - vor dem naechsten grossen Ausbau einen sauberen Commit nur fuer Code, Tests und kanonische Doku schneiden
+- beim naechsten Abschluss oder Backup die Vollstaendigkeit explizit gegen den realen Director-/Startup-Pfad pruefen: `tools/llama.cpp`, `config/director_llm.env`, neue Director-Skripte sowie Fixes in `start.sh`, `init.sh` und `app/main.py` duerfen nicht fehlen
 - optional spaeter eine kleine Entlade-/Orchestrierungslogik fuer schwerere Director-Serve-Profile ergaenzen
 - optional spaeter das Qwen-Serve-Profil weiter auf Latenz gegenueber LTX-Koexistenz optimieren
 
 ## IN PROGRESS
-- naechsten sinnvollen Schritt nach dem real verifizierten Qwen-Director-Pfad festlegen
+- naechsten sinnvollen Multi-Scene-/Storyboard-Validierungsschritt fuer den bereits verifizierten Qwen-Director-Pfad festlegen
 
 ## BLOCKED
 - noch leer
@@ -77,7 +78,7 @@
 - echter lokaler HTTP-Lauf der Bridge mit `bridge-demo-job` erfolgreich verifiziert
 - Phase 4B minimale Async-/Polling-Bridge ueber denselben Router implementiert
 - neuer produktiver Submit-Pfad `POST /agent-core/jobs` startet Jobs nicht blockierend im Hintergrund
-- Statusvertrag von `GET /agent-core/jobs/{job_id}` auf `accepted/queued/running/done/failed` geschaerft
+- Statusvertrag von `GET /agent-core/jobs/{job_id}` auf `accepted/running/done/failed` geschaerft
 - neue Tests fuer Async-Annahme, Polling-Erfolg und Fehlerpfad implementiert und erfolgreich ausgefuehrt
 - echter Live-Lauf der Async-Bridge mit `phase4b-live-verify-1776343554` erfolgreich verifiziert
 - Phase 4C kleine n8n-friendly Polling-Haertung implementiert
@@ -97,7 +98,9 @@
 - Director-LLM-Nutzung, aktives Modell und Endpoint jetzt explizit persistiert
 - `result.json` spiegelt jetzt den aktiven Director-LLM-Pfad ebenfalls explizit
 - `init.sh` auf idempotente Director-Modell-Vorbereitung mit optionalem Auto-Start erweitert
-- kompletter Testlauf aktuell erfolgreich mit 48 gruene Tests
+- Restore-/Startup-Haertung nach Repo-Update und Pod-Neustart umgesetzt; der `agent_runs`-FastAPI-Crash ist beseitigt, Basis-Laufzeitordner werden vor Zugriff angelegt, `llama.cpp` wurde fuer den Director real neu gebaut, `check_director_llm.py` ist wieder nutzbar und der Async-Live-Run `restore-startup-check-20260418` lief erfolgreich mit `director_mode=llm_augmented`
+- Director-Umgebungszustand weiter geglaettet: `config/director_llm.env` real angelegt, Startpfade laden jetzt konsistent dieselben Defaults, der `llama-server`-Serve-Pfad ist mit kleinen Health-/Retry-/PID-Guards gehaertet und `director-stability-check-20260418` lief erfolgreich mit `director_mode=llm_augmented`
+- kompletter Testlauf aktuell erfolgreich mit 49 gruene Tests
 - echter erfolgreicher Phase-5B-Live-Run `phase5b-qwen-live-1776506522` mit `director_mode=llm_augmented` verifiziert
 - `.gitignore` fuer Laufzeit-/Artefaktordner geschaerft
 - `HANDOFF.md` fuer die naechste Session angelegt

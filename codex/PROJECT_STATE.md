@@ -1,13 +1,20 @@
 # PROJECT_STATE.md
 
 ## Projektstatus
-Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E, 3A, 3B, 4A, 4B und 4C erweitern den Core jetzt um regelbasierte Scene-/Shot-Planung, Mehrfach-Takes, technischen Quality-Guard, validierte Take-Selektion, kreative Varianten pro Szene, leichte inhaltliche Auswahlheuristik, optionale Storyboard-/Keyframe-Vorsteuerung, produktive First-Frame-Keyframe-Konditionierung im bestehenden `ti2vid`-Pfad, eine minimale produktive Worker-/n8n-Bridge ueber FastAPI, einen polling-faehigen Async-Submit-Pfad, n8n-freundliche Polling-Hinweise und begrenzte Retries; Phase 5A erweitert den Planner jetzt um eine Director-/Brain-Schicht mit `director_output`, `style_lock`, staerkeren Szenenintents, verbessertem Prompt-Bau und ehrlichem lokalem LLM-Fallback; Phase 5B bindet diesen Director-Layer jetzt produktiv an ein echtes lokales Qwen3.6-35B-A3B-Serving ueber `llama.cpp` + GGUF an
+Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E, 3A, 3B, 4A, 4B und 4C erweitern den Core jetzt um regelbasierte Scene-/Shot-Planung, Mehrfach-Takes, technischen Quality-Guard, validierte Take-Selektion, kreative Varianten pro Szene, leichte inhaltliche Auswahlheuristik, optionale Storyboard-/Keyframe-Vorsteuerung, produktive First-Frame-Keyframe-Konditionierung im bestehenden `ti2vid`-Pfad, eine minimale produktive Worker-/n8n-Bridge ueber FastAPI, einen polling-faehigen Async-Submit-Pfad, n8n-freundliche Polling-Hinweise und begrenzte Retries; Phase 5A erweitert den Planner jetzt um eine Director-/Brain-Schicht mit `director_output`, `style_lock`, staerkeren Szenenintents, verbessertem Prompt-Bau und ehrlichem lokalem LLM-Fallback; Phase 5B bindet diesen Director-Layer jetzt produktiv an ein echtes lokales Qwen3.6-35B-A3B-Serving ueber `llama.cpp` + GGUF an; der Restore-/Startup-Pfad nach Repo-Update und Pod-Neustart ist jetzt erneut real geprueft, minimal gehaertet und um eine robuste lokale Director-Env-/Serve-Konfiguration erweitert
+
+- Kanonische Capability-Uebersicht: `/workspace/codex/CAPABILITY_MAP.md`
 
 ## Verifizierte Fakten
 - Git-Root ist `/workspace`.
 - `origin` zeigt auf `https://github.com/Leon102938/HyperLTX-2`.
 - Die vorhandene Laufumgebung ist bereits ein RunPod-faehiges Medien-Template mit FastAPI, Jupyter, Modellen, Jobs- und Statusordnern.
-- Ein zentraler API-Prozess laeuft bereits ueber `uvicorn app.main:app` auf Port `8000`.
+- Nach Repo-Update und Pod-Neustart sind `/workspace/agent_core`, `/workspace/app`, `/workspace/scripts`, `/workspace/config`, `/workspace/tests` und `/workspace/codex` wieder real vorhanden; die dokumentierten Kernverzeichnisse sind damit vollstaendig verfuegbar.
+- Der erste Restore-Bug war real: `/workspace/agent_runs` fehlte, waehrend `app.main` den statischen Mount `/agent-runs` bereits beim Import band; dadurch scheiterte FastAPI beim Pod-Start hart.
+- `app.main`, `start.sh` und `init.sh` legen die Basis-Laufzeitordner `agent_runs/`, `exports/`, `jobs/`, `status/` und `venvs/` jetzt defensiv bzw. idempotent an, bevor FastAPI oder Folgepfade darauf zugreifen.
+- `config/director_llm.env` ist jetzt als reale lokale Default-Konfiguration vorhanden; `start.sh`, `init.sh`, `app.main` und `scripts/check_director_llm.py` laden diese Defaults jetzt konsistent, optional ergaenzt durch `config/director_llm.env.local`.
+- Ein zentraler API-Prozess laeuft jetzt wieder sauber ueber `uvicorn app.main:app` auf Port `8000`.
+- Der lokale Director-Serve und FastAPI laufen im aktuellen verifizierten Stand wieder als echte Hintergrundprozesse mit PPID `1`.
 - JupyterLab laeuft bereits auf Port `8888`.
 - Der Pod meldet `RUNPOD_GPU_NAME=NVIDIA RTX 6000 Ada Generation`, `RUNPOD_GPU_COUNT=1`, `RUNPOD_CPU_COUNT=10`, `RUNPOD_MEM_GB=167`.
 - GPU und Torch sind nutzbar: `torch 2.7.0+cu128`, CUDA verfuegbar, 1 GPU erkannt.
@@ -23,7 +30,7 @@ Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E, 3A, 3B, 4A, 4B und
   - `/workspace/LTX-2/checkpoints` ca. `74G`
   - `/workspace/ACE-Step-1.5/checkpoints` ca. `9.4G`
   - `/workspace/models/qwen3-tts` ca. `4.9G`
-- `/workspace/codex` ist jetzt real als Symlink auf `/workspace/Upscaler/codex` vorhanden; der kanonische Pfad ist damit praktisch wiederhergestellt.
+- `/workspace/codex` ist im aktuellen Restore-Stand ein reales Verzeichnis und kein Symlink; der Legacy-Duplikatbestand unter `/workspace/Upscaler/codex` existiert weiterhin, aber kanonisch gepflegt wird ausschliesslich `/workspace/codex`.
 - Bisheriger Projekt-Memory-Stand lag in `/workspace/Codex`; kanonisch gepflegt wird ab jetzt `/workspace/codex`.
 - Auf `/workspace` waren zu Beginn von Phase 5B nur noch etwa `33G` frei; ein voller Safetensor-/Transformers-Pfad fuer ein grosses Director-Modell waere damit unnoetig riskant gewesen.
 - Ein neues Paket `/workspace/agent_core` wurde gebaut.
@@ -44,7 +51,7 @@ Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E, 3A, 3B, 4A, 4B und
 - Der neue Core nutzt in Phase 1 standardmaessig lokale HTTP-Endpunkte der bestehenden FastAPI statt tiefer Eingriffe in Backend-Repos.
 - Der Planner koppelt bei `use_voice=true` die geplante finale Videolaenge an geschaetzte oder echte Voice-Dauer plus Guard-Padding.
 - Beispieljob vorhanden: `/workspace/examples/minimal_job.json`
-- Bridge-Beispielrequest vorhanden: `/workspace/examples/agent_core_bridge_request.json`
+- Ein dedizierter Bridge-Beispielrequest unter `/workspace/examples/agent_core_bridge_request.json` ist aktuell nicht vorhanden; die kanonischen Beispielaufrufe liegen stattdessen in `/workspace/codex/COMMAND_PROMPTS.md` als Inline-JSON.
 - Tests vorhanden:
   - `/workspace/tests/test_director_layer.py`
   - `/workspace/tests/test_core_smoke.py`
@@ -55,7 +62,7 @@ Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E, 3A, 3B, 4A, 4B und
   - `/workspace/tests/test_take_quality_guard.py`
   - `/workspace/tests/test_agent_core_api.py`
 - Verifiziert ausgefuehrte Tests:
-  - `python -m unittest discover -s /workspace/tests -v` -> aktuell erfolgreich, 48 Tests gruen
+  - `python -m unittest discover -s /workspace/tests -v` -> aktuell erfolgreich, 49 Tests gruen
 - Verifiziert implementierte Phase 5A:
   - `ProductionPlan` enthaelt jetzt optional `director_output`
   - pro Job wird jetzt `director_output.json` als eigenes Artefakt geschrieben
@@ -82,6 +89,11 @@ Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E, 3A, 3B, 4A, 4B und
   - reale Download-Quelle im verifizierten Pod-Lauf: `bartowski/Qwen_Qwen3.6-35B-A3B-GGUF`
   - der zuerst vermutete Dateiname ohne `Qwen_`-Praefix war falsch und fuehrte zu einem echten `404`; danach wurde auf den real existierenden Dateinamen umgestellt
   - verifiziert koexistenzfaehiges Pod-Profil: `-ngl 8 -c 2048 --reasoning off --no-warmup`
+  - nach dem Pod-Restore fehlte das Build-Artefakt `/workspace/tools/llama.cpp/build/bin/llama-server` zunaechst wieder; der Serve-Pfad konnte aber ueber `scripts/serve_director_llm.sh` den gesamten `llama.cpp`-Build real neu aufbauen und danach erfolgreich starten
+  - `config/director_llm.env` ist jetzt im aktuellen Workspace vorhanden und dokumentiert den real genutzten lokalen Standardpfad fuer Host, Port, Modell, Timeouts und Readiness-Checks
+  - `scripts/check_director_llm.py` war nach dem Restore real unbenutzbar wegen eines Syntaxfehlers; der Smoke-Check ist jetzt repariert und antwortet wieder produktiv
+  - `scripts/check_director_llm.py` nutzt jetzt konfigurierbare Timeouts und kleine Retries; `scripts/serve_director_llm.sh` nutzt jetzt konfigurierbare Health-Checks, Readiness-Retries, PID-Bereinigung und fruehes Fail-fast bei vorzeitig beendetem `llama-server`
+  - `scripts/ensure_llama_cpp.sh` installiert bei Bedarf jetzt auch `ninja`, damit ein Rebuild nach Restore nicht still an einem fehlenden Generator scheitert
 - Verifizierter echter Phase-5A-Fallback-Lauf:
   - Job-ID: `phase5a-live-fallback-1776420785`
   - Director-Modus: `rule_based_fallback`
@@ -102,6 +114,25 @@ Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E, 3A, 3B, 4A, 4B und
     - `director_llm_model=Qwen_Qwen3.6-35B-A3B-Q4_K_M.gguf`
     - `director_llm_endpoint=http://127.0.0.1:8011/v1/chat/completions`
     - `director_fallback_reason=null`
+- Verifizierter echter Restore-/Startup-Live-Run:
+  - Job-ID: `restore-startup-check-20260418`
+  - Einstieg: `POST http://127.0.0.1:8000/agent-core/jobs`
+  - Director-Modus: `llm_augmented`
+  - Director-LLM aktiv: `true`
+  - Director-Endpoint: `http://127.0.0.1:8011/v1/chat/completions`
+  - Video-Backend: reales `ltx-2.3` ueber den bestehenden FastAPI-Pfad
+  - finales MP4: `/workspace/agent_runs/restore-startup-check-20260418/final.mp4`
+  - verifizierte Finaldaten via `ffprobe`: `320x256`, `24 fps`, Gesamtdauer `4.042s`
+  - `director_output.json`, `state.json` und `result.json` dokumentieren dort konsistent den aktiven `llm_augmented`-Pfad
+- Verifizierter echter Director-Defaultpfad nach der Serve-Haertung:
+  - Job-ID: `director-stability-check-20260418`
+  - Einstieg: `POST http://127.0.0.1:8000/agent-core/jobs`
+  - Director-Modus: `llm_augmented`
+  - Director-LLM aktiv: `true`
+  - Director-Endpoint: `http://127.0.0.1:8011/v1/chat/completions`
+  - die Director-Konfiguration kam dabei aus `config/director_llm.env`, nicht aus einem Job-spezifischen Override
+  - finales MP4: `/workspace/agent_runs/director-stability-check-20260418/final.mp4`
+  - verifizierte Finaldaten via `ffprobe`: `320x256`, `24 fps`, Gesamtdauer `4.042s`
 - Verifizierter echter End-to-End-Core-Lauf:
   - Job-ID: `real-e2e-check-3`
   - Input: kurzer Real-Job mit Voice aktiv, `768x448`, `num_inference_steps=8`
@@ -203,7 +234,7 @@ Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E, 3A, 3B, 4A, 4B und
 - Verifiziert implementierte Phase 4B:
   - die bestehende lokale FastAPI bietet jetzt zusaetzlich einen asynchronen Submit-Pfad unter `POST /agent-core/jobs`
   - der neue Submit-Pfad nimmt strukturierte Jobdaten an, gibt sofort `202 Accepted` mit `job_id` und `poll_url` zurueck und blockiert nicht bis zum finalen Video
-  - `GET /agent-core/jobs/{job_id}` liefert jetzt einen polling-faehigen Statusvertrag mit mindestens `accepted`, `queued`, `running`, `done` und `failed`
+  - `GET /agent-core/jobs/{job_id}` liefert jetzt einen polling-faehigen Statusvertrag mit `accepted`, `running`, `done` und `failed`
   - der Statuspfad nutzt weiter die vorhandenen `state.json`- und `result.json`-Artefakte; nur fruehe Pre-State-Zustaende werden klein in-process gespiegelt
   - `POST /agent-core/run` bleibt als synchroner Dev-/Test-Pfad erhalten, ist aber nicht mehr der bevorzugte produktive n8n-Einstieg
   - der produktive FastAPI-Prozess auf Port `8000` wurde nach den Phase-4B-Aenderungen erneut manuell neu geladen; danach war `POST /agent-core/jobs` real auf dem Live-Server verfuegbar

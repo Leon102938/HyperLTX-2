@@ -23,15 +23,47 @@ from .zimage import router as zimage_router
 
 app = FastAPI(title="LTX-2.3 API", version="2.3")
 
-# Exports für n8n (Link-basiert statt Binary)
 BASE_DIR = Path("/workspace")
-EXPORT_DIR = BASE_DIR / "exports"
-EXPORT_DIR.mkdir(parents=True, exist_ok=True)
-app.mount("/exports", StaticFiles(directory=str(EXPORT_DIR)), name="exports")
+DIRECTOR_ENV_FILES = (
+    BASE_DIR / "config" / "director_llm.env",
+    BASE_DIR / "config" / "director_llm.env.local",
+)
+RUNTIME_DIRS = {
+    "exports": BASE_DIR / "exports",
+    "jobs": BASE_DIR / "jobs",
+    "agent_runs": BASE_DIR / "agent_runs",
+}
+
+
+def _load_env_defaults(paths: tuple[Path, ...]) -> None:
+    for path in paths:
+        if not path.exists():
+            continue
+        for raw_line in path.read_text().splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            key = key.strip()
+            value = value.strip().strip("'").strip('"')
+            os.environ.setdefault(key, value)
+
+
+def _ensure_runtime_dirs() -> dict[str, Path]:
+    for path in RUNTIME_DIRS.values():
+        path.mkdir(parents=True, exist_ok=True)
+    return RUNTIME_DIRS
+
+
+_load_env_defaults(DIRECTOR_ENV_FILES)
+runtime_dirs = _ensure_runtime_dirs()
+
+# Exports für n8n (Link-basiert statt Binary)
+app.mount("/exports", StaticFiles(directory=str(runtime_dirs["exports"])), name="exports")
 
 # Mount für Jobs (damit Videos per Link abrufbar sind)
-app.mount("/jobs", StaticFiles(directory="/workspace/jobs"), name="jobs")
-app.mount("/agent-runs", StaticFiles(directory="/workspace/agent_runs"), name="agent-runs")
+app.mount("/jobs", StaticFiles(directory=str(runtime_dirs["jobs"])), name="jobs")
+app.mount("/agent-runs", StaticFiles(directory=str(runtime_dirs["agent_runs"])), name="agent-runs")
 
 # ---- Routers ----
 app.include_router(ace_step_router, prefix="/Ace_step_1.5", tags=["Ace_step_1.5"])

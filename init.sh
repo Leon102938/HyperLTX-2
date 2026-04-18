@@ -6,17 +6,27 @@ sed -i 's/\r$//' "$0" 2>/dev/null || true
 
 # 1) Sicherstellen, dass tools.config im Volume existiert
 mkdir -p /workspace /workspace/LTX-2/outputs
-mkdir -p /workspace /workspace/status
+mkdir -p \
+  /workspace/agent_runs \
+  /workspace/exports \
+  /workspace/jobs \
+  /workspace/status \
+  /workspace/venvs
 if [ -f /app/tools.config ] && [ ! -f /workspace/tools.config ]; then
   cp -f /app/tools.config /workspace/tools.config
 fi
 
 sed -i 's/\r$//' /workspace/tools.config 2>/dev/null || true
 source /workspace/tools.config 2>/dev/null || true
-if [ -f /workspace/config/director_llm.env ]; then
-  sed -i 's/\r$//' /workspace/config/director_llm.env 2>/dev/null || true
-  source /workspace/config/director_llm.env 2>/dev/null || true
-fi
+for config_file in \
+  /workspace/config/director_llm.env \
+  /workspace/config/director_llm.env.local
+do
+  if [ -f "$config_file" ]; then
+    sed -i 's/\r$//' "$config_file" 2>/dev/null || true
+    source "$config_file" 2>/dev/null || true
+  fi
+done
 
 export PATH="/usr/local/bin:/root/.local/bin:/usr/local/cuda/bin:/usr/bin:/bin:$PATH"
 

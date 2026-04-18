@@ -1,5 +1,57 @@
 # CHANGELOG.md
 
+## 2026-04-18 Capability Map
+- neue kanonische Uebersicht `/workspace/codex/CAPABILITY_MAP.md` erstellt
+- produktive Kernpfade, Stub-/Fallback-Bereiche, externe Schnittstellen und Laufzeitabhaengigkeiten dort kompakt zusammengezogen
+- kleine Doku-Klarstellung: der aktuelle Polling-Pfad emittiert real `accepted`, `running`, `done`, `failed`; ein separates `queued` wird im aktuellen Code nicht ausgegeben
+
+## 2026-04-18 Director Serve Smoothing
+- realen lokalen Director-Umgebungszustand nach dem Restore weiter geglaettet, ohne neuen Feature-Ausbau
+- `config/director_llm.env` als echte lokale Default-Konfiguration angelegt und `config/director_llm.env.example` auf denselben Ist-Stand gebracht
+- `start.sh`, `init.sh`, `app.main` und `scripts/check_director_llm.py` laden die Director-Defaults jetzt konsistent; optionale lokale Overrides bleiben ueber `config/director_llm.env.local` moeglich
+- `scripts/serve_director_llm.sh` um kleine operative Guards erweitert:
+  - konfigurierbarer Health-Timeout
+  - konfigurierbare Readiness-Retries
+  - Bereinigung eines stale PID-Files
+  - fruehes Scheitern, wenn `llama-server` vor Readiness beendet wird
+- `scripts/check_director_llm.py` um konfigurierbare Timeouts und kleine Retries fuer `/v1/models` und `/v1/chat/completions` erweitert
+- `scripts/ensure_llama_cpp.sh` installiert bei Bedarf jetzt auch `ninja`, damit ein Restore-Rebuild nicht am fehlenden Generator haengt
+- FastAPI und Director danach erneut sauber als Hintergrunddienste mit PPID `1` gestartet
+- neuer echter Verifikationslauf erfolgreich:
+  - `POST http://127.0.0.1:8000/agent-core/jobs` mit `director-stability-check-20260418`
+  - Director-Pfad lief real ueber `config/director_llm.env` im Modus `llm_augmented`
+  - finales MP4 erfolgreich unter `/workspace/agent_runs/director-stability-check-20260418/final.mp4`
+  - verifizierte Finaldaten via `ffprobe`: `320x256`, `24 fps`, Gesamtdauer `4.042s`
+
+## 2026-04-18 Restore Startup Hardening
+- Restore-/Startup-Zustand nach Repo-Update und Pod-Neustart gegen den kanonischen `/workspace/codex`-Stand geprueft
+- bestaetigt: `/workspace/agent_core`, `/workspace/app`, `/workspace/scripts`, `/workspace/config`, `/workspace/tests` und `/workspace/codex` sind vorhanden; die dokumentierten Kernverzeichnisse sind damit wieder vollstaendig
+- echter Pod-Startfehler verifiziert: FastAPI scheiterte an `RuntimeError: Directory '/workspace/agent_runs' does not exist`
+- minimale Haertung umgesetzt:
+  - `app.main` legt die statisch gemounteten Laufzeitordner jetzt vor dem FastAPI-Mount selbst an
+  - `start.sh` legt die Basis-Laufzeitordner vor dem Dienststart an
+  - `init.sh` legt dieselben Basis-Laufzeitordner idempotent fuer Restore-/Bootstrap-Pfade an
+- Regression abgesichert:
+  - neuer API-Test fuer die Runtime-Verzeichnis-Erzeugung
+  - kompletter Testlauf erneut erfolgreich: `python -m unittest discover -s /workspace/tests -v` -> 49 Tests gruen
+- Director-Stack nach Restore real geprueft:
+  - GGUF-Modell weiter vorhanden unter `/workspace/models/director/qwen3.6-35b-a3b/gguf/Qwen_Qwen3.6-35B-A3B-Q4_K_M.gguf`
+  - `llama-server` fehlte nach dem Restore zunaechst real
+  - `scripts/serve_director_llm.sh` hat `llama.cpp` daraufhin real neu gebaut und den lokalen Server erfolgreich auf `127.0.0.1:8011` gestartet
+  - `scripts/check_director_llm.py` war wegen eines Syntaxfehlers real kaputt und wurde minimal repariert
+  - `serve_director_llm.sh` startet jetzt standardmaessig mit `--no-warmup`, passend zum dokumentierten Low-Memory-Profil
+- FastAPI live erneut verifiziert:
+  - `uvicorn app.main:app` laeuft wieder sauber auf `127.0.0.1:8000`
+  - `GET /health` antwortet wieder erfolgreich
+  - `GET /agent-core/jobs/does-not-exist` liefert korrekt `404`
+  - `GET /agent-core/run` liefert korrekt `405`
+- echter Restore-/Startup-Live-Run erfolgreich:
+  - `POST http://127.0.0.1:8000/agent-core/jobs` mit `restore-startup-check-20260418`
+  - Director real aktiv mit `director_mode=llm_augmented`
+  - lokaler Director-Endpoint real genutzt: `http://127.0.0.1:8011/v1/chat/completions`
+  - finales MP4 erfolgreich unter `/workspace/agent_runs/restore-startup-check-20260418/final.mp4`
+  - verifizierte Finaldaten via `ffprobe`: `320x256`, `24 fps`, Gesamtdauer `4.042s`
+
 ## 2026-04-11 Bootstrap-Recon
 - kanonisches Projektgedaechtnis unter `/workspace/codex` angelegt
 - vorhandenen Legacy-Memory-Stand aus `/workspace/Codex` gesichtet und konsolidiert

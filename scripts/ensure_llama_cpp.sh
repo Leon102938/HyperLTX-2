@@ -25,6 +25,11 @@ if ! command -v cmake >/dev/null 2>&1; then
   python -m pip install --no-cache-dir cmake
 fi
 
+if ! command -v ninja >/dev/null 2>&1; then
+  echo "[director-llm] installing ninja via pip"
+  python -m pip install --no-cache-dir ninja
+fi
+
 echo "[director-llm] configuring llama.cpp build"
 cmake -S "$LLAMA_CPP_DIR" -B "$LLAMA_CPP_DIR/build" -G Ninja -DCMAKE_BUILD_TYPE=Release -DGGML_CUDA=ON
 echo "[director-llm] building llama-server and llama-cli"

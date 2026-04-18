@@ -3,13 +3,14 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
 from agent_core.schemas import JobInput, ResultSummary
 from agent_core.state_store import StateStore
 from app import agent_core_api
-from app.main import app
+from app.main import _ensure_runtime_dirs, app
 
 
 class FakeBridgeAgent:
@@ -78,6 +79,22 @@ class FakeBridgeAgent:
 
 
 class AgentCoreApiTest(unittest.TestCase):
+    def test_runtime_dirs_helper_creates_missing_mount_targets(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            runtime_dirs = {
+                "exports": base_dir / "exports",
+                "jobs": base_dir / "jobs",
+                "agent_runs": base_dir / "agent_runs",
+            }
+            with patch("app.main.RUNTIME_DIRS", runtime_dirs):
+                created = _ensure_runtime_dirs()
+
+            self.assertEqual(created, runtime_dirs)
+            for path in runtime_dirs.values():
+                self.assertTrue(path.exists())
+                self.assertTrue(path.is_dir())
+
     def setUp(self) -> None:
         self.tmpdir = tempfile.TemporaryDirectory()
         self.store = StateStore(Path(self.tmpdir.name) / "runs")

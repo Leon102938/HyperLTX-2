@@ -3,6 +3,7 @@
 ## Aktueller Gesamtstand
 - Git-Root ist `/workspace`.
 - Kanonischer Projekt-Memory-Pfad ist `/workspace/codex`.
+- Kanonische Capability-Uebersicht liegt jetzt in `/workspace/codex/CAPABILITY_MAP.md`.
 - Phase 1 ist technisch abgeschlossen:
   - Job validieren
   - Plan bauen
@@ -51,7 +52,7 @@
   - der Live-Server auf Port `8000` wurde nach den Bridge-Dateiaenderungen manuell neu geladen und der Endpunkt ist dort jetzt real verifiziert
 - Phase 4B ist abgeschlossen:
   - produktiver Async-Submit-Pfad `POST /agent-core/jobs` ist gebaut
-  - `GET /agent-core/jobs/{job_id}` liefert jetzt polling-faehig `accepted`, `queued`, `running`, `done` oder `failed`
+  - `GET /agent-core/jobs/{job_id}` liefert aktuell polling-faehig `accepted`, `running`, `done` oder `failed`
   - `POST /agent-core/run` bleibt als synchroner Dev-/Test-Pfad erhalten
   - der Live-Server auf Port `8000` wurde nach den Phase-4B-Aenderungen erneut manuell neu geladen und der Async-Pfad ist dort jetzt real verifiziert
 - Phase 4C ist abgeschlossen:
@@ -75,10 +76,18 @@
   - Director-LLM-Nutzung, Modell und Endpoint werden explizit in `director_output.json` und `result.json` persistiert
   - verifizierter erfolgreicher Live-Run mit aktivem Director-LLM: `phase5b-qwen-live-1776506522`
   - wichtige Einordnung: die dort sichtbaren `320x256` stammen aus einem explizit klein gesetzten Verifikationsjob; der Default-Renderpfad blieb unveraendert bei `resolution="standard"`
+- Restore-/Startup-Check nach Repo-Update und Pod-Neustart ist jetzt ebenfalls real verifiziert:
+  - der konkrete FastAPI-Crash durch fehlendes `/workspace/agent_runs` ist minimal gefixt
+  - `app.main`, `start.sh` und `init.sh` erzeugen die Basis-Laufzeitordner jetzt vor Zugriff bzw. idempotent
+  - `/workspace/tools/llama.cpp/build/bin/llama-server` fehlte nach dem Restore zunaechst wieder, wurde aber ueber `scripts/serve_director_llm.sh` real neu gebaut
+  - `config/director_llm.env` ist jetzt real vorhanden und wird von `start.sh`, `init.sh`, `app.main` und `scripts/check_director_llm.py` konsistent geladen
+  - `scripts/serve_director_llm.sh` ist jetzt mit kleinen Health-/Retry-/PID-Guards gehaertet; `scripts/ensure_llama_cpp.sh` sichert bei Restore-Rebuilds jetzt auch `ninja`
+  - neuer echter Restore-Live-Run mit aktivem Director-LLM: `restore-startup-check-20260418`
+  - neuer echter Defaultpfad-Live-Run mit aktivem Director-LLM: `director-stability-check-20260418`
 
 ## Was real verifiziert wurde
 - Tests:
-  - `python -m unittest discover -s /workspace/tests -v` -> 48 Tests gruen
+  - `python -m unittest discover -s /workspace/tests -v` -> 49 Tests gruen
 - Kleiner Real-Check:
   - `python3 /workspace/scripts/download_director_model.py` meldet bei vorhandenem Modell sauber nur `present: ...` und startet keinen unnötigen Neu-Download
 - Reale Core-/Backend-Laeufe:
@@ -100,13 +109,26 @@
   - `phase4c-live-verify-1776348348` via `POST http://127.0.0.1:8000/agent-core/jobs`
   - `phase5a-live-fallback-1776420785` via direktem `VideoAgent()`-Run mit aktivem Director-Layer im `rule_based_fallback`-Modus
   - `phase5b-qwen-live-1776506522` via direktem `VideoAgent()`-Run mit aktivem Qwen3.6-Director; `result.json` und `director_output.json` dokumentieren dort den aktiven Director-LLM-Pfad
+  - `restore-startup-check-20260418` via `POST http://127.0.0.1:8000/agent-core/jobs` mit erneut real verifiziertem `llm_augmented`-Director-Pfad
+  - `director-stability-check-20260418` via `POST http://127.0.0.1:8000/agent-core/jobs` mit Director-Defaults aus `config/director_llm.env` und erneut real verifiziertem `llm_augmented`-Pfad
 - Reale lokale Backends verifiziert:
   - Qwen TTS ueber vorhandene FastAPI-Endpunkte
   - LTX2 `ti2vid` ueber vorhandene FastAPI-Endpunkte
   - Z-Image ueber vorhandene FastAPI-Endpunkte
   - lokaler Director-LLM-Serve ueber `llama.cpp` auf `127.0.0.1:8011`
-- Heutiges Backup-Artefakt:
-  - `/workspace/backups/hyperltx_phase5b_qwen_director_2026-04-18.tar.gz`
+- Backup-Status dieses Schritts:
+  - in diesem Schritt wurde bewusst kein neues Backup erzeugt
+  - beim naechsten Abschluss oder Backup muss die Dateiliste explizit auf Vollstaendigkeit gegen den realen Director-/Startup-Pfad geprueft werden
+  - dabei duerfen insbesondere diese Pfade nicht fehlen:
+    - `/workspace/tools/llama.cpp`
+    - `/workspace/config/director_llm.env`
+    - `/workspace/scripts/download_director_model.py`
+    - `/workspace/scripts/serve_director_llm.sh`
+    - `/workspace/scripts/check_director_llm.py`
+    - `/workspace/scripts/ensure_llama_cpp.sh`
+    - `/workspace/start.sh`
+    - `/workspace/init.sh`
+    - `/workspace/app/main.py`
 
 ## Welche Phasen abgeschlossen sind
 - Abgeschlossen:
