@@ -65,7 +65,18 @@ class VideoAgent:
             self.state_store.transition(state, "validated", "Job schema validated.")
             plan = self.planner.build_plan(job)
             self.state_store.save_plan(state, plan)
+            self.state_store.save_director_output(state, plan)
             self.state_store.save_scene_plan(state, plan)
+            if plan.director_output:
+                self.state_store.append_log(
+                    state.job_id,
+                    f"Director mode active: {plan.director_output.mode}"
+                    + (
+                        f" fallback_reason={plan.director_output.fallback_reason}"
+                        if plan.director_output.fallback_reason
+                        else ""
+                    ),
+                )
             self.state_store.transition(state, "planned", "Production plan created.")
 
             voice_step = next(step for step in plan.steps if step.name == "voice")
@@ -84,6 +95,8 @@ class VideoAgent:
                     if revised_plan.model_dump() != plan.model_dump():
                         plan = revised_plan
                         self.state_store.save_plan(state, plan)
+                        self.state_store.save_director_output(state, plan)
+                        self.state_store.save_scene_plan(state, plan)
                         self.state_store.append_log(
                             state.job_id,
                             "Plan updated after real voice duration became available.",
@@ -435,6 +448,8 @@ class VideoAgent:
                     framing_hint=take.framing_hint,
                     prompt_variant_text=take.prompt_variant_text,
                     style_bias=take.style_bias,
+                    creative_intent=take.creative_intent,
+                    prompt_build_metadata=dict(take.prompt_build_metadata),
                     seed=take.seed,
                     video_mode=take_video_mode,
                     render_mode=take_render_mode,
@@ -453,6 +468,8 @@ class VideoAgent:
                     validation=validation,
                     metadata={
                         "prompt_text": take.prompt_text,
+                        "creative_intent": take.creative_intent,
+                        "prompt_build_metadata": take.prompt_build_metadata,
                         "selected_keyframe": scene.selected_keyframe.model_dump(mode="json") if scene.selected_keyframe else None,
                         "selected_keyframe_usage": selected_keyframe_usage,
                         "backend_metadata": take_result.metadata,
@@ -524,6 +541,7 @@ class VideoAgent:
                                 "scene_index": scene.index,
                                 "title": scene.title,
                                 "prompt_text": scene.prompt_text,
+                                "prompt_build_metadata": scene.prompt_build_metadata,
                                 "variation_count": len(scene.variations),
                                 "variations": [variation.model_dump(mode="json") for variation in scene.variations],
                                 "selected_keyframe": scene.selected_keyframe.model_dump(mode="json") if scene.selected_keyframe else None,
@@ -563,6 +581,8 @@ class VideoAgent:
                 "output_url": selected_take.output_url,
                 "duration_sec": selected_take.duration_sec or scene.target_duration_sec,
                 "prompt_text": scene.prompt_text,
+                "prompt_build_metadata": scene.prompt_build_metadata,
+                "scene_intent": scene.scene_intent.model_dump(mode="json") if scene.scene_intent else None,
                 "selected_take_id": selected_take.take_id,
                 "selected_variation_id": selected_take.variation_id,
                 "selected_variation": self._scene_variation_payload(scene, selected_take.variation_id),
@@ -602,6 +622,7 @@ class VideoAgent:
                     "duration_sec": selected_take.duration_sec or scene.target_duration_sec,
                     "selected_take_id": selected_take.take_id,
                     "selected_variation_id": selected_take.variation_id,
+                    "prompt_build_metadata": scene.prompt_build_metadata,
                     "selected_keyframe": scene.selected_keyframe.model_dump(mode="json") if scene.selected_keyframe else None,
                     "video_mode": selected_take.video_mode,
                     "planned_render_mode": scene.render_mode,
@@ -659,6 +680,14 @@ class VideoAgent:
                 "planned_render_mode": plan.metadata.get("planned_render_mode", "text_only"),
                 "render_mode_counts": render_mode_counts,
                 "fallback_reasons": fallback_reasons,
+                "director_mode": plan.metadata.get("director_mode"),
+                "director_llm_active": plan.metadata.get("director_llm_active"),
+                "director_fallback_reason": plan.metadata.get("director_fallback_reason"),
+                "director_llm_provider": plan.metadata.get("director_llm_provider"),
+                "director_llm_model": plan.metadata.get("director_llm_model"),
+                "director_llm_endpoint": plan.metadata.get("director_llm_endpoint"),
+                "style_lock": plan.metadata.get("style_lock"),
+                "prompt_guidance": plan.metadata.get("prompt_guidance"),
                 "selection_mode": selection_mode,
                 "creative_selection_mode": creative_selection_mode,
                 "storyboard_enabled": storyboard_enabled,
@@ -690,6 +719,14 @@ class VideoAgent:
                 {"text_only": 0, "storyboard_reference": 0, "keyframe_conditioned": 0},
             ),
             "fallback_reasons": video_result.metadata.get("fallback_reasons", []),
+            "director_mode": video_result.metadata.get("director_mode"),
+            "director_llm_active": video_result.metadata.get("director_llm_active"),
+            "director_fallback_reason": video_result.metadata.get("director_fallback_reason"),
+            "director_llm_provider": video_result.metadata.get("director_llm_provider"),
+            "director_llm_model": video_result.metadata.get("director_llm_model"),
+            "director_llm_endpoint": video_result.metadata.get("director_llm_endpoint"),
+            "style_lock": video_result.metadata.get("style_lock"),
+            "prompt_guidance": video_result.metadata.get("prompt_guidance"),
             "selection_mode": video_result.metadata.get("selection_mode", "quality_guarded_best_valid_take"),
             "creative_selection_mode": video_result.metadata.get(
                 "creative_selection_mode", "rule_based_scene_variation_heuristic"
@@ -720,6 +757,8 @@ class VideoAgent:
                 "camera_motion": take.camera_motion,
                 "framing_hint": take.framing_hint,
                 "style_bias": take.style_bias,
+                "creative_intent": take.creative_intent,
+                "prompt_build_metadata": take.prompt_build_metadata,
                 "video_mode": take.video_mode,
                 "render_mode": take.render_mode,
                 "fallback_strategy": take.fallback_strategy,
@@ -813,8 +852,13 @@ class VideoAgent:
             framing_hint=source_take.framing_hint,
             prompt_variant_text=source_take.prompt_variant_text,
             style_bias=source_take.style_bias,
+            creative_intent=source_take.creative_intent,
+            prompt_build_metadata=dict(source_take.prompt_build_metadata),
             seed=seed,
             prompt_text=source_take.prompt_text,
+            video_mode=source_take.video_mode,
+            render_mode=source_take.render_mode,
+            fallback_strategy=source_take.fallback_strategy,
             render_params=render_params,
             notes=notes,
         )

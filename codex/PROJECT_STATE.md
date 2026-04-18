@@ -1,0 +1,427 @@
+# PROJECT_STATE.md
+
+## Projektstatus
+Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E, 3A, 3B, 4A, 4B und 4C erweitern den Core jetzt um regelbasierte Scene-/Shot-Planung, Mehrfach-Takes, technischen Quality-Guard, validierte Take-Selektion, kreative Varianten pro Szene, leichte inhaltliche Auswahlheuristik, optionale Storyboard-/Keyframe-Vorsteuerung, produktive First-Frame-Keyframe-Konditionierung im bestehenden `ti2vid`-Pfad, eine minimale produktive Worker-/n8n-Bridge ueber FastAPI, einen polling-faehigen Async-Submit-Pfad, n8n-freundliche Polling-Hinweise und begrenzte Retries; Phase 5A erweitert den Planner jetzt um eine Director-/Brain-Schicht mit `director_output`, `style_lock`, staerkeren Szenenintents, verbessertem Prompt-Bau und ehrlichem lokalem LLM-Fallback; Phase 5B bindet diesen Director-Layer jetzt produktiv an ein echtes lokales Qwen3.6-35B-A3B-Serving ueber `llama.cpp` + GGUF an
+
+## Verifizierte Fakten
+- Git-Root ist `/workspace`.
+- `origin` zeigt auf `https://github.com/Leon102938/HyperLTX-2`.
+- Die vorhandene Laufumgebung ist bereits ein RunPod-faehiges Medien-Template mit FastAPI, Jupyter, Modellen, Jobs- und Statusordnern.
+- Ein zentraler API-Prozess laeuft bereits ueber `uvicorn app.main:app` auf Port `8000`.
+- JupyterLab laeuft bereits auf Port `8888`.
+- Der Pod meldet `RUNPOD_GPU_NAME=NVIDIA RTX 6000 Ada Generation`, `RUNPOD_GPU_COUNT=1`, `RUNPOD_CPU_COUNT=10`, `RUNPOD_MEM_GB=167`.
+- GPU und Torch sind nutzbar: `torch 2.7.0+cu128`, CUDA verfuegbar, 1 GPU erkannt.
+- Bereits verifizierte lokale Backends bzw. Wrapper:
+  - LTX-2.3 Video ueber `app/LTX2.py`
+  - Qwen3-TTS ueber `app/qwen_tts.py`
+  - ACE-Step 1.5 Musik ueber `app/ace_step_1_5.py`
+  - Z-Image ueber `app/zimage.py`
+  - Editor ueber `app/editor_api.py`
+  - Upscaler ueber `app/upscaler_api.py`
+- Readiness-Endpunkte melden derzeit `ready=true` fuer Init, Qwen TTS, ACE-Step 1.5 und Z-Image.
+- Vorhandene Modellbestaende:
+  - `/workspace/LTX-2/checkpoints` ca. `74G`
+  - `/workspace/ACE-Step-1.5/checkpoints` ca. `9.4G`
+  - `/workspace/models/qwen3-tts` ca. `4.9G`
+- `/workspace/codex` ist jetzt real als Symlink auf `/workspace/Upscaler/codex` vorhanden; der kanonische Pfad ist damit praktisch wiederhergestellt.
+- Bisheriger Projekt-Memory-Stand lag in `/workspace/Codex`; kanonisch gepflegt wird ab jetzt `/workspace/codex`.
+- Auf `/workspace` waren zu Beginn von Phase 5B nur noch etwa `33G` frei; ein voller Safetensor-/Transformers-Pfad fuer ein grosses Director-Modell waere damit unnoetig riskant gewesen.
+- Ein neues Paket `/workspace/agent_core` wurde gebaut.
+- Die bestehende lokale FastAPI enthaelt jetzt zusaetzlich einen duennen `agent_core`-Bridge-Router unter `/agent-core`.
+- Der neue Core enthaelt:
+  - `agent.py`
+  - `director.py`
+  - `llm_adapter.py`
+  - `prompt_builder.py`
+  - `schemas.py`
+  - `planner.py`
+  - `state_store.py`
+  - `style_memory.py`
+  - `backend_registry.py`
+  - `assembler.py`
+  - `utils.py`
+  - Adapter fuer `qwen_tts`, `ltx2`, `zimage_storyboard`, `music_stub`, `storyboard_stub`
+- Der neue Core nutzt in Phase 1 standardmaessig lokale HTTP-Endpunkte der bestehenden FastAPI statt tiefer Eingriffe in Backend-Repos.
+- Der Planner koppelt bei `use_voice=true` die geplante finale Videolaenge an geschaetzte oder echte Voice-Dauer plus Guard-Padding.
+- Beispieljob vorhanden: `/workspace/examples/minimal_job.json`
+- Bridge-Beispielrequest vorhanden: `/workspace/examples/agent_core_bridge_request.json`
+- Tests vorhanden:
+  - `/workspace/tests/test_director_layer.py`
+  - `/workspace/tests/test_core_smoke.py`
+  - `/workspace/tests/test_planner_rules.py`
+  - `/workspace/tests/test_assembler_mux.py`
+  - `/workspace/tests/test_scene_planner.py`
+  - `/workspace/tests/test_storyboard_pipeline.py`
+  - `/workspace/tests/test_take_quality_guard.py`
+  - `/workspace/tests/test_agent_core_api.py`
+- Verifiziert ausgefuehrte Tests:
+  - `python -m unittest discover -s /workspace/tests -v` -> aktuell erfolgreich, 48 Tests gruen
+- Verifiziert implementierte Phase 5A:
+  - `ProductionPlan` enthaelt jetzt optional `director_output`
+  - pro Job wird jetzt `director_output.json` als eigenes Artefakt geschrieben
+  - `ScenePlan` enthaelt jetzt `scene_intent` plus `prompt_build_metadata`
+  - Varianten und Takes dokumentieren jetzt `creative_intent` und `prompt_build_metadata`
+  - die Director-Ausgabe enthaelt mindestens `creative_brief`, `style_lock`, `prompt_guidance`, `scene_intents` sowie vorbereitende `character_notes`, `voice_notes` und `world_notes`
+  - `prompt_builder.py` erzeugt jetzt staerkere Opening-Shots, klarere visuelle Sprache, konsistentere Varianten und kompaktere Kamera-/Stilhinweise
+  - `llm_adapter.py` bietet jetzt einen echten Adapter fuer lokale OpenAI-kompatible Director-Endpunkte; ohne konfigurierten oder erreichbaren Dienst faellt der Core ehrlich auf `rule_based_fallback` zurueck
+  - `app/agent_core_api.py` ist im Workspace wieder real vorhanden und in `app.main` eingebunden; die dokumentierte Phase-4-Bridge ist damit wieder konsistent mit Code und Tests
+- Verifiziert implementierte Phase 5B:
+  - `llama.cpp` wurde im Pod real mit CUDA gebaut; produktives Binary: `/workspace/tools/llama.cpp/build/bin/llama-server`
+  - das Director-Modell laeuft real als GGUF unter `/workspace/models/director/qwen3.6-35b-a3b/gguf/Qwen_Qwen3.6-35B-A3B-Q4_K_M.gguf`
+  - `scripts/download_director_model.py`, `scripts/serve_director_llm.sh` und `scripts/check_director_llm.py` bilden jetzt den minimalen produktiven Download-/Serve-/Smoke-Pfad
+  - `config/director_llm.env.example` dokumentiert die noetigen Umgebungsvariablen
+  - `llm_adapter.py` kennt jetzt das echte lokale Profil `qwen36_llama_cpp_local`
+  - `DirectorOutput` persistiert jetzt explizit `llm_active`, `llm_provider`, `llm_model` und `llm_endpoint`
+  - fuer `llama.cpp` fragt der Adapter bewusst einen kleineren `scene_map`-Vertrag ab und normalisiert diesen danach sauber in den bestehenden `DirectorOutput`-Vertrag
+  - `llm_adapter.py` extrahiert JSON jetzt defensiv auch dann, wenn Qwen vor dem JSON noch Begruendungstext oder `<think>`-Fragmente ausgibt
+  - `init.sh` richtet das Director-Modell jetzt idempotent ein: vorhandene Qwen-GGUF-Datei wird wiederverwendet, fehlende Datei wird geladen, optional kann der lokale Serve-Dienst automatisch gestartet werden
+  - `init.sh` bereinigt vor dem Director-Setup jetzt auch alte `director_llm_*_ready`-Flags, damit fruehere erfolgreiche Starts keinen veralteten Status vortaeuschen
+- Verifizierte lokale Director-Serving-Fakten:
+  - lokaler Endpoint: `http://127.0.0.1:8011/v1/chat/completions`
+  - reales Modell: `Qwen_Qwen3.6-35B-A3B-Q4_K_M.gguf`
+  - reale Download-Quelle im verifizierten Pod-Lauf: `bartowski/Qwen_Qwen3.6-35B-A3B-GGUF`
+  - der zuerst vermutete Dateiname ohne `Qwen_`-Praefix war falsch und fuehrte zu einem echten `404`; danach wurde auf den real existierenden Dateinamen umgestellt
+  - verifiziert koexistenzfaehiges Pod-Profil: `-ngl 8 -c 2048 --reasoning off --no-warmup`
+- Verifizierter echter Phase-5A-Fallback-Lauf:
+  - Job-ID: `phase5a-live-fallback-1776420785`
+  - Director-Modus: `rule_based_fallback`
+  - Fallback-Grund: `director_llm_not_configured`
+  - finales MP4: `/workspace/agent_runs/phase5a-live-fallback-1776420785/final.mp4`
+  - verifizierte Director-Artefakte: `director_output.json`, `scene_plan.json`, `result.json`
+- Verifizierter echter Phase-5B-Live-Run:
+  - Job-ID: `phase5b-qwen-live-1776506522`
+  - Director-Modus: `llm_augmented`
+  - Director-LLM aktiv: `true`
+  - finales MP4: `/workspace/agent_runs/phase5b-qwen-live-1776506522/final.mp4`
+  - `result.json` spiegelt jetzt ebenfalls explizit `director_llm_active`, `director_llm_provider`, `director_llm_model` und `director_llm_endpoint`
+  - verifizierte Finaldaten via `ffprobe`: `320x256`, `24 fps`, Gesamtdauer `4.042s`
+  - wichtige Einordnung: `320x256` war in diesem Verifikationslauf explizit als kleine Custom-Aufloesung im Job gesetzt und ist kein neuer Render-Default
+  - die Render-Defaults bleiben unveraendert: `resolution="standard"` und damit in Landscape weiterhin `1216x704`
+  - verifizierter Persistenzstand:
+    - `director_llm_provider=llama_cpp_local`
+    - `director_llm_model=Qwen_Qwen3.6-35B-A3B-Q4_K_M.gguf`
+    - `director_llm_endpoint=http://127.0.0.1:8011/v1/chat/completions`
+    - `director_fallback_reason=null`
+- Verifizierter echter End-to-End-Core-Lauf:
+  - Job-ID: `real-e2e-check-3`
+  - Input: kurzer Real-Job mit Voice aktiv, `768x448`, `num_inference_steps=8`
+  - Qwen TTS: erfolgreich, echte WAV erzeugt, reale Dauer `3.92s`
+  - LTX2: erfolgreich, reales MP4 erzeugt
+  - Video-Output: `/workspace/jobs/real-e2e-check-3_video/real-e2e-check-3_video.mp4`
+  - Audio-Output: `/workspace/exports/qwen_3ef111ac124c.wav`
+  - Verifizierte Video-Daten via `ffprobe`: `768x448`, `24 fps`, Dauer `5.042s`
+- Verifizierter echter End-to-End-Mux-Lauf:
+  - Job-ID: `real-e2e-mux-2`
+  - Qwen TTS: erfolgreich, echte WAV erzeugt, reale Dauer `3.20s`
+  - LTX2: erfolgreich, echtes MP4 erzeugt, reale Dauer `4.71s`
+  - Assembler: erfolgreich, finales MP4 `/workspace/agent_runs/real-e2e-mux-2/final.mp4` erzeugt
+  - Verifizierte Finaldaten via `ffprobe`: `768x448`, `24 fps`, Audio `aac`, Gesamtdauer `4.710s`
+  - Verifizierter Mux-Modus: `voice_padded_to_video`
+- Verifiziert: rohe LTX2-MP4s koennen bereits einen Audio-Stream enthalten; der neue Assembler ersetzt diesen kontrolliert durch die erzeugte Voice-Spur.
+- Verifiziert: die bisherige Dauervertragsluecke entstand, weil der Planner bereits quantisierte Dauerwerte berechnete, der LTX2-Adapter `num_frames` danach aber aus der gerundeten Plan-Dauer erneut ableitete.
+- Verifiziert implementierter Fix:
+  - der Planner quantisiert jetzt einmalig auf den LTX-Framevertrag
+  - `plan.target_duration_sec` ist die quantisierte Plan-Dauer
+  - `video.params.num_frames` ist die kanonische Framezahl
+  - der LTX2-Adapter uebernimmt genau diese Framezahl statt neu zu rechnen
+- Verifizierter realer Dauervertragslauf A:
+  - Job-ID: `real-duration-case-a`
+  - geplanter Zielwert: `5.041s`
+  - reale Voice: `3.92s`
+  - reales Video: `5.042s`
+  - finales MP4: `5.042s`
+  - Delta Plan zu realem Video: `0.001s`
+- Verifizierter realer Dauervertragslauf C:
+  - Job-ID: `real-duration-case-c`
+  - Voice deaktiviert
+  - geplanter Zielwert: `4.041s`
+  - reales Video: `4.042s`
+  - finales MP4: `4.042s`
+  - Delta Plan zu realem Video: `0.001s`
+- Verifizierter realer Randfall B auf Assembler-Ebene:
+  - Job-ID: `real-duration-case-b`
+  - reales Qwen-TTS-Audio: `17.84s`
+  - reales kurzes LTX2-Video wiederverwendet: `4.042s`
+  - finales MP4: `4.042s`
+  - Timing-Modus: `voice_trimmed_to_video`
+  - Hinweis: dieser Fall wurde absichtlich ausserhalb des normalen Agent-Runs provoziert, weil der Planner ihn im regulaeren Pfad inzwischen korrekt verhindert.
+- Verifiziert implementierte Phase 2A:
+  - `ProductionPlan` enthaelt jetzt `scenes`
+  - jedes Scene-Objekt enthaelt mindestens Beschreibung, Ziel-Dauer, Prompt-Basis, Narrationszuordnung, Framezahl, Render-Parameter und einen ersten renderbaren Shot
+  - der Single-Flow bleibt als `single_scene`-Fallback erhalten
+- Verifiziert implementierte Phase 2B:
+  - jede Szene enthaelt jetzt geplante `takes`
+  - jeder Take hat mindestens `take_id`, `scene_id`, `take_index`, `seed`, Prompt-Text und Render-Parameter
+  - pro Szene koennen mehrere reale LTX2-Takes erzeugt werden
+  - der Agent spiegelt erfolgreiche Take-Videos in den Job-Workspace unter `scenes/<scene_id>/takes/`
+  - `takes.json` wird pro Job als eigenes Artefakt geschrieben
+  - pro Szene wird ein `selected_take` dokumentiert
+  - die finale Assembly nutzt nur die ausgewaehlten Takes
+- Verifiziert implementierte Phase 2C:
+  - jeder erfolgreiche Take wird jetzt technisch validiert, bevor er fuer die Auswahl zugelassen wird
+  - der Guard prueft mindestens Dateiexistenz, Dateigroesse, `ffprobe`, Decode-Faehigkeit, Aufloesung, FPS und plausible Dauer
+  - jeder Take dokumentiert jetzt `review_status` plus strukturierten `validation`-Block
+  - die neue Auswahlregel bevorzugt technisch valide Takes und faellt nur bei technischer Gleichheit auf `first_successful_take` als Tie-Break zurueck
+  - technisch abgelehnte Takes koennen pro Szene mit kleinem Retry-Budget erneut gerendert werden
+  - `takes.json` und `state.json` dokumentieren jetzt auch Retry-Historie, Guard-Ergebnis und Auswahlgrund
+  - der Assembler akzeptiert nur noch validierte selektierte Takes
+- Verifiziert implementierte Phase 2D:
+  - jede Szene enthaelt jetzt mehrere regelbasierte kreative `variations`
+  - jede Variation dokumentiert mindestens `variation_id`, `variation_index`, `shot_type`, Kamera-Hinweis, `framing_hint`, `prompt_delta` und `prompt_variant_text`
+  - pro Variation koennen danach mehrere Takes geplant und gerendert werden
+  - jeder Take dokumentiert jetzt auch seine Quell-Variation
+  - `scene_plan.json`, `takes.json` und `state.json` dokumentieren jetzt Varianten, Variantenzuordnung und die ausgewaehlte Variation pro Szene
+  - Quality-Guard, Retry-Regeln und technische Auswahl bleiben mit dem Variantenvertrag kompatibel
+- Verifiziert implementierte Phase 2E:
+  - die Take-Auswahl arbeitet weiter auf dem Phase-2C-Guard-Vertrag, ergaenzt aber eine kleine regelbasierte kreative Heuristik
+  - pro Szene und selektiertem Take werden jetzt `technical_score`, `creative_score`, `selection_reason` und `selected_by_rule` persistiert
+  - die kreative Heuristik beruecksichtigt mindestens Szenenposition, `shot_type`, `framing_hint`, Prompt-Variante, grobe Szenenziel-Passung und Abwechslung gegenueber der vorher selektierten Szene
+  - direkt benachbarte Szenen koennen gleiche technische Scores haben, aber dennoch unterschiedlich selektiert werden, wenn die kreative Regelbasis dies begruendet
+  - technisch ungueltige Takes bleiben trotz kreativer Heuristik strikt ausgeschlossen
+- Verifiziert implementierte Phase 3A:
+  - ein optionaler Storyboard-Step kann jetzt pro Szene regelbasiert Keyframe-Kandidaten planen
+  - `ScenePlan` enthaelt jetzt `storyboard_config`, `keyframe_candidates` und optional `selected_keyframe`
+  - der produktive Storyboard-Adapter nutzt das vorhandene lokale Z-Image-Backend ueber die bestehende FastAPI
+  - `storyboard_plan.json` wird pro Job als neues Artefakt geschrieben
+  - jeder Keyframe-Kandidat dokumentiert Szene, Variation, technischen Bildstatus und Auswahlmetadaten
+  - pro Szene wird jetzt ein `selected_keyframe` dokumentiert, der spaeteren video- oder prompt-gestuetzten Ausbau vorbereitet
+  - der bestehende Video-Flow bleibt intakt; selektierte Keyframes werden nur als strukturierter Kontext in Take-Metadaten und Renderplaene durchgereicht
+- Verifiziert implementierte Phase 3B:
+  - `JobInput` enthaelt jetzt `video_mode`; `ScenePlan`, `TakePlan` und `TakeResultRecord` dokumentieren `video_mode`, `render_mode`, `fallback_strategy` und bei Laufzeit-Fallbacks auch `fallback_reason`
+  - der Planner entscheidet jetzt pro Job oder optional pro Szene via `metadata.scene_video_modes`, ob der Video-Pfad `text_only`, `storyboard_reference` oder `keyframe_conditioned` laeuft
+  - der vorhandene stabile LTX2-`ti2vid`-Pfad kann selektierte Storyboard-Keyframes jetzt produktiv als First-Frame-Image-Conditioning nutzen
+  - der LTX2-Adapter injiziert den selektierten Keyframe nur auf dem bestehenden `ti2vid`-Vertrag und dokumentiert `selected_keyframe_usage` sowie `keyframe_conditioning_status`
+  - `takes.json`, `state.json` und `result.json` persistieren jetzt klar, welcher Rendermodus aktiv war, ob der selektierte Keyframe angewendet wurde und warum gegebenenfalls auf `storyboard_reference` oder `text_only` zurueckgefallen wurde
+  - der textgetriebene Flow bleibt unveraendert als harter Fallback erhalten
+- Verifiziert implementierte Phase 4A:
+  - die bestehende lokale FastAPI bietet jetzt einen minimalen synchronen Einstieg unter `/agent-core/run`
+  - ein zweiter Endpunkt `/agent-core/jobs/{job_id}` liefert den zuletzt persistierten Status bzw. Result-Vertrag fuer bekannte Jobs
+  - die Bridge nimmt strukturierte Jobdaten als JSON entgegen, ruft den bestehenden `VideoAgent` ohne neue Produktionslogik auf und gibt ein kleines stabiles Antwortobjekt mit `job_id`, `status`, `success`, `result` und `refs` zurueck
+  - `/agent-runs` ist jetzt als statischer Pfad gemountet, damit `state.json`, `result.json` und `final.mp4` auch als URL referenzierbar sind
+  - Request-Validierungsfehler werden sauber von FastAPI als `422` zurueckgegeben; echte Core-Laeufe liefern einen strukturierten Erfolg- oder Failure-Vertrag zurueck
+  - der produktive FastAPI-Prozess auf Port `8000` wurde nach den Bridge-Aenderungen manuell neu geladen; danach war `/agent-core/run` real auf dem Live-Server verfuegbar
+- Verifiziert implementierte Phase 4B:
+  - die bestehende lokale FastAPI bietet jetzt zusaetzlich einen asynchronen Submit-Pfad unter `POST /agent-core/jobs`
+  - der neue Submit-Pfad nimmt strukturierte Jobdaten an, gibt sofort `202 Accepted` mit `job_id` und `poll_url` zurueck und blockiert nicht bis zum finalen Video
+  - `GET /agent-core/jobs/{job_id}` liefert jetzt einen polling-faehigen Statusvertrag mit mindestens `accepted`, `queued`, `running`, `done` und `failed`
+  - der Statuspfad nutzt weiter die vorhandenen `state.json`- und `result.json`-Artefakte; nur fruehe Pre-State-Zustaende werden klein in-process gespiegelt
+  - `POST /agent-core/run` bleibt als synchroner Dev-/Test-Pfad erhalten, ist aber nicht mehr der bevorzugte produktive n8n-Einstieg
+  - der produktive FastAPI-Prozess auf Port `8000` wurde nach den Phase-4B-Aenderungen erneut manuell neu geladen; danach war `POST /agent-core/jobs` real auf dem Live-Server verfuegbar
+- Verifiziert implementierte Phase 4C:
+  - der bestehende Async-/Polling-Vertrag wurde klein und n8n-freundlich gehaertet, ohne den Core umzubauen
+  - `GET /agent-core/jobs/{job_id}` liefert jetzt zusaetzlich `status_summary`, `is_terminal`, `should_poll`, `retry_after_sec`, `artifacts_ready`, `final_mp4_ready`, `result_json_ready` und `public_refs`
+  - `public_refs` enthaelt nur die extern nutzbaren URLs fuer `state.json`, `result.json` und `final.mp4`
+  - terminale Zustande sind jetzt expliziter: `done` und `failed` koennen sichtbar sein, aber `is_terminal` haengt sauber an der tatsaechlichen Artefakt-Readiness
+  - fehlgeschlagene Jobs exponieren keinen irrefuehrenden `final.mp4`-Public-Link mehr, auch wenn lokal Zwischenartefakte existieren
+  - der produktive FastAPI-Prozess auf Port `8000` wurde nach den Phase-4C-Aenderungen erneut manuell neu geladen; danach waren die neuen Felder real im Live-Vertrag sichtbar
+- Verifizierter echter Phase-2A-Multi-Segment-Lauf:
+  - Job-ID: `real-phase2a-multiscene-1`
+  - Segmentierung: `2` Szenen
+  - geplante Szenendauern: `3.041s` + `3.041s`
+  - Rohclips:
+    - `/workspace/jobs/real-phase2a-multiscene-1_scene_01_video/real-phase2a-multiscene-1_scene_01_video.mp4`
+    - `/workspace/jobs/real-phase2a-multiscene-1_scene_02_video/real-phase2a-multiscene-1_scene_02_video.mp4`
+  - zusammengesetztes Rohvideo: `/workspace/agent_runs/real-phase2a-multiscene-1/assembled_video.mp4`
+  - finales MP4: `/workspace/agent_runs/real-phase2a-multiscene-1/final.mp4`
+  - verifizierter Segmentierungsmodus: `multi_scene`
+  - verifizierte reale Finaldauer: `6.105s`
+  - verifiziertes Delta Plan zu concateniertem Video: `0.023s`
+- Verifiziert: pro Job wird jetzt auch `scene_plan.json` als Artefakt geschrieben.
+- Verifizierter echter Phase-2B-Multi-Take-Lauf:
+  - Job-ID: `real-phase2b-multitake-1`
+  - Segmentierung: `2` Szenen
+  - Take-Plan: `2` Takes pro Szene
+  - reale LTX2-Takes erfolgreich:
+    - `scene_01_take_01`
+    - `scene_01_take_02`
+    - `scene_02_take_01`
+    - `scene_02_take_02`
+  - Take-Referenzen im Job-Workspace:
+    - `/workspace/agent_runs/real-phase2b-multitake-1/scenes/scene_01/takes/scene_01_take_01.mp4`
+    - `/workspace/agent_runs/real-phase2b-multitake-1/scenes/scene_01/takes/scene_01_take_02.mp4`
+    - `/workspace/agent_runs/real-phase2b-multitake-1/scenes/scene_02/takes/scene_02_take_01.mp4`
+    - `/workspace/agent_runs/real-phase2b-multitake-1/scenes/scene_02/takes/scene_02_take_02.mp4`
+  - verifizierter Auswahlmodus: `first_successful_take`
+  - verifizierte `selected_take_ids`:
+    - `scene_01_take_01`
+    - `scene_02_take_01`
+  - verifiziertes Artefakt `takes.json` vorhanden
+  - finales MP4: `/workspace/agent_runs/real-phase2b-multitake-1/final.mp4`
+  - verifizierte Finaldauer via `ffprobe`: `6.105s`
+- Verifizierter echter Phase-2C-Quality-Guard-Lauf:
+  - Job-ID: `real-phase2c-quality-guard-1`
+  - Segmentierung: `2` Szenen
+  - Take-Plan: `2` Takes pro Szene
+  - Quality-Guard aktiv auf allen `4` realen Takes
+  - verifizierter Auswahlmodus: `quality_guarded_best_valid_take`
+  - verifizierter Fallback-Modus: `first_successful_take`
+  - verifizierte `selected_take_ids`:
+    - `scene_01_take_01`
+    - `scene_02_take_01`
+  - verifizierte Guard-Ergebnisse fuer die selektierten Takes:
+    - `validation_status=passed`
+    - Aufloesung `768x448`
+    - FPS `24`
+    - Dauer-Delta gegen Plan je Szene `0.001s`
+  - verifizierte Retry-Anzahl: `0`
+  - finales MP4: `/workspace/agent_runs/real-phase2c-quality-guard-1/final.mp4`
+  - verifizierte Finaldauer via `ffprobe`: `6.105s`
+- Verifizierter echter Phase-2D-Variationslauf:
+  - Job-ID: `real-phase2d-variation-1`
+  - Segmentierung: `1` Szene
+  - kreative Varianten pro Szene: `2`
+  - Take-Plan: `1` Take pro Variation, insgesamt `2` Takes fuer die Szene
+  - verifizierte Variation-IDs:
+    - `scene_01_var_01`
+    - `scene_01_var_02`
+  - verifizierte Shot-Typen:
+    - `establishing`
+    - `medium_action`
+  - beide realen Varianten-Takes wurden technisch validiert mit `validation_status=passed`
+  - verifizierte Auswahl:
+    - `selected_take_id=scene_01_var_01_take_01`
+    - `selected_variation_id=scene_01_var_01`
+    - Fallback auf `first_successful_take` als Tie-Break zwischen technisch gleichwertigen Varianten
+  - finales MP4: `/workspace/agent_runs/real-phase2d-variation-1/final.mp4`
+  - verifizierte Finaldaten via `ffprobe`: `768x448`, `24 fps`, Gesamtdauer `4.042s`
+- Verifizierter echter Phase-2E-Kreativauswahl-Lauf:
+  - Job-ID: `real-phase2e-creative-selection-1`
+  - Segmentierung: `2` Szenen
+  - kreative Varianten pro Szene: `2`
+  - Take-Plan: `1` Take pro Variation, insgesamt `2` Takes pro Szene
+  - verifizierter Auswahlmodus: `quality_guarded_best_valid_take`
+  - verifizierter kreativer Auswahlmodus: `rule_based_scene_variation_heuristic`
+  - alle `4` realen Varianten-Takes wurden technisch validiert mit `validation_status=passed`
+  - verifizierte kreative Auswahl:
+    - `scene_01` -> `selected_take_id=scene_01_var_01_take_01`, `shot_type=establishing`, `selected_by_rule=opening_prefers_establishing`, `creative_score=6`
+    - `scene_02` -> `selected_take_id=scene_02_var_02_take_01`, `shot_type=medium_action`, `selected_by_rule=scene_goal_motion_match`, `creative_score=5`
+  - verifiziert: zwei technisch gleichwertige Kandidaten wurden pro Szene kreativ aufgeloest
+  - finales MP4: `/workspace/agent_runs/real-phase2e-creative-selection-1/final.mp4`
+  - verifizierte Finaldaten via `ffprobe`: `768x448`, `24 fps`, Audio `aac`, Gesamtdauer `6.439s`
+- Verifizierter echter Phase-3A-Storyboard-Lauf:
+  - Job-ID: `real-phase3a-storyboard-1`
+  - Storyboard-Backend: `zimage_storyboard`
+  - Segmentierung: `1` Szene
+  - kreative Varianten pro Szene: `2`
+  - Keyframe-Kandidaten: `2`
+  - beide realen Keyframe-Kandidaten wurden technisch validiert mit `validation_status=passed`
+  - verifizierte Keyframe-Auswahl:
+    - `selected_keyframe_id=scene_01_var_01_keyframe_01`
+    - `selected_variation_id=scene_01_var_01`
+    - `selected_by_rule=preferred_variation_match`
+  - verifizierte Keyframe-Artefakte im Job-Workspace:
+    - `/workspace/agent_runs/real-phase3a-storyboard-1/scenes/scene_01/storyboard/scene_01_var_01_keyframe_01.png`
+    - `/workspace/agent_runs/real-phase3a-storyboard-1/scenes/scene_01/storyboard/scene_01_var_02_keyframe_02.png`
+  - verifiziert: `takes.json` dokumentiert die Keyframe-Beziehung auch am selektierten Take
+  - finales MP4: `/workspace/agent_runs/real-phase3a-storyboard-1/final.mp4`
+  - verifizierte Finaldaten via `ffprobe`: `768x448`, `24 fps`, Audio `aac`, Gesamtdauer `4.042s`
+- Verifizierter echter Phase-3B-Keyframe-Video-Lauf:
+  - Job-ID: `real-phase3b-keyframe-1`
+  - Storyboard-Backend: `zimage_storyboard`
+  - Video-Backend: `ltx2`
+  - Segmentierung: `1` Szene
+  - kreative Varianten pro Szene: `2`
+  - verifizierter `video_mode_requested=keyframe_conditioned`
+  - verifizierter `render_mode=keyframe_conditioned`
+  - verifiziert: der reale LTX2-Job wurde mit `--image ... 0 1.0 33` aus dem selektierten Storyboard-Keyframe gestartet
+  - verifizierte selektierte Keyframe-Nutzung:
+    - `selected_keyframe_candidate_id=scene_01_var_01_keyframe_01`
+    - `selected_keyframe_usage.usage_mode=first_frame_conditioning`
+    - `selected_keyframe_usage.applied=true`
+  - verifizierte Take-Auswahl:
+    - `selected_take_id=scene_01_var_01_take_01`
+    - `selected_variation_id=scene_01_var_01`
+    - kreative Aufloesung gegen eine zweite technisch valide keyframe-konditionierte Variation
+  - verifizierte Artefakte:
+    - `/workspace/agent_runs/real-phase3b-keyframe-1/storyboard_plan.json`
+    - `/workspace/agent_runs/real-phase3b-keyframe-1/takes.json`
+    - `/workspace/agent_runs/real-phase3b-keyframe-1/final.mp4`
+  - verifizierte Finaldaten via `ffprobe`/Result: `768x448`, `24 fps`, Gesamtdauer `4.042s`
+- Verifizierter echter Phase-4A-Bridge-Lauf:
+  - Job-ID: `bridge-demo-job`
+  - echter lokaler HTTP-Start ueber separaten `uvicorn app.main:app --port 8010`
+  - verifizierter erfolgreicher Aufruf: `POST /agent-core/run`
+  - verifizierter Statusabruf: `GET /agent-core/jobs/bridge-demo-job`
+  - verifizierter Rueckgabevertrag:
+    - `status=assembled`
+    - `success=true`
+    - `result.output_final_path=/workspace/agent_runs/bridge-demo-job/final.mp4`
+    - `refs.result_json_url` und `refs.final_mp4_url` zeigen auf den gemounteten `/agent-runs`-Pfad
+  - verifiziertes Finalartefakt: `/workspace/agent_runs/bridge-demo-job/final.mp4`
+- Verifizierter echter Phase-4A-Live-Bridge-Lauf:
+  - Job-ID: `phase4a-live-verify-1776342448`
+  - Ursache des frueheren `404`: der laufende `uvicorn` auf Port `8000` war vor den Bridge-Dateiaenderungen gestartet und hatte den neuen Router noch nicht geladen
+  - produktiver FastAPI-Prozess auf `8000` wurde deshalb manuell mit aktuellem Code neu gestartet
+  - verifizierter erfolgreicher Live-Aufruf: `POST http://127.0.0.1:8000/agent-core/run`
+  - verifizierter Live-Statusabruf: `GET http://127.0.0.1:8000/agent-core/jobs/phase4a-live-verify-1776342448`
+  - verifizierter Proxy-Abruf: `GET https://mvwg65x59mc01e-8000.proxy.runpod.net/agent-core/jobs/phase4a-live-verify-1776342448`
+  - verifizierter Proxy-POST-Pfad: `POST https://mvwg65x59mc01e-8000.proxy.runpod.net/agent-core/run` liefert fuer leeres JSON korrekt `422`
+  - verifiziertes Finalartefakt: `/workspace/agent_runs/phase4a-live-verify-1776342448/final.mp4`
+  - verifizierte Finaldaten via `ffprobe`: `768x448`, `24 fps`, Gesamtdauer `4.042s`
+- Verifizierter echter Phase-4B-Live-Bridge-Lauf:
+  - Job-ID: `phase4b-live-verify-1776343554`
+  - verifizierter produktiver Submit: `POST http://127.0.0.1:8000/agent-core/jobs`
+  - verifizierter Polling-Status: `GET http://127.0.0.1:8000/agent-core/jobs/phase4b-live-verify-1776343554`
+  - verifizierter Statusverlauf: `accepted` -> `running` -> `done`
+  - verifizierter Endstatus: `status=done`, `current_phase=done`, `result.final_phase=assembled`
+  - verifizierter Proxy-Statusabruf: `GET https://mvwg65x59mc01e-8000.proxy.runpod.net/agent-core/jobs/phase4b-live-verify-1776343554`
+  - verifizierter Proxy-Submit-Pfad: `POST https://mvwg65x59mc01e-8000.proxy.runpod.net/agent-core/jobs` liefert fuer `{}` korrekt `422`
+  - verifiziertes Finalartefakt: `/workspace/agent_runs/phase4b-live-verify-1776343554/final.mp4`
+  - verifizierte Finaldaten via `ffprobe`: `768x448`, `24 fps`, Gesamtdauer `4.042s`
+- Verifizierter echter Phase-4C-Live-Response-Lauf:
+  - Job-ID: `phase4c-live-verify-1776348348`
+  - verifizierter produktiver Submit: `POST http://127.0.0.1:8000/agent-core/jobs`
+  - verifizierte Submit-Felder: `status=accepted`, `is_terminal=false`, `should_poll=true`, `retry_after_sec=2`, `artifacts_ready=false`
+  - verifizierter Mid-Poll: `status=running`, `should_poll=true`, `result_json_ready=false`, `final_mp4_ready=false`
+  - verifizierter terminaler Poll: `status=done`, `is_terminal=true`, `should_poll=false`, `artifacts_ready=true`, `result_json_ready=true`, `final_mp4_ready=true`
+  - verifizierter Proxy-Statusabruf: `GET https://mvwg65x59mc01e-8000.proxy.runpod.net/agent-core/jobs/phase4c-live-verify-1776348348`
+  - verifizierte `public_refs` auf dem Proxy zeigen auf `result.json` und `final.mp4`
+  - verifiziertes Finalartefakt: `/workspace/agent_runs/phase4c-live-verify-1776348348/final.mp4`
+  - verifizierte Finaldaten via `ffprobe`: `768x448`, `24 fps`, Gesamtdauer `4.042s`
+
+## Verifizierte Luecken
+- ACE-Step, Editor und Upscaler sind noch nicht im neuen Core integriert.
+- Music-Adapter bleibt bewusst ein Future-ready-Stub.
+- Es gibt jetzt eine minimale lokale Worker-/n8n-Bridge, aber noch keine groessere externe API-Plattform fuer den neuen Core.
+- Es gibt noch keine eigentliche n8n-spezifische Orchestrierung oder Queue-Anbindung.
+- Es gibt noch keinen AI-basierten Hook-/Quality-/Storyboard-Produktionspfad im Core.
+- Phase 3B nutzt jetzt einen echten produktiven First-Frame-Keyframe-Pfad ueber `ti2vid`, aber es gibt noch keinen separaten Multi-Keyframe-Interpolations- oder Retake-Vertrag im Core.
+- `a2vid` ist fuer generierte TTS-Audio im aktuellen Pod-Setup nicht als stabiler Phase-1-Vertrag verifiziert.
+- Multi-Segment-Qualitaet ist jetzt technisch besser abgesichert und mit leichter kreativer Heuristik selektierbar, aber es gibt noch keine inhaltliche AI-Qualitaetsbewertung.
+- Die neue Take-Auswahl bleibt bewusst klein und regelbasiert; sie ist noch keine vollwertige Bildinhalts- oder Hook-Bewertungsmaschine.
+- Die Concat-Stufe kann bei Multi-Segment-Jobs noch kleine Container-/Timing-Abweichungen gegenueber der geplanten Szenensumme haben.
+- `.gitignore` ignoriert jetzt die bekannten Laufzeit-/Artefaktordner und lokale Runtime-Logs des Pods.
+
+## Annahmen
+- Der bestehende FastAPI-Layer soll vorerst nicht ersetzt, sondern spaeter als bestehende Integrationsflaeche behandelt werden.
+- Fuer Phase 1 bleibt die HTTP-basierte Adapter-Schicht der schnellste stabile Integrationsweg; spaeter kann direkter Python-Zugriff pro Backend ergaenzt werden.
+- Der belastbare Phase-1-Pfad ist aktuell `text/script -> qwen_tts -> ti2vid -> final.mp4`.
+- Phase 2A verbessert Qualitaet zuerst ueber bessere Planung, nicht ueber neue Modellfamilien.
+- Phase 2B verbessert die Produktionsrobustheit zuerst ueber Mehrfach-Takes plus einfache Selektion, nicht ueber komplexe AI-Bewertung.
+- Phase 2C verbessert die Produktionsrobustheit zuerst ueber technische Validierung, leichte Retry-Regeln und bessere Auswahl, nicht ueber Content-Scoring.
+- Phase 2D verbessert die Kandidatenvielfalt zuerst ueber regelbasierte kreative Variation, nicht ueber generative AI-Planung oder Content-Scoring.
+- Phase 2E verbessert die Auswahl zuerst ueber kleine nachvollziehbare kreative Regeln ueber dem technischen Vertrag, nicht ueber grosse AI-Bewertung.
+- Phase 3A verbessert die visuelle Vorsteuerung zuerst ueber optionale Keyframes aus vorhandener Bildinfrastruktur, nicht ueber einen grossen Umbau des Video-Pfads.
+- Phase 3B verbessert den bestehenden Video-Pfad vorsichtig ueber First-Frame-Keyframe-Conditioning im vorhandenen `ti2vid`-Stack, nicht ueber einen neuen Backend-Zweig.
+- Phase 4A verbessert die Aussenanbindung zuerst ueber eine duenne lokale FastAPI-Bridge ueber dem bestehenden synchronen Core, nicht ueber Queue-, Auth- oder Multi-User-Architektur.
+- Phase 4B verbessert die Aussenanbindung jetzt ueber einen kleinen polling-faehigen Async-Submit-Pfad, aber bewusst noch nicht ueber eine durable Queue- oder Worker-Architektur.
+- `agent_runs/`, `exports/`, `jobs/`, `status/`, `venvs/`, Checkpoints und lokale `.log`-Dateien sind Laufzeit-/Umgebungsbestand und nicht primaer fuer Commits gedacht.
+
+## Offene Fragen
+- Soll der naechste produktive Adapterpfad `ACE-Step`, `ZImage` oder Editor/Assembler sein?
+- Soll der Core spaeter direkt in die bestehende FastAPI eingehangen werden oder zunaechst rein intern bleiben?
+- Wie fein soll die naechste Planner-Generation werden: mehr Produktionsregeln oder zuerst mehr Backends?
+- Soll der LTX2-Adapter spaeter von HTTP auf direkten Python-Aufruf umgestellt werden?
+- Soll `a2vid` spaeter mit strengem Audio-/Frame-Vertrag wieder freigeschaltet werden?
+- Soll fuer spaetere Phasen neben Dauer auch eine explizite Shot-/Clip-Vertragslogik eingefuehrt werden?
+- Wann soll die kleine kreative Heuristik von Phase 2E in spaetere echte Inhaltsbewertung oder Hook-/Narrativ-Scoring uebergehen?
+- Soll der naechste Schritt eher ein keyframe-gestuetzter Video-Pfad oder ein zweiter produktiver Backend-Pfad sein?
+- Soll der naechste Schritt den produktiven First-Frame-Keyframe-Pfad weiter in Richtung staerkerer Prompt-/Look-Konsistenz absichern oder eher einen zweiten produktiven Backend-Pfad erschliessen?
+
+## Empfehlungen
+- Den bestehenden Phase-1-Kern nicht aufblasen, sondern als Basis fuer den zweiten Vertical Slice nutzen.
+- Phase 3B ist jetzt als vorsichtiger produktiver First-Frame-Keyframe-Pfad gebaut; der naechste Ausbau sollte eher auf Absicherung, feinere Regeln oder einen zweiten produktiven Backend-Pfad zielen als auf einen grossen Refactor.
+- Phase 4B sollte klein bleiben: naechster Ausbau eher n8n-taugliche Doku, optionale Webhook-Konvention oder sehr kontrollierte Restart-Haertung, nicht sofort eine grosse API-Plattform.
+- Vor einer externen API zuerst die internen Artefakt- und Fehlervertraege stabilisieren.
+- Phase 1 kann fuer den definierten Scope jetzt als technisch sauber abgeschlossen gelten.
+- Fuer den Tagesabschluss sollte `agent_core/`, `tests/`, `examples/`, `.gitignore` und `/workspace/codex` priorisiert werden; Laufzeitordner sollten draussen bleiben.

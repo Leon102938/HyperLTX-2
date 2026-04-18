@@ -165,6 +165,15 @@ class ResultAssembler:
                     {"text_only": 0, "storyboard_reference": 0, "keyframe_conditioned": 0},
                 ),
                 "fallback_reasons": video_result.metadata.get("fallback_reasons", []),
+                "director_mode": plan.metadata.get("director_mode"),
+                "director_llm_active": plan.metadata.get("director_llm_active"),
+                "director_fallback_reason": plan.metadata.get("director_fallback_reason"),
+                "director_llm_provider": plan.metadata.get("director_llm_provider"),
+                "director_llm_model": plan.metadata.get("director_llm_model"),
+                "director_llm_endpoint": plan.metadata.get("director_llm_endpoint"),
+                "director_output": plan.director_output.model_dump(mode="json") if plan.director_output else None,
+                "style_lock": plan.metadata.get("style_lock"),
+                "prompt_guidance": plan.metadata.get("prompt_guidance"),
                 "selection_mode": video_result.metadata.get("selection_mode", "quality_guarded_best_valid_take"),
                 "creative_selection_mode": video_result.metadata.get(
                     "creative_selection_mode", "rule_based_scene_variation_heuristic"

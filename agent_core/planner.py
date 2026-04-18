@@ -6,12 +6,16 @@ from pathlib import Path
 from typing import Any
 
 from agent_core.backend_registry import BackendRegistry
+from agent_core.director import DirectorEngine
+from agent_core.prompt_builder import PromptBuilder
 from agent_core.schemas import (
+    DirectorOutput,
     JobInput,
     KeyframeCandidatePlan,
     ProductionPlan,
     ProductionStep,
     ScenePlan,
+    SceneIntent,
     ShotPlan,
     StoryboardConfig,
     TakePlan,
@@ -34,8 +38,16 @@ class ProductionPlanner:
     DEFAULT_KEYFRAME_STRENGTH = 1.0
     DEFAULT_KEYFRAME_CRF = 33
 
-    def __init__(self, registry: BackendRegistry) -> None:
+    def __init__(
+        self,
+        registry: BackendRegistry,
+        *,
+        director: DirectorEngine | None = None,
+        prompt_builder: PromptBuilder | None = None,
+    ) -> None:
         self.registry = registry
+        self.prompt_builder = prompt_builder or PromptBuilder()
+        self.director = director or DirectorEngine(prompt_builder=self.prompt_builder)
 
     def build_plan(self, job: JobInput, actual_voice_duration_sec: float | None = None) -> ProductionPlan:
         video_capability = self.registry.primary_capability("video")
@@ -92,6 +104,25 @@ class ProductionPlanner:
             )
         target_duration = snapped_duration
 
+        text_units = self._split_text_units(job.primary_text)
+        scene_count = self._determine_scene_count(job, target_duration, len(text_units))
+        grouped_units = self._group_text_units(text_units, scene_count, fallback_text=job.idea or job.script or "visual beat")
+        raw_scene_durations = self._allocate_scene_durations(grouped_units, target_duration)
+        director_output = self.director.build_direction(
+            job=job,
+            scene_beats=self._build_scene_beats(grouped_units, raw_scene_durations),
+        )
+        prompt_text = self.prompt_builder.build_global_prompt(job, director_output)
+        rules_applied.append(f"Phase 5A director mode active: {director_output.mode}.")
+        if director_output.mode == "llm_augmented":
+            rules_applied.append("Director output came from a configured local OpenAI-compatible LLM adapter.")
+            if director_output.llm_model:
+                rules_applied.append(f"Director LLM model used: {director_output.llm_model}.")
+        elif director_output.fallback_reason:
+            warnings.append(
+                f"Director LLM unavailable; planner used rule-based fallback: {director_output.fallback_reason}."
+            )
+
         scenes = self._build_scene_plans(
             job,
             width=width,
@@ -103,6 +134,9 @@ class ProductionPlanner:
             frame_rate=self.DEFAULT_FRAME_RATE,
             storyboard_requested=storyboard_requested,
             keyframe_video_available=keyframe_video_available,
+            grouped_units=grouped_units,
+            raw_scene_durations=raw_scene_durations,
+            director_output=director_output,
         )
         scene_total_duration = round(sum(scene.target_duration_sec for scene in scenes), 3)
         if scene_total_duration != target_duration:
@@ -153,7 +187,6 @@ class ProductionPlanner:
         if job.use_music:
             warnings.append("Music requested but skipped in Phase 1 because no music backend is active.")
 
-        prompt_text = self._build_prompt(job)
         frame_rate = self.DEFAULT_FRAME_RATE
         steps = [
             ProductionStep(
@@ -220,6 +253,10 @@ class ProductionPlanner:
                     "fallback_selection_mode": "first_successful_take",
                     "quality_guard_enabled": True,
                     "creative_selection_enabled": True,
+                    "director_mode": director_output.mode,
+                    "director_llm_active": director_output.llm_active,
+                    "director_fallback_reason": director_output.fallback_reason,
+                    "director_llm_endpoint": director_output.llm_endpoint,
                     "max_quality_retries_per_scene": max_quality_retries_per_scene,
                     "width": width,
                     "height": height,
@@ -243,6 +280,7 @@ class ProductionPlanner:
             estimated_voice_duration_sec=None if actual_voice_duration_sec is not None else estimated_voice_duration,
             actual_voice_duration_sec=round(actual_voice_duration_sec, 3) if actual_voice_duration_sec is not None else None,
             prompt_text=prompt_text,
+            director_output=director_output,
             warnings=warnings,
             rules_applied=rules_applied,
             scenes=scenes,
@@ -270,6 +308,14 @@ class ProductionPlanner:
                 "fallback_selection_mode": "first_successful_take",
                 "quality_guard_enabled": True,
                 "creative_selection_enabled": True,
+                "director_mode": director_output.mode,
+                "director_llm_active": director_output.llm_active,
+                "director_fallback_reason": director_output.fallback_reason,
+                "director_llm_provider": director_output.llm_provider,
+                "director_llm_model": director_output.llm_model,
+                "director_llm_endpoint": director_output.llm_endpoint,
+                "style_lock": director_output.style_lock.model_dump(mode="json"),
+                "prompt_guidance": director_output.prompt_guidance.model_dump(mode="json"),
                 "max_quality_retries_per_scene": max_quality_retries_per_scene,
                 "voice_padding_sec": self.VOICE_PADDING_SEC,
                 "voice_enabled": job.use_voice,
@@ -333,6 +379,9 @@ class ProductionPlanner:
                 "selected_keyframe_usage": render_context["selected_keyframe_usage"],
                 "selection_mode": "quality_guarded_best_valid_take",
                 "creative_selection_mode": "rule_based_scene_variation_heuristic",
+                "director_mode": plan.metadata.get("director_mode"),
+                "director_fallback_reason": plan.metadata.get("director_fallback_reason"),
+                "prompt_build_metadata": take.prompt_build_metadata,
                 "seed": take.seed,
                 "width": plan.width,
                 "height": plan.height,
@@ -354,12 +403,14 @@ class ProductionPlanner:
             estimated_voice_duration_sec=None,
             actual_voice_duration_sec=None,
             prompt_text=take.prompt_text,
+            director_output=plan.director_output,
             warnings=list(plan.warnings),
             rules_applied=list(plan.rules_applied),
             scenes=[
                 scene.model_copy(
                     update={
                         "prompt_text": take.prompt_text,
+                        "prompt_build_metadata": take.prompt_build_metadata,
                         "variations": [selected_variation] if selected_variation else list(scene.variations),
                         "selected_keyframe": scene.selected_keyframe,
                         "takes": [take],
@@ -391,6 +442,9 @@ class ProductionPlanner:
                 "selected_keyframe_usage": render_context["selected_keyframe_usage"],
                 "selection_mode": "quality_guarded_best_valid_take",
                 "creative_selection_mode": "rule_based_scene_variation_heuristic",
+                "director_mode": plan.metadata.get("director_mode"),
+                "director_fallback_reason": plan.metadata.get("director_fallback_reason"),
+                "prompt_build_metadata": take.prompt_build_metadata,
                 "quality_guard_enabled": True,
                 "creative_selection_enabled": True,
             },
@@ -443,6 +497,7 @@ class ProductionPlanner:
             estimated_voice_duration_sec=None,
             actual_voice_duration_sec=None,
             prompt_text=candidate.prompt_text,
+            director_output=plan.director_output,
             warnings=list(plan.warnings),
             rules_applied=list(plan.rules_applied),
             scenes=[
@@ -494,16 +549,17 @@ class ProductionPlanner:
         frame_rate: int,
         storyboard_requested: bool,
         keyframe_video_available: bool,
+        grouped_units: list[str],
+        raw_scene_durations: list[float],
+        director_output: DirectorOutput,
     ) -> list[ScenePlan]:
-        text_units = self._split_text_units(job.primary_text)
-        scene_count = self._determine_scene_count(job, target_duration_sec, len(text_units))
-        grouped_units = self._group_text_units(text_units, scene_count, fallback_text=job.idea or job.script or "visual beat")
-        raw_scene_durations = self._allocate_scene_durations(grouped_units, target_duration_sec)
+        scene_count = len(grouped_units)
         variations_per_scene = self._determine_variation_count(job)
         takes_per_variation = self._determine_take_count(job)
         storyboard_candidate_count = self._determine_storyboard_candidate_count(job)
         storyboard_enabled = bool(storyboard_requested and self.registry.primary_capability("storyboard"))
         keyframe_conditioning_defaults = self._keyframe_conditioning_defaults(job)
+        scene_intent_lookup = {intent.scene_id: intent for intent in director_output.scene_intents}
 
         scenes: list[ScenePlan] = []
         narration_cursor = 0.0
@@ -518,7 +574,14 @@ class ProductionPlanner:
             )
             title = f"Scene {index}"
             description = self._scene_description(scene_text, job.idea or job.script or "visual beat")
-            prompt_text = self._scene_prompt(job, description, scene_text, index, scene_count)
+            scene_intent = scene_intent_lookup.get(scene_id) or self._fallback_scene_intent(scene_id, index, scene_text)
+            prompt_text, prompt_build_metadata = self.prompt_builder.build_scene_prompt(
+                job=job,
+                description=description,
+                scene_text=scene_text,
+                scene_intent=scene_intent,
+                director_output=director_output,
+            )
             narration_text = scene_text if job.use_voice else None
             narration_start_sec = round(narration_cursor, 3) if narration_text else None
             narration_end_sec = round(narration_cursor + quantized_duration_sec, 3) if narration_text else None
@@ -560,6 +623,8 @@ class ProductionPlanner:
                 scene_count=scene_count,
                 description=description,
                 scene_prompt_text=prompt_text,
+                scene_intent=scene_intent,
+                director_output=director_output,
                 variation_count=variations_per_scene,
             )
             storyboard_config = self._build_storyboard_config(
@@ -605,6 +670,8 @@ class ProductionPlanner:
                     narration_text=narration_text,
                     narration_start_sec=narration_start_sec,
                     narration_end_sec=narration_end_sec,
+                    scene_intent=scene_intent,
+                    prompt_build_metadata=prompt_build_metadata,
                     video_mode=requested_video_mode,
                     render_mode=render_mode,
                     fallback_strategy=fallback_strategy,
@@ -624,6 +691,7 @@ class ProductionPlanner:
                             else "Phase 3A storyboard is inactive for this scene."
                         ),
                         f"Phase 3B requested video_mode={requested_video_mode} and planned render_mode={render_mode}.",
+                        f"Phase 5A prompt builder metadata: {prompt_build_metadata.get('builder_version', 'unknown')}.",
                     ],
                 )
             )
@@ -760,22 +828,26 @@ class ProductionPlanner:
         scene_count: int,
         description: str,
         scene_prompt_text: str,
+        scene_intent: SceneIntent,
+        director_output: DirectorOutput,
         variation_count: int,
     ) -> list[VariationPlan]:
-        presets = self._variation_blueprints(scene_index=scene_index, scene_count=scene_count)
-        selected_presets = presets[:variation_count]
+        selected_presets = self._resolve_variation_directives(
+            scene_intent=scene_intent,
+            scene_index=scene_index,
+            scene_count=scene_count,
+            variation_count=variation_count,
+        )
         variations: list[VariationPlan] = []
         for variation_index, preset in enumerate(selected_presets, start=1):
             variation_id = f"{scene_id}_var_{variation_index:02d}"
             prompt_delta = str(preset["prompt_delta"])
-            prompt_variant_text = self._compose_variation_prompt(
+            prompt_variant_text, prompt_build_metadata = self.prompt_builder.build_variation_prompt(
                 scene_prompt_text=scene_prompt_text,
-                shot_type=str(preset["shot_type"]),
-                camera_style=preset.get("camera_style"),
-                camera_motion=preset.get("camera_motion"),
-                framing_hint=str(preset["framing_hint"]),
-                prompt_delta=prompt_delta,
-                style_bias=preset.get("style_bias"),
+                scene_intent=scene_intent,
+                style_lock=director_output.style_lock,
+                director_output=director_output,
+                variation=preset,
             )
             variations.append(
                 VariationPlan(
@@ -789,6 +861,8 @@ class ProductionPlanner:
                     prompt_delta=prompt_delta,
                     prompt_variant_text=prompt_variant_text,
                     style_bias=str(preset["style_bias"]) if preset.get("style_bias") else None,
+                    creative_intent=str(preset["intent"]),
+                    prompt_build_metadata=prompt_build_metadata,
                     notes=[
                         f"Phase 2D variation {variation_index} for {scene_id}.",
                         f"Base scene description: {description}",
@@ -800,28 +874,36 @@ class ProductionPlanner:
     def _variation_blueprints(self, *, scene_index: int, scene_count: int) -> list[dict[str, str]]:
         return [
             {
+                "label": "hook_master",
                 "shot_type": "establishing",
+                "intent": "show the world and subject relationship immediately",
                 "camera_motion": "slow push-in",
                 "framing_hint": "wide environmental framing with a readable subject anchor",
                 "prompt_delta": "Emphasize geography, context and a strong opening silhouette with a controlled slow push-in.",
                 "style_bias": "scale",
             },
             {
+                "label": "kinetic_subject",
                 "shot_type": "medium_action",
+                "intent": "bring the viewer closer to the active subject beat",
                 "camera_motion": "gentle lateral tracking",
                 "framing_hint": "medium three-quarter framing with clearer subject focus",
                 "prompt_delta": "Bring the scene closer to the subject with a medium composition and subtle lateral movement.",
                 "style_bias": "motion",
             },
             {
+                "label": "tactile_detail",
                 "shot_type": "detail_closeup",
+                "intent": "surface one tactile detail without losing scene identity",
                 "camera_style": "intimate cinematic close-up",
                 "framing_hint": "tight detail framing with tactile surface emphasis",
                 "prompt_delta": "Prioritize material detail, interfaces, lighting accents and a tighter crop without losing scene coherence.",
                 "style_bias": "texture",
             },
             {
+                "label": "hero_resolve",
                 "shot_type": "hero_tableau",
+                "intent": "present the strongest composed key image for the beat",
                 "camera_style": "composed hero frame",
                 "framing_hint": "balanced hero framing with deliberate negative space",
                 "prompt_delta": (
@@ -830,6 +912,26 @@ class ProductionPlanner:
                 "style_bias": "clarity",
             },
         ]
+
+    def _resolve_variation_directives(
+        self,
+        *,
+        scene_intent: SceneIntent,
+        scene_index: int,
+        scene_count: int,
+        variation_count: int,
+    ) -> list[dict[str, Any]]:
+        directives = [directive.model_dump(mode="json") for directive in scene_intent.variation_directives]
+        fallback_directives = self._variation_blueprints(scene_index=scene_index, scene_count=scene_count)
+        used_shot_types = {str(item.get("shot_type")) for item in directives}
+        for fallback in fallback_directives:
+            if len(directives) >= variation_count:
+                break
+            if str(fallback.get("shot_type")) in used_shot_types:
+                continue
+            directives.append(dict(fallback))
+            used_shot_types.add(str(fallback.get("shot_type")))
+        return directives[:variation_count]
 
     def _compose_variation_prompt(
         self,
@@ -1080,6 +1182,8 @@ class ProductionPlanner:
                         framing_hint=variation.framing_hint,
                         prompt_variant_text=variation.prompt_variant_text,
                         style_bias=variation.style_bias,
+                        creative_intent=variation.creative_intent,
+                        prompt_build_metadata=dict(variation.prompt_build_metadata),
                         seed=seed,
                         prompt_text=variation.prompt_variant_text,
                         video_mode=video_mode,
@@ -1094,6 +1198,36 @@ class ProductionPlanner:
                     )
                 )
         return takes
+
+    @staticmethod
+    def _build_scene_beats(grouped_units: list[str], raw_scene_durations: list[float]) -> list[dict[str, Any]]:
+        beats: list[dict[str, Any]] = []
+        for index, (scene_text, raw_duration_sec) in enumerate(zip(grouped_units, raw_scene_durations), start=1):
+            beats.append(
+                {
+                    "scene_id": f"scene_{index:02d}",
+                    "scene_index": index,
+                    "scene_text": scene_text,
+                    "description": " ".join(scene_text.split())[:180] or "Visual beat",
+                    "target_duration_sec": round(raw_duration_sec, 3),
+                }
+            )
+        return beats
+
+    @staticmethod
+    def _fallback_scene_intent(scene_id: str, scene_index: int, scene_text: str) -> SceneIntent:
+        return SceneIntent(
+            scene_id=scene_id,
+            scene_index=scene_index,
+            narrative_role="fallback",
+            hook_focus=scene_text or "scene beat",
+            emotional_beat="focus",
+            visual_goal=scene_text or "scene beat",
+            shot_intent="keep the scene readable",
+            opening_emphasis=scene_index == 1,
+            prompt_keywords=[],
+            variation_directives=[],
+        )
 
     @staticmethod
     def _storyboard_requested(job: JobInput) -> bool:

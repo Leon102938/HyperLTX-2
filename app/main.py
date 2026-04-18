@@ -4,6 +4,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from .agent_core_api import router as agent_core_router
 from .editor_api import EditRequest, render_edit
 from .upscaler_api import (
     UpscaleVideoRequest,
@@ -30,11 +31,13 @@ app.mount("/exports", StaticFiles(directory=str(EXPORT_DIR)), name="exports")
 
 # Mount für Jobs (damit Videos per Link abrufbar sind)
 app.mount("/jobs", StaticFiles(directory="/workspace/jobs"), name="jobs")
+app.mount("/agent-runs", StaticFiles(directory="/workspace/agent_runs"), name="agent-runs")
 
 # ---- Routers ----
 app.include_router(ace_step_router, prefix="/Ace_step_1.5", tags=["Ace_step_1.5"])
 app.include_router(zimage_router, prefix="/zimage", tags=["zimage"])
 app.include_router(qwen_tts_router, prefix="/qwen_tts", tags=["qwen_tts"])
+app.include_router(agent_core_router)
 
 # Flags
 INIT_FLAG = "/workspace/status/init_done"

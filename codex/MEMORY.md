@@ -1,0 +1,120 @@
+# MEMORY.md
+
+## Dauerhafte Erkenntnisse
+- Kanonischer Projekt-Memory-Pfad ist `/workspace/codex`.
+- Legacy-Notizen existieren in `/workspace/Codex`; nicht automatisch als Wahrheit bevorzugen.
+- Git-Root des eigentlichen Projekts ist `/workspace`, nicht `/workspace/codex`.
+- Das Root-Repo ist bereits ein RunPod-Medien-Template mit FastAPI-Wrappern und lokalen Modell-/Tool-Bereichen.
+- Basisdienste laufen standardmaessig ueber `start.sh`: Jupyter auf `8888`, FastAPI auf `8000`, Init im Hintergrund.
+- Das Root-Python ist nicht die einzige relevante Runtime; wichtige Audio-/ACE-Step-Abhaengigkeiten leben im separaten Venv `/workspace/venvs/qwen3-tts`.
+- Vorhandene lokale Medien-Backends sind nutzbar, aber noch nicht als eigener Agent-Core abstrahiert.
+- Der Nutzer will zuerst einen starken modularen Agent-Core, nicht sofort API, n8n oder GUI.
+- Fremdrepos duerfen spaeter als Referenz dienen, aber nicht blind uebernommen werden.
+- Der neue Agent-Core lebt als eigenes Paket `agent_core/` im Git-Root.
+- Phase 1 nutzt lokale HTTP-Adapter ueber die bestehende FastAPI, nicht tiefe Backend-Umbauten.
+- Der Planner soll Voice-Laenge explizit in die Video-Planung einbeziehen; erst geschaetzt, spaeter mit echter Dauer nachgezogen.
+- Jeder Core-Job speichert mindestens `input_job.json`, `plan.json`, `state.json`, `result.json` und `logs/agent.log`.
+- Jeder erfolgreiche Phase-1-Job soll jetzt auch `final.mp4` im Job-Workspace haben.
+- Phase 2A fuehrt `scene_plan.json` als dauerhaftes Plan-Artefakt pro Job ein.
+- Phase 2B fuehrt `takes.json` als dauerhaftes Take-Artefakt pro Job ein.
+- LTX Two-Stage braucht in Phase 1 Aufloesungen als Vielfache von `64`.
+- LTX Phase-1-Framezahl sollte auf das Schema `8k+1` geschnappt werden.
+- Die kanonische Dauerquelle fuer den Video-Render ist jetzt der quantisierte Planner-Vertrag: `plan.target_duration_sec` plus `video.params.num_frames`.
+- `a2vid` mit generierter Qwen-TTS-Audio ist im aktuellen Pod-Setup nicht als stabiler Phase-1-Vertrag verifiziert.
+- Der reale stabile Phase-1-Renderpfad ist aktuell `ti2vid`; Voice beeinflusst die geplante Videolaenge und wird danach in `final.mp4` gemuxt.
+- Phase 2A verbessert Produktionsqualitaet zuerst ueber strukturierte Planung und mehrere Segmente, nicht ueber neue Backends.
+- Multi-Segment-Jobs rendern pro Szene eigene Rohclips und fuehren diese vor dem finalen Mux zu `assembled_video.mp4` zusammen.
+- Phase 2B fuehrt mehrere Takes pro Szene ein; die aktuelle stabile Auswahlregel war zuerst `first_successful_take`.
+- Phase 2C fuehrt einen technischen Quality-Guard pro Take ein; die aktuelle stabile Auswahlregel ist `quality_guarded_best_valid_take`.
+- Phase 2D fuehrt mehrere regelbasierte kreative Varianten pro Szene ein; Varianten und Takes sind jetzt explizit miteinander verknuepft.
+- Phase 2E fuehrt eine kleine regelbasierte kreative Auswahlheuristik ueber dem technischen Guard-Vertrag ein.
+- Phase 3A fuehrt eine optionale Storyboard-/Keyframe-Pipeline ueber das vorhandene Z-Image-Backend ein.
+- Phase 3B fuehrt `video_mode` als Job-Vertrag und `render_mode` als tatsaechlich geplanten bzw. gelaufenen Video-Pfad pro Szene/Take ein.
+- Der vorhandene LTX2-FastAPI-Wrapper kann im stabilen `ti2vid`-Pfad echtes Image-Conditioning via `--image` nutzen.
+- Der aktuelle produktive Phase-3B-Keyframe-Pfad ist deshalb kein neuer Backend-Zweig, sondern selektierter Storyboard-Keyframe als First-Frame-Conditioning im bestehenden `ti2vid`-Vertrag.
+- Der Planner kann pro Szene optional via `metadata.scene_video_modes` zwischen `text_only`, `storyboard_reference` und `keyframe_conditioned` differenzieren.
+- `takes.json`, `state.json` und `result.json` persistieren jetzt `selected_keyframe_usage`, `render_mode_counts` und `fallback_reasons`.
+- Die kleinste saubere Aussenbruecke im aktuellen Pod-Stack ist eine duenne lokale FastAPI-Integration ueber der bereits laufenden `app.main`, nicht ein neuer separater CLI- oder API-Stack.
+- Phase 4A fuehrt `POST /agent-core/run` und `GET /agent-core/jobs/{job_id}` als minimalen externen Vertrag ein.
+- `/agent-runs` ist jetzt statisch gemountet; dadurch koennen `state.json`, `result.json` und `final.mp4` per URL referenziert werden, ohne den Core umzubauen.
+- Die Phase-4A-Bridge startet den bestehenden `VideoAgent` synchron und fuehrt bewusst noch kein Queue-, Auth- oder Multi-User-Management ein.
+- Phase 4B fuehrt `POST /agent-core/jobs` als bevorzugten produktiven n8n-Submit-Pfad ein; `POST /agent-core/run` bleibt nur als synchroner Dev-/Test-Pfad bestehen.
+- Die Phase-4B-Bridge ist bewusst nur ein kleiner in-process Background-Runner mit Polling ueber `GET /agent-core/jobs/{job_id}`, keine durable Queue und kein restart-sicheres Worker-System.
+- Der Async-Statusvertrag verwendet `accepted`, `queued`, `running`, `done` und `failed`; Detailphasen kommen zusaetzlich ueber `current_phase` bzw. `result.final_phase`.
+- Phase 4C fuehrt fuer n8n explizite Polling-Hinweise ein: `is_terminal`, `should_poll`, `retry_after_sec`, `artifacts_ready`, `final_mp4_ready`, `result_json_ready`, `status_summary` und `public_refs`.
+- `public_refs` ist der n8n-freundliche Teilvertrag fuer externe URLs; `refs` bleibt der vollstaendige Vertrag mit lokalen Pfaden plus URLs.
+- `/workspace/codex` existiert im aktuellen Workspace jetzt real als Symlink auf `/workspace/Upscaler/codex`.
+- Phase 5A fuehrt eine Director-/Brain-Schicht vor der bisherigen Varianten-/Storyboard-/Take-Planung ein.
+- `director_output.json` ist ab Phase 5A ein eigenes Artefakt pro Job.
+- `ProductionPlan` enthaelt jetzt optional `director_output`; `ScenePlan` enthaelt `scene_intent` und `prompt_build_metadata`.
+- `VariationPlan` und `TakePlan` dokumentieren jetzt `creative_intent` und `prompt_build_metadata`.
+- Der neue `prompt_builder` erzeugt staerkere Opening-Shots, kompaktere Stil-/Kamera-Hinweise und konsistentere Varianten, ohne in Wortwuesten zu kippen.
+- Der neue `llm_adapter` erwartet einen echten lokalen OpenAI-kompatiblen Director-Endpunkt; ohne konfigurierten und erreichbaren Dienst faellt der Planner ehrlich auf `rule_based_fallback` zurueck.
+- Phase 5B nutzt fuer den echten lokalen Director-LLM-Pfad bewusst `llama.cpp` + GGUF statt einen grossen neuen Serving-Stack.
+- Wegen nur rund `33G` freiem Speicher im Pod ist ein GGUF-Pfad fuer das Director-Modell deutlich praktikabler als ein voller Safetensor-/Transformers-Download.
+- Der reale lokale Director-Serve liegt jetzt unter:
+  - Binary: `/workspace/tools/llama.cpp/build/bin/llama-server`
+  - Modellpfad: `/workspace/models/director/qwen3.6-35b-a3b/gguf/Qwen_Qwen3.6-35B-A3B-Q4_K_M.gguf`
+- Das produktive lokale Profil fuer den Director heisst `qwen36_llama_cpp_local`.
+- Der Director-Adapter fragt fuer `llama.cpp` bewusst einen kleineren `scene_map`-JSON-Vertrag ab und normalisiert diesen danach in den bestehenden `DirectorOutput`-Vertrag.
+- Der Director-Adapter extrahiert JSON fuer den lokalen Qwen-Pfad jetzt defensiv auch dann, wenn das Modell vor dem JSON noch Begruendungstext oder `<think>`-Fragmente ausgibt.
+- `DirectorOutput` dokumentiert jetzt explizit `llm_active`, `llm_provider`, `llm_model` und `llm_endpoint`.
+- `result.json` dokumentiert den aktiven Director-LLM-Pfad jetzt ebenfalls explizit.
+- Das verifizierte koexistenzfaehige Pod-Profil fuer Director + LTX ist aktuell `-ngl 8 -c 2048 --reasoning off --no-warmup`.
+- `init.sh` ist fuer den Director-Pfad jetzt idempotent: vorhandenes GGUF wird wiederverwendet, fehlendes GGUF wird geladen, optional kann der lokale Serve-Prozess gestartet werden.
+- `init.sh` loescht vor dem Director-Setup alte `director_llm_model_ready`- und `director_llm_server_ready`-Flags, damit ein frueher Erfolg keinen falschen aktuellen Ready-Zustand signalisiert.
+- Der reale verifizierte Modell-Download fuer den Director lief ueber `bartowski/Qwen_Qwen3.6-35B-A3B-GGUF`.
+- Der zuerst vermutete Dateiname ohne `Qwen_`-Praefix existierte nicht; der reale Dateiname ist `Qwen_Qwen3.6-35B-A3B-Q4_K_M.gguf`.
+- Echter erfolgreicher Phase-5B-Run:
+  - `phase5b-qwen-live-1776506522`
+  - `director_mode=llm_augmented`
+  - `final.mp4` erfolgreich erzeugt
+- `result.json` zeigt dort real `director_llm_active=true`, Provider `llama_cpp_local` und Modell `Qwen_Qwen3.6-35B-A3B-Q4_K_M.gguf`
+- Die `320x256` aus dem Qwen-Live-Run waren bewusst als kleine Custom-Aufloesung fuer den Verifikationsjob gesetzt; sie sind kein neuer Render-Default.
+- Der Default fuer `JobInput.resolution` bleibt `standard`; Landscape mappt weiter auf `1216x704`.
+- `app/agent_core_api.py` war im Workspace real fehlend, obwohl Doku und Tests ihn erwarteten; er wurde in dieser Session wiederhergestellt.
+- `failed` darf im Polling-Vertrag sichtbar sein, bevor `result.json` fertig geschrieben ist; in diesem Fall bleibt `is_terminal=false` und `should_poll=true`, bis der Failure-Vertrag wirklich bereit ist.
+- `final_mp4_ready` bedeutet nutzbarer finaler Output fuer Caller, nicht nur dass irgendwo lokal eine MP4-Datei liegt; Fehljobs exponieren deshalb keinen `final_mp4`-Public-Link.
+- Der produktive `uvicorn app.main:app` auf Port `8000` laeuft im Pod ohne Auto-Reload; Router- oder App-Aenderungen in `app/main.py` bzw. `app/agent_core_api.py` werden erst nach einem manuellen FastAPI-Neustart live.
+- Fuer die Aussenverifikation der Phase-4A-Bridge zaehlt der echte Live-Server auf `127.0.0.1:8000` bzw. `https://mvwg65x59mc01e-8000.proxy.runpod.net`, nicht nur ein separater Test-`uvicorn` auf einem Nebenport.
+- Beim Polling gegen `state.json` und `result.json` koennen kurzzeitig unvollstaendige JSON-Writes auftreten; der Statuspfad muss solche Momente defensiv abfedern statt hart zu scheitern.
+- Erfolgreiche Take-Videos werden in den Job-Workspace unter `scenes/<scene_id>/takes/` gespiegelt, auch wenn das Backend seine Originaldateien extern unter `/workspace/jobs` schreibt.
+- Die finale Assembly arbeitet ab Phase 2B nur noch mit den selektierten Takes.
+- Die finale Assembly darf ab Phase 2C nur noch mit validierten selektierten Takes arbeiten.
+- Jeder Take dokumentiert jetzt `review_status`, `validation`, `attempt_number` und optional Retry-Metadaten.
+- Jeder Take dokumentiert jetzt auch `variation_id`, `variation_index`, Shot-Hinweise und den variantenbezogenen Prompt.
+- `scene_plan.json` und `takes.json` dokumentieren jetzt auch die ausgewaehlte Variation pro Szene.
+- `takes.json`, `state.json` und `ResultSummary.metadata` dokumentieren jetzt auch `technical_score`, `creative_score`, `selection_reason` und `selected_by_rule`.
+- `storyboard_plan.json` dokumentiert jetzt Storyboard-Konfiguration, Keyframe-Kandidaten und selektierte Keyframes pro Szene.
+- Selektierte Keyframes werden auch in `takes.json`, `state.json` und `ResultSummary.metadata` gespiegelt.
+- Der technische Guard prueft mindestens Dateiexistenz, Dateigroesse, `ffprobe`, Decode-Faehigkeit, erwartete Aufloesung, FPS und plausible Dauer.
+- Der Bild-Guard fuer Storyboard prueft mindestens Dateiexistenz, Dateigroesse, Bildoeffnung und erwartete Aufloesung.
+- Retry-Regeln bleiben bewusst klein: pro Szene nur ein kleines begrenztes Zusatzbudget fuer technisch abgelehnte Takes.
+- Die kreative Auswahl darf nur auf technisch validen Kandidaten arbeiten; technische Validitaet bleibt harte Voraussetzung.
+- Die aktuelle kreative Heuristik bevorzugt u. a. Opening-Establishing, grobe Szenenziel-Passung und Abwechslung gegenueber der vorher selektierten Szene.
+- Z-Image ist fuer Phase 3A der kleinste produktive Bildpfad im vorhandenen Pod-Stack: echte PNGs, lokale FastAPI, kein neuer Backend-Zweig.
+- Phase 3A reichte selektierte Keyframes zunaechst nur als Kontext an den Video-Flow weiter; ab Phase 3B existiert jetzt ein produktiver First-Frame-Keyframe-Vertrag im bestehenden `ti2vid`-Pfad.
+- Phase 3B nutzt selektierte Keyframes jetzt produktiv fuer First-Frame-Conditioning, aber noch nicht fuer Multi-Keyframe-Interpolation, Retake oder einen separaten Keyframe-Interpolations-Backend-Vertrag.
+- Commit-wuerdig sind primaer `agent_core/`, `tests/`, `examples/`, `.gitignore` und der kanonische Projekt-Memory unter `/workspace/codex`.
+- Laufzeit- und Artefaktordner wie `agent_runs/`, `exports/`, `jobs/`, `status/`, `venvs/`, Checkpoints und lokale Pod-Logs sollen nicht Teil eines normalen Code-Commits sein.
+- Der Single-Flow bleibt als `single_scene`-Fallback explizit erhalten.
+- Rohe LTX2-MP4s koennen bereits einen Audio-Stream enthalten; der Assembler soll fuer Phase 1 trotzdem immer die eigene Voice-Spur bevorzugen.
+- Wenn kein nutzbares Voice-Artefakt vorliegt, soll `final.mp4` trotzdem als Kopie des Render-Videos entstehen statt den Job unnoetig scheitern zu lassen.
+- Der LTX2-Adapter darf `num_frames` nicht noch einmal aus einer gerundeten Plan-Dauer neu berechnen; sonst driftet der Dauervertrag.
+- Fuer verifizierte Phase-1-Runs liegt das reale Delta zwischen Plan und Video nach dem Fix bei etwa `0.001s`.
+
+## Wiederkehrende Stolperfallen
+- Pfadkonflikt zwischen `/workspace/Codex` und `/workspace/codex`.
+- Paketunterschiede zwischen Root-Python und `qwen3-tts`-Venv.
+- Readiness-Flags bedeuten nicht automatisch, dass ein neuer Agent-Core existiert.
+- Vorhandene HTTP-Endpunkte koennen fuer Recon hilfreich sein, sollen aber den neuen Core nicht definieren.
+- Tests sollten Fake-Adapter oder kleine HTTP-Fakes nutzen, damit der Core verifiziert werden kann, ohne echte Modelljobs auszufuehren.
+- Ein echter lokaler Director-Endpoint kann bereits produktiv laufen, aber fuer gleichzeitigen LTX2-Betrieb muss das GPU-Profil klein gehalten werden.
+- Ein erfolgreicher TTS-Lauf bedeutet nicht automatisch, dass `a2vid` mit derselben Audio-Datei stabil funktioniert.
+- Der Randfall `Voice laenger als Video` ist im regulaeren Agent-Pfad absichtlich schwer erreichbar, weil der Planner das inzwischen verhindert; fuer reale Validierung muss er daher gezielt auf Assembler-Ebene mit echten Artefakten provoziert werden.
+- Bei Multi-Segment-Jobs kann durch MP4-Concat noch ein kleines Timing-Delta gegenueber der geplanten Szenensumme entstehen; im realen Lauf `real-phase2a-multiscene-1` lag es bei etwa `0.023s`.
+- Ein Mehrfach-Take-Run kann alle Takes erfolgreich und technisch valide beenden; Phase 2C faellt dann nur noch als Tie-Break auf den ersten erfolgreichen validen Take zurueck.
+- Ein Mehrvarianten-Run kann mehrere technisch valide kreative Kandidaten erzeugen; Phase 2E loest diese jetzt erst regelbasiert kreativ auf und faellt nur bei echtem Gleichstand weiterhin auf den ersten technisch gleichwertigen validen Kandidaten zurueck.
+- Ein Storyboard-Run kann echte PNG-Artefakte liefern, ohne den Video-Pfad umzubauen; der aktuelle Ausbaupunkt ist spaeter die echte Nutzung dieser Keyframes fuer Video-Steuerung.
+- Ein Phase-3B-Run kann technisch erfolgreich sein, auch wenn `video_mode=keyframe_conditioned` angefordert wurde, aber kein selektierter Keyframe verfuegbar ist; dann muss der Core ehrlich auf `storyboard_reference` oder `text_only` zurueckfallen und das explizit persistieren.
+- Ein Phase-4A-, 4B- oder 4C-Bridge-Failure soll nach moeglichst demselben Persistenzvertrag aussehen wie ein normaler Core-Run: `result.json` bleibt die kanonische Failure-Quelle, waehrend Request-Validierungsfehler schon auf HTTP-Ebene als `422` scheitern duerfen.

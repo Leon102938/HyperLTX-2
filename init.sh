@@ -13,6 +13,10 @@ fi
 
 sed -i 's/\r$//' /workspace/tools.config 2>/dev/null || true
 source /workspace/tools.config 2>/dev/null || true
+if [ -f /workspace/config/director_llm.env ]; then
+  sed -i 's/\r$//' /workspace/config/director_llm.env 2>/dev/null || true
+  source /workspace/config/director_llm.env 2>/dev/null || true
+fi
 
 export PATH="/usr/local/bin:/root/.local/bin:/usr/local/cuda/bin:/usr/bin:/bin:$PATH"
 
@@ -76,9 +80,19 @@ ACE_STEP_ROOT="/workspace/ACE-Step-1.5"
 ACE_STEP_CKPT_DIR="$ACE_STEP_ROOT/checkpoints"
 ACE_STEP_READY_FLAG="/workspace/status/ace_step_ready"
 ACE_STEP_ENV_FLAG="/workspace/status/ace_step_env_ready"
+DIRECTOR_LLM_MODEL_DIR="${DIRECTOR_LLM_MODEL_DIR:-/workspace/models/director/qwen3.6-35b-a3b/gguf}"
+DIRECTOR_LLM_MODEL_FILE="${DIRECTOR_LLM_MODEL_FILE:-Qwen_Qwen3.6-35B-A3B-Q4_K_M.gguf}"
+DIRECTOR_LLM_MODEL_PATH="${DIRECTOR_LLM_MODEL_PATH:-$DIRECTOR_LLM_MODEL_DIR/$DIRECTOR_LLM_MODEL_FILE}"
+DIRECTOR_LLM_AUTO_SETUP="${DIRECTOR_LLM_AUTO_SETUP:-on}"
+DIRECTOR_LLM_AUTO_START="${DIRECTOR_LLM_AUTO_START:-off}"
+DIRECTOR_LLM_MODEL_READY_FLAG="/workspace/status/director_llm_model_ready"
+DIRECTOR_LLM_SERVER_READY_FLAG="/workspace/status/director_llm_server_ready"
+DIRECTOR_LLM_SETUP_FAILED_FLAG="/workspace/status/director_llm_setup_failed"
 mkdir -p "$MODELS_DIR/ltx-2.3" "$MODELS_DIR/gemma-3" "$LORA_DIR"
 mkdir -p "$QWEN_MODELS_DIR"
 mkdir -p "$ACE_STEP_CKPT_DIR"
+mkdir -p "$DIRECTOR_LLM_MODEL_DIR"
+mkdir -p /workspace/scripts
 
 # ----------------------------------------------------
 # 4. Qwen3-TTS / Shared Runtime Sektion
@@ -288,7 +302,50 @@ PY
 fi
 
 # ----------------------------------------------------
-# 8. LoRA Sektion
+# 8. Director-LLM Sektion
+# ----------------------------------------------------
+if [ "$DIRECTOR_LLM_AUTO_SETUP" = "on" ]; then
+  echo "[director-llm] Ensuring local Qwen3.6 Director model..."
+  rm -f "$DIRECTOR_LLM_MODEL_READY_FLAG"
+  rm -f "$DIRECTOR_LLM_SERVER_READY_FLAG"
+  rm -f "$DIRECTOR_LLM_SETUP_FAILED_FLAG"
+
+  if [ -f "/workspace/scripts/download_director_model.py" ]; then
+    if python3 /workspace/scripts/download_director_model.py; then
+      if [ -f "$DIRECTOR_LLM_MODEL_PATH" ]; then
+        touch "$DIRECTOR_LLM_MODEL_READY_FLAG"
+        echo "[director-llm] Model ready at $DIRECTOR_LLM_MODEL_PATH"
+      else
+        echo "[director-llm] ERROR: download script completed without expected model file $DIRECTOR_LLM_MODEL_PATH"
+        touch "$DIRECTOR_LLM_SETUP_FAILED_FLAG"
+      fi
+    else
+      echo "[director-llm] ERROR: model download/preparation failed."
+      touch "$DIRECTOR_LLM_SETUP_FAILED_FLAG"
+    fi
+  else
+    echo "[director-llm] WARN: /workspace/scripts/download_director_model.py missing; skipping Director model setup."
+    touch "$DIRECTOR_LLM_SETUP_FAILED_FLAG"
+  fi
+
+  if [ "$DIRECTOR_LLM_AUTO_START" = "on" ] && [ -f "$DIRECTOR_LLM_MODEL_PATH" ]; then
+    if [ -x "/workspace/scripts/serve_director_llm.sh" ]; then
+      if DIRECTOR_LLM_DAEMON=1 /workspace/scripts/serve_director_llm.sh; then
+        touch "$DIRECTOR_LLM_SERVER_READY_FLAG"
+        echo "[director-llm] Local Director server is ready."
+      else
+        echo "[director-llm] ERROR: local Director server failed to start."
+        touch "$DIRECTOR_LLM_SETUP_FAILED_FLAG"
+      fi
+    else
+      echo "[director-llm] WARN: /workspace/scripts/serve_director_llm.sh missing or not executable; skipping auto-start."
+      touch "$DIRECTOR_LLM_SETUP_FAILED_FLAG"
+    fi
+  fi
+fi
+
+# ----------------------------------------------------
+# 9. LoRA Sektion
 # ----------------------------------------------------
 echo "📥 Prüfe LoRA Downloads..."
 
@@ -305,17 +362,20 @@ echo "📥 Prüfe LoRA Downloads..."
   hf_download_file "MachineDelusions/LTX-2_Image2Video_Adapter_LoRa" "LTX-2-Image2Vid-Adapter.safetensors" "$LORA_DIR"
 
 # ----------------------------------------------------
-# 9. Abschluss
+# 10. Abschluss
 # ----------------------------------------------------
 chmod -R 777 "$MODELS_DIR" || true
 chmod -R 777 "$QWEN_MODELS_DIR" || true
 chmod -R 777 "$QWEN_VENV" || true
 chmod -R 777 "$ACE_STEP_CKPT_DIR" || true
+chmod -R 777 "/workspace/models/director" || true
+chmod +x /workspace/scripts/*.sh 2>/dev/null || true
+chmod +x /workspace/scripts/*.py 2>/dev/null || true
 echo "🏁 init.sh erfolgreich beendet."
 touch /workspace/status/init_done
 
 # ----------------------------------------------------
-# 10. Optional: Real-ESRGAN AI Installer (nach init_done)
+# 11. Optional: Real-ESRGAN AI Installer (nach init_done)
 # ----------------------------------------------------
 if [ "${UPSCALER_INSTALL:-off}" = "on" ]; then
   UPSCALER_INSTALLER="/workspace/upscaler_installer_minimal/install_realesrgan_ai_pod.sh"

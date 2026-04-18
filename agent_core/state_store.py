@@ -17,6 +17,7 @@ class StateStore:
         mapping = {
             "input": self.job_dir(job_id) / "input_job.json",
             "plan": self.job_dir(job_id) / "plan.json",
+            "director_output": self.job_dir(job_id) / "director_output.json",
             "scene_plan": self.job_dir(job_id) / "scene_plan.json",
             "storyboard_plan": self.job_dir(job_id) / "storyboard_plan.json",
             "takes": self.job_dir(job_id) / "takes.json",
@@ -129,12 +130,55 @@ class StateStore:
         self.save_state(state)
         return path
 
+    def save_director_output(self, state: JobState, plan: ProductionPlan) -> Path | None:
+        if plan.director_output is None:
+            return None
+        payload = {
+            "job_id": plan.job_id,
+            "director_mode": plan.director_output.mode,
+            "director_llm_active": plan.director_output.llm_active,
+            "director_llm_provider": plan.director_output.llm_provider,
+            "director_llm_model": plan.director_output.llm_model,
+            "director_llm_endpoint": plan.director_output.llm_endpoint,
+            "director_fallback_reason": plan.director_output.fallback_reason,
+            "director_output": plan.director_output.model_dump(mode="json"),
+            "style_lock": plan.director_output.style_lock.model_dump(mode="json"),
+            "prompt_guidance": plan.director_output.prompt_guidance.model_dump(mode="json"),
+            "llm": {
+                "active": plan.director_output.llm_active,
+                "provider": plan.director_output.llm_provider,
+                "model": plan.director_output.llm_model,
+                "endpoint": plan.director_output.llm_endpoint,
+                "fallback_reason": plan.director_output.fallback_reason,
+            },
+        }
+        path = write_json(self.path_for(state.job_id, "director_output"), payload)
+        self._upsert_artifact(
+            state,
+            ArtifactRef(
+                key="director_output_file",
+                kind="json",
+                path=str(path),
+                origin="agent_core",
+                exists=True,
+                metadata={
+                    "director_mode": plan.director_output.mode,
+                    "director_llm_active": plan.director_output.llm_active,
+                    "director_llm_model": plan.director_output.llm_model,
+                },
+            ),
+        )
+        self.save_state(state)
+        return path
+
     def save_scene_plan(self, state: JobState, plan: ProductionPlan) -> Path:
         payload = {
             "job_id": plan.job_id,
             "scene_count": len(plan.scenes),
             "segmentation_mode": plan.metadata.get("segmentation_mode", "single_scene"),
             "target_duration_sec": plan.target_duration_sec,
+            "director_output": plan.director_output.model_dump(mode="json") if plan.director_output else None,
+            "style_lock": plan.director_output.style_lock.model_dump(mode="json") if plan.director_output else None,
             "scenes": [scene.model_dump(mode="json") for scene in plan.scenes],
         }
         path = write_json(self.path_for(state.job_id, "scene_plan"), payload)

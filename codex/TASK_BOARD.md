@@ -1,0 +1,103 @@
+# TASK_BOARD.md
+
+## TODO
+- Character-/Voice-/World-Lock in spaeterem Phase-5A+-Schritt tiefer ausbauen
+- Director-Live-Validation fuer Multi-Scene-, Multi-Take- und Storyboard-Jobs gegen reale Backends erweitern
+- zweiten produktiven Backend-Pfad nur nach klarer Priorisierung waehlen
+- `a2vid` spaeter separat und gezielt wieder evaluieren
+- per-Keyframe-Conditioning-Tuning wie Staerke, Frame-Index oder spaetere Mehr-Keyframe-Strategien nur nach gezielter Realvalidierung ausbauen
+- Phase-4B-Bridge nur bei echtem Bedarf in Richtung dauerhafte Queue-, Restart- oder Worker-Persistenz erweitern
+- n8n-Arbeit bleibt bewusst spaeter; erst nach klarer Priorisierung wieder aufnehmen
+- vor dem naechsten grossen Ausbau einen sauberen Commit nur fuer Code, Tests und kanonische Doku schneiden
+- optional spaeter eine kleine Entlade-/Orchestrierungslogik fuer schwerere Director-Serve-Profile ergaenzen
+- optional spaeter das Qwen-Serve-Profil weiter auf Latenz gegenueber LTX-Koexistenz optimieren
+
+## IN PROGRESS
+- naechsten sinnvollen Schritt nach dem real verifizierten Qwen-Director-Pfad festlegen
+
+## BLOCKED
+- noch leer
+
+## DONE
+- Bootstrap- und Recon-Analyse durchgefuehrt
+- RunPod-Umgebung verifiziert
+- vorhandene lokale Modelle, Services und Wrapper dokumentiert
+- Projektgedaechtnis auf `/workspace/codex` kanonisiert
+- erste technische Bestandsaufnahme erstellt
+- `agent_core/` als neuer Phase-1-Kern gebaut
+- produktiver Minimal-Vertical-Slice `text/script -> optional qwen_tts -> ltx2 -> Resultat` implementiert
+- filesystem-basierter Job-State-Store implementiert
+- Planner-Regeln fuer Voice-Laenge implementiert
+- Smoke- und Planner-Tests implementiert und erfolgreich ausgefuehrt
+- echter End-to-End-Core-Lauf gegen reale Qwen-TTS- und LTX2-Backends erfolgreich verifiziert
+- reale Backend-Fixes fuer Aufloesung, Framezahl und Phase-1-Pipeline-Vertrag umgesetzt
+- Assembler auf finales MP4 mit gemuxter Voice erweitert
+- sauberer Fallback implementiert: ohne nutzbares Voice-Artefakt wird trotzdem `final.mp4` erzeugt
+- echter End-to-End-Mux-Lauf gegen reale Qwen-TTS- und LTX2-Backends erfolgreich verifiziert
+- Dauervertrag zwischen Planner, LTX2-Frame-Quantisierung, realem Video und finalem Muxing geschaerft
+- reale Randfaelle fuer Voice kuerzer, Voice laenger und kein Voice-Artefakt verifiziert
+- Phase 2A Scene-/Shot-Planung implementiert
+- `scene_plan.json` als neues Plan-Artefakt eingefuehrt
+- produktiver Multi-Segment-Flow mit Single-Flow-Fallback umgesetzt
+- echter Multi-Segment-Lauf gegen reales LTX2 erfolgreich verifiziert
+- Phase 2B Mehrfach-Takes pro Szene implementiert
+- `takes.json` als neues Take-Artefakt eingefuehrt
+- Auswahlregel `first_successful_take` implementiert
+- finale Assembly auf selektierte Takes umgestellt
+- echter Multi-Take-Lauf gegen reales LTX2 erfolgreich verifiziert
+- Phase 2C technischer Quality-Guard pro Take implementiert
+- `takes.json` und `state.json` um Guard-Status, Validation und Retry-Historie erweitert
+- Auswahlregel auf `quality_guarded_best_valid_take` geschaerft
+- begrenzte Retry-Regeln pro Szene implementiert
+- Assembler auf validierte selektierte Takes geschaerft
+- neue Tests fuer Quality-Guard, Auswahl, Retry und Persistenz implementiert und erfolgreich ausgefuehrt
+- echter Phase-2C-Lauf gegen reales LTX2 erfolgreich verifiziert
+- Phase 2D Shot-/Prompt-Variation-Engine pro Szene implementiert
+- `scene_plan.json`, `takes.json` und `state.json` um Varianten und Variantenzuordnung erweitert
+- Variationen und Multi-Take-Flow kompatibel gemacht
+- neue Tests fuer Variations-Erzeugung, Struktur, Flow-Kompatibilitaet und Persistenz implementiert und erfolgreich ausgefuehrt
+- echter Phase-2D-Lauf gegen reales LTX2 erfolgreich verifiziert
+- Phase 2E leichte kreative Varianten-/Take-Auswahl ueber dem technischen Vertrag implementiert
+- `takes.json`, `state.json` und Result-Metadaten um `technical_score`, `creative_score`, `selection_reason` und `selected_by_rule` erweitert
+- neue Tests fuer kreative Auswahlregeln, benachbarte Shot-Diversitaet, Tie-Break und Persistenz implementiert und erfolgreich ausgefuehrt
+- echter Phase-2E-Lauf gegen reales LTX2 erfolgreich verifiziert
+- Phase 3A optionale Storyboard-/Keyframe-Pipeline implementiert
+- produktiver Z-Image-Storyboard-Adapter ueber vorhandene FastAPI-Endpunkte integriert
+- `storyboard_plan.json` sowie Keyframe-Kandidaten und selektierte Keyframes im Job-Workspace eingefuehrt
+- neue Tests fuer Storyboard-Planung, Persistenz, Fallback und Keyframe-Auswahl implementiert und erfolgreich ausgefuehrt
+- echter Phase-3A-Lauf gegen reales Z-Image erfolgreich verifiziert
+- Phase 3B produktive First-Frame-Keyframe-Nutzung im bestehenden `ti2vid`-Pfad implementiert
+- Planner, Agent und LTX2-Adapter um `video_mode`, `render_mode`, `fallback_strategy` und `selected_keyframe_usage` erweitert
+- neue Tests fuer keyframe-aware Planung, Fallback, Persistenz und Multi-Scene-/Multi-Take-Kompatibilitaet implementiert und erfolgreich ausgefuehrt
+- echter Phase-3B-Lauf gegen reale Z-Image- und LTX2-Backends erfolgreich verifiziert
+- Phase 4A minimale Worker-/n8n-Bridge ueber die bestehende FastAPI implementiert
+- neuer Router mit `POST /agent-core/run` und `GET /agent-core/jobs/{job_id}` baut auf dem bestehenden `VideoAgent` auf
+- `agent_runs` als statischer Referenzpfad fuer `state.json`, `result.json` und `final.mp4` gemountet
+- neue Tests fuer Job-Entry, Erfolg, Fehler und Ergebnisvertrag implementiert und erfolgreich ausgefuehrt
+- echter lokaler HTTP-Lauf der Bridge mit `bridge-demo-job` erfolgreich verifiziert
+- Phase 4B minimale Async-/Polling-Bridge ueber denselben Router implementiert
+- neuer produktiver Submit-Pfad `POST /agent-core/jobs` startet Jobs nicht blockierend im Hintergrund
+- Statusvertrag von `GET /agent-core/jobs/{job_id}` auf `accepted/queued/running/done/failed` geschaerft
+- neue Tests fuer Async-Annahme, Polling-Erfolg und Fehlerpfad implementiert und erfolgreich ausgefuehrt
+- echter Live-Lauf der Async-Bridge mit `phase4b-live-verify-1776343554` erfolgreich verifiziert
+- Phase 4C kleine n8n-friendly Polling-Haertung implementiert
+- Polling-Antworten liefern jetzt `status_summary`, `is_terminal`, `should_poll`, `retry_after_sec`, `artifacts_ready`, `final_mp4_ready`, `result_json_ready` und `public_refs`
+- Fehljobs exponieren keinen irrefuehrenden finalen Public-Link mehr
+- bestehende Tests bleiben gruen und der echte Live-Response-Check mit `phase4c-live-verify-1776348348` ist erfolgreich
+- Phase 5A Director-/Brain-Schicht implementiert
+- neue Module `director.py`, `llm_adapter.py`, `prompt_builder.py` und `style_memory.py` eingefuehrt
+- `director_output.json` sowie `director_output`, `style_lock`, `scene_intent`, `creative_intent` und `prompt_build_metadata` in den bestehenden Planner-/Take-/Result-Vertrag integriert
+- ehrlicher lokaler LLM-Adapter fuer OpenAI-kompatible Director-Dienste gebaut; ohne produktiven Dienst faellt der Core klar auf `rule_based_fallback` zurueck
+- `app/agent_core_api.py` wiederhergestellt und `app.main` wieder mit `/agent-core` und `/agent-runs` kompatibel gemacht
+- neue Tests fuer Director-Struktur, Fallback, Prompt-Building und Persistenz implementiert und erfolgreich ausgefuehrt
+- echter Phase-5A-Live-Fallback-Lauf `phase5a-live-fallback-1776420785` erfolgreich verifiziert
+- Phase 5B echter lokaler Director-LLM-Pfad implementiert
+- `llama.cpp` mit CUDA im Pod gebaut und produktiv als lokaler OpenAI-kompatibler Director-Serve verifiziert
+- Qwen3.6-35B-A3B `Q4_K_M` als lokales Director-Modell mit sauberem Modellpfad und Serve-Skripten integriert
+- Director-LLM-Nutzung, aktives Modell und Endpoint jetzt explizit persistiert
+- `result.json` spiegelt jetzt den aktiven Director-LLM-Pfad ebenfalls explizit
+- `init.sh` auf idempotente Director-Modell-Vorbereitung mit optionalem Auto-Start erweitert
+- kompletter Testlauf aktuell erfolgreich mit 48 gruene Tests
+- echter erfolgreicher Phase-5B-Live-Run `phase5b-qwen-live-1776506522` mit `director_mode=llm_augmented` verifiziert
+- `.gitignore` fuer Laufzeit-/Artefaktordner geschaerft
+- `HANDOFF.md` fuer die naechste Session angelegt

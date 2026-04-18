@@ -20,6 +20,7 @@ StepStatus = Literal["pending", "planned", "running", "succeeded", "skipped", "f
 BackendKind = Literal["voice", "video", "music", "storyboard"]
 VideoMode = Literal["auto", "text_only", "storyboard_reference", "keyframe_conditioned"]
 RenderMode = Literal["text_only", "storyboard_reference", "keyframe_conditioned"]
+DirectorMode = Literal["llm_augmented", "rule_based_fallback"]
 TakeReviewStatus = Literal["passed", "failed", "rejected", "selected"]
 TakeValidationStatus = Literal["passed", "failed", "rejected"]
 KeyframeReviewStatus = Literal["passed", "failed", "rejected", "selected"]
@@ -231,6 +232,8 @@ class VariationPlan(BaseModel):
     prompt_delta: str | None = None
     prompt_variant_text: str
     style_bias: str | None = None
+    creative_intent: str | None = None
+    prompt_build_metadata: dict[str, Any] = Field(default_factory=dict)
     notes: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
@@ -323,6 +326,8 @@ class TakePlan(BaseModel):
     framing_hint: str | None = None
     prompt_variant_text: str | None = None
     style_bias: str | None = None
+    creative_intent: str | None = None
+    prompt_build_metadata: dict[str, Any] = Field(default_factory=dict)
     seed: int
     prompt_text: str
     video_mode: VideoMode = "auto"
@@ -384,6 +389,8 @@ class TakeResultRecord(BaseModel):
     framing_hint: str | None = None
     prompt_variant_text: str | None = None
     style_bias: str | None = None
+    creative_intent: str | None = None
+    prompt_build_metadata: dict[str, Any] = Field(default_factory=dict)
     seed: int
     video_mode: VideoMode = "auto"
     render_mode: RenderMode = "text_only"
@@ -423,6 +430,92 @@ class KeyframeCandidateResult(BaseModel):
     error: str | None = None
 
 
+class VariationDirective(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    label: str
+    shot_type: str
+    intent: str
+    camera_style: str | None = None
+    camera_motion: str | None = None
+    framing_hint: str
+    prompt_delta: str
+    style_bias: str | None = None
+
+
+class CreativeBrief(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    concept: str
+    hook: str
+    audience_intent: str
+    narrative_arc: str
+    emotional_arc: str
+    payoff: str
+    notes: list[str] = Field(default_factory=list)
+
+
+class StyleLock(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    style_label: str
+    visual_identity: str
+    color_palette: str
+    lighting: str
+    camera_language: str
+    texture: str
+    pacing: str
+    keep: list[str] = Field(default_factory=list)
+    avoid: list[str] = Field(default_factory=list)
+
+
+class PromptGuidance(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    opening_shot: str
+    visual_language: list[str] = Field(default_factory=list)
+    camera_cues: list[str] = Field(default_factory=list)
+    prompt_rules: list[str] = Field(default_factory=list)
+    negative_cues: list[str] = Field(default_factory=list)
+
+
+class SceneIntent(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scene_id: str
+    scene_index: int
+    narrative_role: str
+    hook_focus: str
+    emotional_beat: str
+    visual_goal: str
+    shot_intent: str
+    opening_emphasis: bool = False
+    transition_note: str | None = None
+    prompt_keywords: list[str] = Field(default_factory=list)
+    variation_directives: list[VariationDirective] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+
+
+class DirectorOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mode: DirectorMode
+    active: bool = True
+    fallback_reason: str | None = None
+    llm_active: bool = False
+    llm_provider: str | None = None
+    llm_model: str | None = None
+    llm_endpoint: str | None = None
+    creative_brief: CreativeBrief
+    style_lock: StyleLock
+    prompt_guidance: PromptGuidance
+    scene_intents: list[SceneIntent] = Field(default_factory=list)
+    character_notes: list[str] = Field(default_factory=list)
+    voice_notes: list[str] = Field(default_factory=list)
+    world_notes: list[str] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class ScenePlan(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -436,6 +529,8 @@ class ScenePlan(BaseModel):
     narration_text: str | None = None
     narration_start_sec: float | None = None
     narration_end_sec: float | None = None
+    scene_intent: SceneIntent | None = None
+    prompt_build_metadata: dict[str, Any] = Field(default_factory=dict)
     video_mode: VideoMode = "auto"
     render_mode: RenderMode = "text_only"
     fallback_strategy: str = "text_only"
@@ -464,6 +559,7 @@ class ProductionPlan(BaseModel):
     estimated_voice_duration_sec: float | None = None
     actual_voice_duration_sec: float | None = None
     prompt_text: str
+    director_output: DirectorOutput | None = None
     warnings: list[str] = Field(default_factory=list)
     rules_applied: list[str] = Field(default_factory=list)
     scenes: list[ScenePlan] = Field(default_factory=list)
