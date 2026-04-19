@@ -84,10 +84,18 @@
   - `scripts/serve_director_llm.sh` ist jetzt mit kleinen Health-/Retry-/PID-Guards gehaertet; `scripts/ensure_llama_cpp.sh` sichert bei Restore-Rebuilds jetzt auch `ninja`
   - neuer echter Restore-Live-Run mit aktivem Director-LLM: `restore-startup-check-20260418`
   - neuer echter Defaultpfad-Live-Run mit aktivem Director-LLM: `director-stability-check-20260418`
+  - der kleine Restore-Folgecheck `restore-health-check-20260419` lief real mit `llm_augmented`, scheiterte danach aber in LTX2 an einem CUDA-OOM
+  - `DIRECTOR_LLM_N_GPU_LAYERS` wurde danach minimal von `8` auf `0` gesenkt, um den Director-GPU-Footprint fuer den produktiven Kombipfad weiter zu entlasten
+  - neuer echter Minimal-Live-Run nach diesem GPU-Fix: `director-gpu-fix-check-20260419`
+  - neuer echter kleiner Voice-Live-Run auf dem produktiven API-Pfad: `voice-stability-check-20260419`
+  - dieser Voice-Run lief real mit `director_mode=llm_augmented`, `director_llm_active=true`, Qwen-TTS, LTX2 und erzeugte erfolgreich `final.mp4`
+  - fuer schnelle lokale Manual-Checks gibt es jetzt zusaetzlich `scripts/agent_core_cli.py` als kleinen Submit-/Polling-Wrapper ueber denselben produktiven API-Vertrag
+  - `tests/test_director_layer.py` isoliert `DIRECTOR_LLM_*` jetzt bewusst im Test-Setup, damit lokale Pod-Defaults die Fallback-Tests nicht kippen
 
 ## Was real verifiziert wurde
 - Tests:
   - `python -m unittest discover -s /workspace/tests -v` -> 49 Tests gruen
+  - `python3 -m unittest tests.test_director_layer -v` -> 7 Tests gruen nach Env-Isolation der Director-Tests
 - Kleiner Real-Check:
   - `python3 /workspace/scripts/download_director_model.py` meldet bei vorhandenem Modell sauber nur `present: ...` und startet keinen unnötigen Neu-Download
 - Reale Core-/Backend-Laeufe:
@@ -111,6 +119,8 @@
   - `phase5b-qwen-live-1776506522` via direktem `VideoAgent()`-Run mit aktivem Qwen3.6-Director; `result.json` und `director_output.json` dokumentieren dort den aktiven Director-LLM-Pfad
   - `restore-startup-check-20260418` via `POST http://127.0.0.1:8000/agent-core/jobs` mit erneut real verifiziertem `llm_augmented`-Director-Pfad
   - `director-stability-check-20260418` via `POST http://127.0.0.1:8000/agent-core/jobs` mit Director-Defaults aus `config/director_llm.env` und erneut real verifiziertem `llm_augmented`-Pfad
+  - `director-gpu-fix-check-20260419` via `POST http://127.0.0.1:8000/agent-core/jobs` mit erneut real verifiziertem `llm_augmented`-Director-Pfad und erfolgreichem kleinem LTX2-Render nach dem GPU-Fix
+  - `voice-stability-check-20260419` via `POST http://127.0.0.1:8000/agent-core/jobs` mit aktivem Voice-Pfad, `llm_augmented`, erfolgreichem Qwen-TTS-Render, erfolgreichem LTX2-Video und finalem muxed `final.mp4`
 - Reale lokale Backends verifiziert:
   - Qwen TTS ueber vorhandene FastAPI-Endpunkte
   - LTX2 `ti2vid` ueber vorhandene FastAPI-Endpunkte
@@ -155,7 +165,7 @@
 
 ## Was als Naechstes sinnvoll ist
 - Kleinster sinnvoller naechster Schritt:
-  - den jetzigen Qwen3.6-Director-Pfad ueber weitere reale Multi-Scene-/Storyboard-Laeufe validieren und danach Character-/Voice-/World-Lock ausbauen
+  - den jetzigen Qwen3.6-Director-Pfad ueber einen kleinen Multi-Scene- oder Storyboard-Live-Run weiter validieren; der enge Single-Scene-Voice-Kernpfad und ein lokales Manual-Test-CLI sind jetzt real vorhanden
 - Alternative:
   - Character-/Voice-/World-Lock kontrolliert ausbauen
 - Nicht sinnvoll als naechster Schritt:

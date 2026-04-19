@@ -57,6 +57,7 @@
 | `/workspace/scripts/serve_director_llm.sh` | `productive` | Produktiver lokaler Director-Serve inkl. Build-/Health-/Readiness-Guards. |
 | `/workspace/scripts/check_director_llm.py` | `productive` | Produktiver Smoke-Check fuer `/v1/models` und `/v1/chat/completions`. |
 | `/workspace/scripts/ensure_llama_cpp.sh` | `productive` | Baut `llama.cpp` bei Bedarf real neu. |
+| `/workspace/scripts/agent_core_cli.py` | `productive` | Kleines lokales Manual-Test-CLI auf dem bestehenden `POST /agent-core/jobs` plus Polling-Vertrag. |
 | `/workspace/config/director_llm.env` | `productive` | Reale lokale Default-Konfiguration fuer den Director-Pfad. |
 | `/workspace/config/director_llm.env.example` | `partial` | Vorlage, nicht selbst der aktive Laufzeitpfad. |
 | `/workspace/codex` | `productive` | Kanonisches Projektgedaechtnis und Doku-Quelle. |

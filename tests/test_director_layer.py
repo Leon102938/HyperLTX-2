@@ -1,4 +1,5 @@
 import json
+import os
 import threading
 import subprocess
 import tempfile
@@ -6,10 +7,12 @@ import unittest
 import wave
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from unittest.mock import patch
 
 from agent_core.agent import VideoAgent
 from agent_core.backend_registry import BackendRegistry
 from agent_core.director import DirectorEngine
+from agent_core.llm_adapter import LocalOpenAICompatibleLLMAdapter
 from agent_core.planner import ProductionPlanner
 from agent_core.schemas import ArtifactRef, BackendCapabilities, ExecutionResult, JobInput, ProductionPlan
 from agent_core.state_store import StateStore
@@ -110,12 +113,17 @@ class FakeDirectorLLM:
 
 class DirectorLayerTest(unittest.TestCase):
     def setUp(self) -> None:
+        sanitized_env = {key: value for key, value in os.environ.items() if not key.startswith("DIRECTOR_LLM_")}
+        self._env_patch = patch.dict(os.environ, sanitized_env, clear=True)
+        self._env_patch.start()
+        self.addCleanup(self._env_patch.stop)
         self.registry = BackendRegistry([DirectorVoiceAdapter(), DirectorVideoAdapter()])
 
     def _start_fake_openai_server(
         self,
         *,
         include_reasoning_prefix: bool = False,
+        wrap_scene_map: str | None = None,
     ) -> tuple[ThreadingHTTPServer, threading.Thread, str]:
         class Handler(BaseHTTPRequestHandler):
             def do_POST(self):  # noqa: N802
@@ -132,6 +140,14 @@ class DirectorLayerTest(unittest.TestCase):
                 else:
                     first_scene_id = next(iter(response_payload))
                     response_payload[first_scene_id]["visual_concept"] = "Server-backed director hook and a stronger opening reveal."
+                    if "prompt_seed" in response_payload[first_scene_id]:
+                        response_payload[first_scene_id]["prompt_seed"] = "clean hero seed for the opening shot"
+                        response_payload[first_scene_id]["camera_movement"] = "slow push-in"
+                    else:
+                        response_payload[first_scene_id]["lighting_design"] = "moody practical reflections with controlled contrast"
+                        response_payload[first_scene_id]["color_grading"] = "cool neon blues with warm metallic highlights"
+                if wrap_scene_map:
+                    response_payload = {wrap_scene_map: response_payload}
                 content = json.dumps(response_payload)
                 if include_reasoning_prefix:
                     content = f"<think>hidden scratchpad</think>\n{content}"
@@ -286,6 +302,69 @@ class DirectorLayerTest(unittest.TestCase):
             thread.join(timeout=5)
             server.server_close()
 
+    def test_local_llama_cpp_profile_can_parse_wrapped_scene_map_payload(self) -> None:
+        server, thread, base_url = self._start_fake_openai_server(wrap_scene_map="scene_map")
+        try:
+            planner = ProductionPlanner(self.registry)
+            job = JobInput(
+                idea="A wrapped scene_map payload should still normalize into llm_augmented output.",
+                script="The opening reveals the car. The middle beat circles the subject. The ending lands on a hero frame.",
+                duration_sec=10,
+                use_voice=False,
+                resolution="draft",
+                orientation="landscape",
+                metadata={
+                    "director_llm": {
+                        "profile": "qwen36_llama_cpp_local",
+                        "base_url": base_url,
+                        "enabled": True,
+                    }
+                },
+            )
+
+            plan = planner.build_plan(job)
+
+            self.assertEqual(plan.director_output.mode, "llm_augmented")
+            self.assertTrue(plan.director_output.llm_active)
+            self.assertEqual(plan.director_output.llm_provider, "llama_cpp_local")
+            self.assertTrue(plan.director_output.scene_intents[0].hook_focus)
+            self.assertGreaterEqual(len(plan.director_output.scene_intents[0].variation_directives), 1)
+        finally:
+            server.shutdown()
+            thread.join(timeout=5)
+            server.server_close()
+
+    def test_local_llama_cpp_compact_scene_map_keeps_rule_based_variation_structure(self) -> None:
+        server, thread, base_url = self._start_fake_openai_server()
+        try:
+            planner = ProductionPlanner(self.registry)
+            job = JobInput(
+                idea="A compact local scene map should still normalize into the existing planner contract.",
+                script="The opening reveals the car. The middle beat circles the subject. The ending lands on a hero frame.",
+                duration_sec=10,
+                use_voice=False,
+                resolution="draft",
+                orientation="landscape",
+                metadata={
+                    "director_llm": {
+                        "profile": "qwen36_llama_cpp_local",
+                        "base_url": base_url,
+                        "enabled": True,
+                    }
+                },
+            )
+
+            plan = planner.build_plan(job)
+
+            self.assertEqual(plan.director_output.mode, "llm_augmented")
+            self.assertTrue(plan.director_output.llm_active)
+            self.assertIn("clean hero seed", plan.director_output.scene_intents[0].hook_focus.lower())
+            self.assertGreaterEqual(len(plan.director_output.scene_intents[0].variation_directives), 1)
+        finally:
+            server.shutdown()
+            thread.join(timeout=5)
+            server.server_close()
+
     def test_local_llama_cpp_profile_falls_back_when_server_is_unreachable(self) -> None:
         planner = ProductionPlanner(self.registry)
         job = JobInput(
@@ -313,6 +392,37 @@ class DirectorLayerTest(unittest.TestCase):
         self.assertEqual(plan.director_output.llm_provider, "llama_cpp_local")
         self.assertEqual(plan.director_output.llm_model, "Qwen_Qwen3.6-35B-A3B-Q4_K_M.gguf")
         self.assertTrue(plan.director_output.fallback_reason.startswith("director_llm_request_failed:"))
+
+    def test_local_llama_cpp_budget_is_capped_for_small_context(self) -> None:
+        single_scene = LocalOpenAICompatibleLLMAdapter._effective_max_tokens(
+            provider="llama_cpp_local",
+            requested_max_tokens=640,
+            ctx_tokens=2048,
+            scene_count=1,
+            system_prompt="system prompt",
+            user_prompt="x" * 400,
+        )
+        self.assertEqual(single_scene, 256)
+
+        multi_scene = LocalOpenAICompatibleLLMAdapter._effective_max_tokens(
+            provider="llama_cpp_local",
+            requested_max_tokens=640,
+            ctx_tokens=2048,
+            scene_count=3,
+            system_prompt="system prompt",
+            user_prompt="x" * 400,
+        )
+        self.assertEqual(multi_scene, 576)
+
+        constrained = LocalOpenAICompatibleLLMAdapter._effective_max_tokens(
+            provider="llama_cpp_local",
+            requested_max_tokens=640,
+            ctx_tokens=512,
+            scene_count=3,
+            system_prompt="system prompt",
+            user_prompt="x" * 1200,
+        )
+        self.assertEqual(constrained, 32)
 
     def test_agent_persists_director_output_and_prompt_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

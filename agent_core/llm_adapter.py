@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -18,6 +19,11 @@ QWEN36_LLAMA_CPP_LOCAL_PROFILES = {
 }
 QWEN36_LLAMA_CPP_DEFAULT_BASE_URL = "http://127.0.0.1:8011"
 QWEN36_LLAMA_CPP_DEFAULT_MODEL = "Qwen_Qwen3.6-35B-A3B-Q4_K_M.gguf"
+LOCAL_SCENE_MAP_CONTEXT_RESERVE_TOKENS = 256
+LOCAL_SCENE_MAP_BASE_COMPLETION_TOKENS = 96
+LOCAL_SCENE_MAP_PER_SCENE_TOKENS = 160
+LOCAL_SCENE_MAP_HARD_MAX_TOKENS = 640
+LOCAL_SCENE_MAP_MIN_TOKENS = 32
 
 
 class LocalOpenAICompatibleLLMAdapter:
@@ -50,7 +56,14 @@ class LocalOpenAICompatibleLLMAdapter:
         payload = {
             "model": settings["model"],
             "temperature": settings["temperature"],
-            "max_tokens": settings["max_tokens"],
+            "max_tokens": self._effective_max_tokens(
+                provider=str(settings.get("provider") or ""),
+                requested_max_tokens=int(settings["max_tokens"]),
+                ctx_tokens=int(settings.get("ctx_tokens") or 0),
+                scene_count=len(scene_beats),
+                system_prompt=self._system_prompt(),
+                user_prompt=prompt,
+            ),
             "response_format": response_format,
             "messages": [
                 {"role": "system", "content": self._system_prompt()},
@@ -174,6 +187,12 @@ class LocalOpenAICompatibleLLMAdapter:
             or os.environ.get("DIRECTOR_LLM_TIMEOUT_SEC")
             or (240.0 if local_profile_selected else 45.0)
         )
+        ctx_tokens = int(
+            merged.get("ctx")
+            or merged.get("context_tokens")
+            or os.environ.get("DIRECTOR_LLM_CTX")
+            or (2048 if local_profile_selected else 0)
+        )
         max_tokens = int(
             merged.get("max_tokens")
             or os.environ.get("DIRECTOR_LLM_MAX_TOKENS")
@@ -212,6 +231,7 @@ class LocalOpenAICompatibleLLMAdapter:
             "provider": provider,
             "temperature": temperature,
             "timeout_sec": timeout_sec,
+            "ctx_tokens": ctx_tokens,
             "max_tokens": max_tokens,
         }
 
@@ -250,45 +270,45 @@ class LocalOpenAICompatibleLLMAdapter:
 
     @staticmethod
     def _build_local_scene_map_prompt(*, job: JobInput, scene_beats: list[dict[str, Any]], fallback_output: DirectorOutput) -> str:
+        compact_scene_beats: list[dict[str, Any]] = []
         compact_shape: dict[str, Any] = {}
-        intents_by_scene = {intent.scene_id: intent for intent in fallback_output.scene_intents}
         for scene_beat in scene_beats:
             scene_id = str(scene_beat["scene_id"])
-            intent = intents_by_scene.get(scene_id)
-            variation_shape = []
-            for directive in (intent.variation_directives if intent else []):
-                variation_shape.append(
-                    {
-                        "variation_id": directive.label,
-                        "prompt": f"{directive.intent}; {directive.prompt_delta}",
-                        "camera_movement": directive.camera_motion or directive.camera_style or "restrained movement",
-                    }
-                )
+            compact_scene_beats.append(
+                {
+                    "scene_id": scene_id,
+                    "scene_index": int(scene_beat["scene_index"]),
+                    "beat": LocalOpenAICompatibleLLMAdapter._compact_text(
+                        str(scene_beat.get("description") or scene_beat.get("scene_text") or ""),
+                        limit=72,
+                    ),
+                }
+            )
             compact_shape[scene_id] = {
-                "visual_concept": str(scene_beat.get("description") or scene_beat.get("scene_text") or ""),
-                "lighting_design": fallback_output.style_lock.lighting,
-                "color_grading": fallback_output.style_lock.color_palette,
-                "variations": variation_shape,
+                "visual_concept": "",
+                "prompt_seed": "",
+                "camera_movement": "",
             }
 
         return json.dumps(
             {
                 "job": {
-                    "idea": job.idea,
-                    "script": job.script,
-                    "style": job.style,
-                    "orientation": job.orientation,
-                    "resolution": job.resolution,
-                    "extra_llm_instruction": job.extra_llm_instruction,
+                    "idea": LocalOpenAICompatibleLLMAdapter._compact_text(job.idea, limit=72),
+                    "script": LocalOpenAICompatibleLLMAdapter._compact_text(job.script, limit=120),
+                    "style": LocalOpenAICompatibleLLMAdapter._compact_text(job.style, limit=72),
+                    "extra_llm_instruction": LocalOpenAICompatibleLLMAdapter._compact_text(
+                        job.extra_llm_instruction,
+                        limit=48,
+                    ),
                 },
-                "scene_beats": scene_beats,
+                "scene_beats": compact_scene_beats,
                 "required_json_shape": compact_shape,
                 "instructions": [
                     "Return only one JSON object.",
                     "Use every scene_id as a top-level key.",
-                    "For each scene include visual_concept, lighting_design, color_grading, and variations.",
-                    "Each variation needs variation_id, prompt, and camera_movement.",
-                    "Keep variation prompts concise, cinematic, and production-minded.",
+                    "Do not wrap the response in scene_map or scenes unless you preserve the same scene_id mapping.",
+                    "Each scene object must contain exactly visual_concept, prompt_seed, and camera_movement.",
+                    "Keep every value short, concrete, and production-minded.",
                 ],
             },
             ensure_ascii=False,
@@ -323,3 +343,47 @@ class LocalOpenAICompatibleLLMAdapter:
                 if isinstance(parsed, dict):
                     return parsed
             raise
+
+    @staticmethod
+    def _compact_text(value: str, *, limit: int) -> str:
+        normalized = " ".join(str(value).split()).strip()
+        if len(normalized) <= limit:
+            return normalized
+        return normalized[: max(0, limit - 3)].rstrip() + "..."
+
+    @staticmethod
+    def _effective_max_tokens(
+        *,
+        provider: str,
+        requested_max_tokens: int,
+        ctx_tokens: int,
+        scene_count: int,
+        system_prompt: str,
+        user_prompt: str,
+    ) -> int:
+        if provider != "llama_cpp_local" or ctx_tokens <= 0:
+            return requested_max_tokens
+
+        desired_completion_tokens = min(
+            requested_max_tokens,
+            LOCAL_SCENE_MAP_BASE_COMPLETION_TOKENS + max(1, scene_count) * LOCAL_SCENE_MAP_PER_SCENE_TOKENS,
+        )
+        prompt_tokens = LocalOpenAICompatibleLLMAdapter._estimate_token_count(system_prompt, user_prompt) + 64
+        remaining_tokens = max(
+            LOCAL_SCENE_MAP_MIN_TOKENS,
+            ctx_tokens - prompt_tokens - LOCAL_SCENE_MAP_CONTEXT_RESERVE_TOKENS,
+        )
+        ratio_cap = max(LOCAL_SCENE_MAP_MIN_TOKENS, int(ctx_tokens * 0.4))
+        return max(
+            LOCAL_SCENE_MAP_MIN_TOKENS,
+            min(desired_completion_tokens, remaining_tokens, ratio_cap, LOCAL_SCENE_MAP_HARD_MAX_TOKENS),
+        )
+
+    @staticmethod
+    def _estimate_token_count(*texts: str) -> int:
+        compact = " ".join(" ".join(str(text).split()).strip() for text in texts if text).strip()
+        if not compact:
+            return 0
+        char_estimate = math.ceil(len(compact) / 4)
+        word_estimate = len(compact.split())
+        return max(char_estimate, word_estimate)

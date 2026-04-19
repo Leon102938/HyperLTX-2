@@ -63,6 +63,7 @@ Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E, 3A, 3B, 4A, 4B und
   - `/workspace/tests/test_agent_core_api.py`
 - Verifiziert ausgefuehrte Tests:
   - `python -m unittest discover -s /workspace/tests -v` -> aktuell erfolgreich, 49 Tests gruen
+  - `python3 -m unittest tests.test_director_layer -v` -> aktuell erfolgreich, 7 Tests gruen
 - Verifiziert implementierte Phase 5A:
   - `ProductionPlan` enthaelt jetzt optional `director_output`
   - pro Job wird jetzt `director_output.json` als eigenes Artefakt geschrieben
@@ -76,6 +77,7 @@ Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E, 3A, 3B, 4A, 4B und
   - `llama.cpp` wurde im Pod real mit CUDA gebaut; produktives Binary: `/workspace/tools/llama.cpp/build/bin/llama-server`
   - das Director-Modell laeuft real als GGUF unter `/workspace/models/director/qwen3.6-35b-a3b/gguf/Qwen_Qwen3.6-35B-A3B-Q4_K_M.gguf`
   - `scripts/download_director_model.py`, `scripts/serve_director_llm.sh` und `scripts/check_director_llm.py` bilden jetzt den minimalen produktiven Download-/Serve-/Smoke-Pfad
+  - `scripts/agent_core_cli.py` bietet jetzt einen kleinen lokalen Manual-Testpfad ueber denselben produktiven `POST /agent-core/jobs` plus Polling-Vertrag
   - `config/director_llm.env.example` dokumentiert die noetigen Umgebungsvariablen
   - `llm_adapter.py` kennt jetzt das echte lokale Profil `qwen36_llama_cpp_local`
   - `DirectorOutput` persistiert jetzt explizit `llm_active`, `llm_provider`, `llm_model` und `llm_endpoint`
@@ -88,12 +90,14 @@ Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E, 3A, 3B, 4A, 4B und
   - reales Modell: `Qwen_Qwen3.6-35B-A3B-Q4_K_M.gguf`
   - reale Download-Quelle im verifizierten Pod-Lauf: `bartowski/Qwen_Qwen3.6-35B-A3B-GGUF`
   - der zuerst vermutete Dateiname ohne `Qwen_`-Praefix war falsch und fuehrte zu einem echten `404`; danach wurde auf den real existierenden Dateinamen umgestellt
-  - verifiziert koexistenzfaehiges Pod-Profil: `-ngl 8 -c 2048 --reasoning off --no-warmup`
+  - der kleine Restore-Folgecheck `restore-health-check-20260419` lief zwar real mit `llm_augmented`, scheiterte danach aber im LTX2-Schritt an CUDA-OOM, waehrend der Director noch mit `-ngl 8` lief
+  - aktuell verifiziert koexistenzfaehiges Restore-Profil fuer den kleinen Director+LTX2-Kombipfad: `DIRECTOR_LLM_N_GPU_LAYERS=0`, `-c 2048`, `--reasoning off`, `--no-warmup`
   - nach dem Pod-Restore fehlte das Build-Artefakt `/workspace/tools/llama.cpp/build/bin/llama-server` zunaechst wieder; der Serve-Pfad konnte aber ueber `scripts/serve_director_llm.sh` den gesamten `llama.cpp`-Build real neu aufbauen und danach erfolgreich starten
   - `config/director_llm.env` ist jetzt im aktuellen Workspace vorhanden und dokumentiert den real genutzten lokalen Standardpfad fuer Host, Port, Modell, Timeouts und Readiness-Checks
   - `scripts/check_director_llm.py` war nach dem Restore real unbenutzbar wegen eines Syntaxfehlers; der Smoke-Check ist jetzt repariert und antwortet wieder produktiv
   - `scripts/check_director_llm.py` nutzt jetzt konfigurierbare Timeouts und kleine Retries; `scripts/serve_director_llm.sh` nutzt jetzt konfigurierbare Health-Checks, Readiness-Retries, PID-Bereinigung und fruehes Fail-fast bei vorzeitig beendetem `llama-server`
   - `scripts/ensure_llama_cpp.sh` installiert bei Bedarf jetzt auch `ninja`, damit ein Rebuild nach Restore nicht still an einem fehlenden Generator scheitert
+  - `tests/test_director_layer.py` isoliert `DIRECTOR_LLM_*` jetzt explizit im Test-Setup, damit lokale Director-Defaults keine env-sensitiven Fallback-Assertions verfaelschen
 - Verifizierter echter Phase-5A-Fallback-Lauf:
   - Job-ID: `phase5a-live-fallback-1776420785`
   - Director-Modus: `rule_based_fallback`
@@ -133,6 +137,33 @@ Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E, 3A, 3B, 4A, 4B und
   - die Director-Konfiguration kam dabei aus `config/director_llm.env`, nicht aus einem Job-spezifischen Override
   - finales MP4: `/workspace/agent_runs/director-stability-check-20260418/final.mp4`
   - verifizierte Finaldaten via `ffprobe`: `320x256`, `24 fps`, Gesamtdauer `4.042s`
+- Verifizierter echter Minimal-Live-Run nach Director-GPU-Fix:
+  - Job-ID: `director-gpu-fix-check-20260419`
+  - Einstieg: `POST http://127.0.0.1:8000/agent-core/jobs`
+  - Director-Modus: `llm_augmented`
+  - Director-LLM aktiv: `true`
+  - Director-Endpoint: `http://127.0.0.1:8011/v1/chat/completions`
+  - Director lief dabei mit `DIRECTOR_LLM_N_GPU_LAYERS=0`
+  - Video-Backend: reales `ltx-2.3` ueber den bestehenden FastAPI-Pfad
+  - finales MP4: `/workspace/agent_runs/director-gpu-fix-check-20260419/final.mp4`
+  - Video-Output: `/workspace/jobs/director-gpu-fix-check-20260419_video/director-gpu-fix-check-20260419_video.mp4`
+  - verifizierte Finaldaten laut `result.json`: `planned_duration_sec=4.041`, `actual_video_duration_sec=4.042`, `actual_final_duration_sec=4.042`
+  - Einordnung: der fruehere kleine Restore-OOM scheint damit fuer diesen Minimalpfad durch den Director-GPU-Fix behoben
+- Verifizierter echter Voice-Live-Run auf dem stabilen Kernpfad:
+  - Job-ID: `voice-stability-check-20260419`
+  - Einstieg: `POST http://127.0.0.1:8000/agent-core/jobs`
+  - Director-Modus: `llm_augmented`
+  - Director-LLM aktiv: `true`
+  - Voice-Backend: reales `qwen_tts`
+  - Video-Backend: reales `ltx-2.3`
+  - Assembly: Voice wurde erfolgreich in das finale MP4 gemuxt
+  - finales MP4: `/workspace/agent_runs/voice-stability-check-20260419/final.mp4`
+  - Artefakte: `result.json`, `state.json` und `final.mp4` liegen vollstaendig im Job-Workspace vor
+- Verifizierter lokaler CLI-Manual-Testpfad:
+  - Datei: `/workspace/scripts/agent_core_cli.py`
+  - Scope: Job submitten, Polling anzeigen und finale Artefaktpfade/-URLs ausgeben
+  - Verifikation dieses Schritts: `python3 -m py_compile /workspace/scripts/agent_core_cli.py` und `python3 /workspace/scripts/agent_core_cli.py --help`
+  - wichtiger Hinweis: fuer die CLI-Verifikation wurde bewusst kein zweiter echter Live-Job gestartet; der reale Produktivnachweis bleibt der Voice-Run `voice-stability-check-20260419`
 - Verifizierter echter End-to-End-Core-Lauf:
   - Job-ID: `real-e2e-check-3`
   - Input: kurzer Real-Job mit Voice aktiv, `768x448`, `num_inference_steps=8`

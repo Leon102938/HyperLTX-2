@@ -37,6 +37,7 @@
 - Der Planner kann pro Szene optional via `metadata.scene_video_modes` zwischen `text_only`, `storyboard_reference` und `keyframe_conditioned` differenzieren.
 - `takes.json`, `state.json` und `result.json` persistieren jetzt `selected_keyframe_usage`, `render_mode_counts` und `fallback_reasons`.
 - Die kleinste saubere Aussenbruecke im aktuellen Pod-Stack ist eine duenne lokale FastAPI-Integration ueber der bereits laufenden `app.main`, nicht ein neuer separater CLI- oder API-Stack.
+- Ein lokales Manual-Test-CLI darf nur ein duennes Werkzeug ueber dem bestehenden `POST /agent-core/jobs` plus `GET /agent-core/jobs/{job_id}`-Vertrag sein und keinen zweiten Jobvertrag einfuehren.
 - Phase 4A fuehrt `POST /agent-core/run` und `GET /agent-core/jobs/{job_id}` als minimalen externen Vertrag ein.
 - `/agent-runs` ist jetzt statisch gemountet; dadurch koennen `state.json`, `result.json` und `final.mp4` per URL referenziert werden, ohne den Core umzubauen.
 - Die Phase-4A-Bridge startet den bestehenden `VideoAgent` synchron und fuehrt bewusst noch kein Queue-, Auth- oder Multi-User-Management ein.
@@ -65,7 +66,10 @@
 - Der Director-Adapter extrahiert JSON fuer den lokalen Qwen-Pfad jetzt defensiv auch dann, wenn das Modell vor dem JSON noch Begruendungstext oder `<think>`-Fragmente ausgibt.
 - `DirectorOutput` dokumentiert jetzt explizit `llm_active`, `llm_provider`, `llm_model` und `llm_endpoint`.
 - `result.json` dokumentiert den aktiven Director-LLM-Pfad jetzt ebenfalls explizit.
-- Das verifizierte koexistenzfaehige Pod-Profil fuer Director + LTX ist aktuell `-ngl 8 -c 2048 --reasoning off --no-warmup`.
+- Der kleine Restore-Folgecheck `restore-health-check-20260419` lief real mit `llm_augmented`, scheiterte danach aber in LTX2 an CUDA-OOM, waehrend der Director noch mit `-ngl 8` lief.
+- Das aktuell erneut real verifizierte Minimal-Koexistenzprofil fuer Director + kleinem LTX2-Live-Run ist `DIRECTOR_LLM_N_GPU_LAYERS=0` bei `c=2048`, `reasoning off` und `--no-warmup`.
+- Der kleine echte Live-Run `director-gpu-fix-check-20260419` lief danach erneut mit `llm_augmented` und erzeugte wieder erfolgreich `final.mp4`; fuer diesen Minimalpfad scheint der fruehere Restore-OOM damit behoben.
+- Der kleine echte Voice-Live-Run `voice-stability-check-20260419` lief danach ebenfalls erfolgreich mit `llm_augmented`, Qwen-TTS, LTX2 und finalem muxed `final.mp4`.
 - `scripts/serve_director_llm.sh` startet den lokalen Director jetzt standardmaessig mit `--no-warmup`, damit der reale Startpfad zum dokumentierten Koexistenzprofil passt.
 - `scripts/serve_director_llm.sh` nutzt jetzt kleine operative Guards fuer konfigurierbare Health-Timeouts, Readiness-Retries, stale PID-Bereinigung und fruehes Scheitern bei vorzeitig beendetem `llama-server`.
 - `scripts/check_director_llm.py` ist Teil des realen Smoke-Pfads und muss syntaktisch lauffaehig bleiben; ein Syntaxfehler dort blockiert sonst die ehrliche Director-Verifikation trotz laufendem Server.
@@ -120,6 +124,7 @@
 - Readiness-Flags bedeuten nicht automatisch, dass ein neuer Agent-Core existiert.
 - Vorhandene HTTP-Endpunkte koennen fuer Recon hilfreich sein, sollen aber den neuen Core nicht definieren.
 - Tests sollten Fake-Adapter oder kleine HTTP-Fakes nutzen, damit der Core verifiziert werden kann, ohne echte Modelljobs auszufuehren.
+- `tests/test_director_layer.py` muss `DIRECTOR_LLM_*` im Testprozess bewusst isolieren; sonst kippen Fallback-Assertions je nach lokalem Pod-Director-Zustand.
 - Ein echter lokaler Director-Endpoint kann bereits produktiv laufen, aber fuer gleichzeitigen LTX2-Betrieb muss das GPU-Profil klein gehalten werden.
 - Ein erfolgreicher TTS-Lauf bedeutet nicht automatisch, dass `a2vid` mit derselben Audio-Datei stabil funktioniert.
 - Der Randfall `Voice laenger als Video` ist im regulaeren Agent-Pfad absichtlich schwer erreichbar, weil der Planner das inzwischen verhindert; fuer reale Validierung muss er daher gezielt auf Assembler-Ebene mit echten Artefakten provoziert werden.

@@ -38,6 +38,8 @@ DIRECTOR_LLM_REASONING_BUDGET="${DIRECTOR_LLM_REASONING_BUDGET:-0}"
 DIRECTOR_LLM_DAEMON="${DIRECTOR_LLM_DAEMON:-0}"
 DIRECTOR_LLM_PID_FILE="${DIRECTOR_LLM_PID_FILE:-$ROOT_DIR/status/director_llm_server.pid}"
 DIRECTOR_LLM_LOG_FILE="${DIRECTOR_LLM_LOG_FILE:-$ROOT_DIR/status/director_llm_server.log}"
+DIRECTOR_LLM_SERVER_READY_FLAG="${DIRECTOR_LLM_SERVER_READY_FLAG:-$ROOT_DIR/status/director_llm_server_ready}"
+DIRECTOR_LLM_SETUP_FAILED_FLAG="${DIRECTOR_LLM_SETUP_FAILED_FLAG:-$ROOT_DIR/status/director_llm_setup_failed}"
 DIRECTOR_LLM_HEALTH_TIMEOUT_SEC="${DIRECTOR_LLM_HEALTH_TIMEOUT_SEC:-10}"
 DIRECTOR_LLM_READY_RETRIES="${DIRECTOR_LLM_READY_RETRIES:-90}"
 DIRECTOR_LLM_READY_SLEEP_SEC="${DIRECTOR_LLM_READY_SLEEP_SEC:-2}"
@@ -79,6 +81,8 @@ if [ -f "$DIRECTOR_LLM_PID_FILE" ]; then
 fi
 
 if health_check; then
+  touch "$DIRECTOR_LLM_SERVER_READY_FLAG"
+  rm -f "$DIRECTOR_LLM_SETUP_FAILED_FLAG"
   echo "[director-llm] server already reachable at $health_url"
   exit 0
 fi
@@ -114,10 +118,14 @@ if [ "$DIRECTOR_LLM_DAEMON" = "1" ]; then
   echo "$server_pid" > "$DIRECTOR_LLM_PID_FILE"
   for _ in $(seq 1 "$DIRECTOR_LLM_READY_RETRIES"); do
     if health_check; then
+      touch "$DIRECTOR_LLM_SERVER_READY_FLAG"
+      rm -f "$DIRECTOR_LLM_SETUP_FAILED_FLAG"
       echo "[director-llm] server ready at $DIRECTOR_LLM_BASE_URL"
       exit 0
     fi
     if ! kill -0 "$server_pid" >/dev/null 2>&1; then
+      rm -f "$DIRECTOR_LLM_SERVER_READY_FLAG"
+      touch "$DIRECTOR_LLM_SETUP_FAILED_FLAG"
       rm -f "$DIRECTOR_LLM_PID_FILE"
       echo "[director-llm] ERROR: llama-server exited before readiness, see $DIRECTOR_LLM_LOG_FILE" >&2
       exit 1
@@ -127,6 +135,8 @@ if [ "$DIRECTOR_LLM_DAEMON" = "1" ]; then
   if kill -0 "$server_pid" >/dev/null 2>&1; then
     kill "$server_pid" >/dev/null 2>&1 || true
   fi
+  rm -f "$DIRECTOR_LLM_SERVER_READY_FLAG"
+  touch "$DIRECTOR_LLM_SETUP_FAILED_FLAG"
   rm -f "$DIRECTOR_LLM_PID_FILE"
   echo "[director-llm] ERROR: server did not become ready, see $DIRECTOR_LLM_LOG_FILE" >&2
   exit 1

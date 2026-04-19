@@ -198,6 +198,7 @@ class DirectorEngine:
         scene_beats: list[dict[str, Any]],
         base_style_lock: StyleLock,
     ) -> dict[str, Any]:
+        payload = self._unwrap_scene_map_payload(payload, scene_beats)
         scene_records: list[dict[str, Any]] = []
         visual_language: list[str] = []
         camera_cues: list[str] = []
@@ -207,24 +208,30 @@ class DirectorEngine:
             loose_scene = payload.get(scene_id)
             if not isinstance(loose_scene, dict):
                 continue
+            normalized_variations = self._scene_variations_from_loose_scene(loose_scene)
             scene_records.append(
                 {
                     "scene_id": scene_id,
                     "scene_index": int(scene_beat["scene_index"]),
                     "visual_concept": str(loose_scene.get("visual_concept") or ""),
+                    "prompt_seed": str(loose_scene.get("prompt_seed") or loose_scene.get("prompt") or ""),
+                    "camera_movement": str(
+                        loose_scene.get("camera_movement") or loose_scene.get("camera_motion") or ""
+                    ),
                     "lighting_design": str(loose_scene.get("lighting_design") or ""),
                     "color_grading": str(loose_scene.get("color_grading") or ""),
-                    "variations": loose_scene.get("variations") or [],
+                    "variations": normalized_variations,
                 }
             )
             for value in (
                 loose_scene.get("visual_concept"),
+                loose_scene.get("prompt_seed"),
                 loose_scene.get("lighting_design"),
                 loose_scene.get("color_grading"),
             ):
                 if value:
                     visual_language.append(self._short_text(str(value), 96))
-            for variation in loose_scene.get("variations") or []:
+            for variation in normalized_variations:
                 movement = variation.get("camera_movement")
                 if movement:
                     camera_cues.append(self._short_text(str(movement), 64))
@@ -299,6 +306,37 @@ class DirectorEngine:
                 "llm_payload_shape": "scene_map",
             },
         }
+
+    @staticmethod
+    def _unwrap_scene_map_payload(payload: dict[str, Any], scene_beats: list[dict[str, Any]]) -> dict[str, Any]:
+        expected_scene_ids = {str(scene_beat["scene_id"]) for scene_beat in scene_beats}
+        if expected_scene_ids.intersection(payload.keys()):
+            return payload
+
+        for key in ("scene_map", "scenes", "scene_data"):
+            candidate = payload.get(key)
+            if isinstance(candidate, dict):
+                if expected_scene_ids.intersection(candidate.keys()):
+                    return candidate
+            if isinstance(candidate, list):
+                mapped: dict[str, Any] = {}
+                for item in candidate:
+                    if not isinstance(item, dict):
+                        continue
+                    scene_id = str(item.get("scene_id") or item.get("id") or "").strip()
+                    if scene_id:
+                        mapped[scene_id] = item
+                if expected_scene_ids.intersection(mapped.keys()):
+                    return mapped
+
+        return payload
+
+    @staticmethod
+    def _scene_variations_from_loose_scene(loose_scene: dict[str, Any]) -> list[dict[str, Any]]:
+        variations = loose_scene.get("variations")
+        if isinstance(variations, list) and variations:
+            return [variation for variation in variations if isinstance(variation, dict)]
+        return []
 
     def _coerce_scene_intent_from_loose_payload(
         self,
@@ -377,14 +415,14 @@ class DirectorEngine:
     def _first_variation_prompt(loose_scene: dict[str, Any]) -> str:
         variations = loose_scene.get("variations") or []
         if not variations:
-            return ""
+            return str(loose_scene.get("prompt_seed") or loose_scene.get("prompt") or "").strip()
         return str(variations[0].get("prompt") or "").strip()
 
     @staticmethod
     def _first_variation_camera(loose_scene: dict[str, Any]) -> str:
         variations = loose_scene.get("variations") or []
         if not variations:
-            return ""
+            return str(loose_scene.get("camera_movement") or loose_scene.get("camera_motion") or "").strip()
         return str(variations[0].get("camera_movement") or variations[0].get("camera_motion") or "").strip()
 
     @staticmethod
