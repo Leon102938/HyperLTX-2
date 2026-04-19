@@ -1,7 +1,20 @@
-# Bytecode
+# Python bytecode
 __pycache__/
 *.py[cod]
+
+# Shared libs allgemein ignorieren ...
 *.so
+
+# ... aber llama.cpp runtime explizit behalten
+!tools/
+!tools/llama.cpp/
+!tools/llama.cpp/build/
+!tools/llama.cpp/build/bin/
+!tools/llama.cpp/build/bin/**
+!tools/llama.cpp/build/bin/*.so
+!tools/llama.cpp/build/bin/*.so.*
+!tools/llama.cpp/build/bin/llama-server
+!tools/llama.cpp/build/bin/llama-cli
 
 # Jupyter
 *.ipynb
@@ -16,22 +29,60 @@ venv/
 .DS_Store
 Thumbs.db
 
-# Temp
+# Temp / runtime
 /workspace/tmp/
 workspace/tmp/
 *.pid
 .cache/
 init_download.log
+status/
+agent_runs/
+jobs/
+exports/
 
 # IDE
 .vscode/
 .idea/
 
-# Large outputs / generated files
+# Large generated outputs
 *.mp4
 
-# Optional: local models only if they should NOT be versioned
+# Local model payloads not for git
 weights/
 models/
 *.safetensors
 *.bin
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
