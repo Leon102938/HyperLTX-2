@@ -37,6 +37,47 @@ class ProductionPlanner:
     DEFAULT_KEYFRAME_FRAME_IDX = 0
     DEFAULT_KEYFRAME_STRENGTH = 1.0
     DEFAULT_KEYFRAME_CRF = 33
+    SOCIAL_TIP_DURATION_MAX_SEC = 35.0
+    SOCIAL_TIP_MARKERS = (
+        "tip",
+        "tips",
+        "habit",
+        "habits",
+        "routine",
+        "routines",
+        "morning",
+        "morgen",
+        "schritt",
+        "schritte",
+        "gewohn",
+        "focus",
+        "fokus",
+        "klarheit",
+        "productive",
+        "produktiv",
+        "mehrwert",
+        "before",
+        "start",
+    )
+    SOCIAL_TIP_AVOID_CUES = (
+        "paper",
+        "notebook",
+        "document",
+        "page",
+        "handwriting",
+        "writing",
+        "text on screen",
+        "labels",
+        "signs",
+        "posters",
+        "ui",
+        "app screen",
+        "monitor closeups",
+        "subtitles inside generated scene",
+        "book pages",
+        "sticky notes",
+        "printed notes",
+    )
 
     def __init__(
         self,
@@ -108,10 +149,20 @@ class ProductionPlanner:
         scene_count = self._determine_scene_count(job, target_duration, len(text_units))
         grouped_units = self._group_text_units(text_units, scene_count, fallback_text=job.idea or job.script or "visual beat")
         raw_scene_durations = self._allocate_scene_durations(grouped_units, target_duration)
+        scene_beats = self._build_scene_beats(grouped_units, raw_scene_durations)
         director_output = self.director.build_direction(
             job=job,
-            scene_beats=self._build_scene_beats(grouped_units, raw_scene_durations),
+            scene_beats=scene_beats,
         )
+        social_tip_visual_guard = self._is_social_tip_format(job, target_duration)
+        if social_tip_visual_guard:
+            director_output = self._apply_social_tip_visual_guard(
+                director_output=director_output,
+                scene_beats=scene_beats,
+            )
+            rules_applied.append(
+                "Social tip visual guard replaced text-prone literal props with model-robust daily-routine motifs."
+            )
         prompt_text = self.prompt_builder.build_global_prompt(job, director_output)
         rules_applied.append(f"Phase 5A director mode active: {director_output.mode}.")
         if director_output.mode == "llm_augmented":
@@ -184,8 +235,10 @@ class ProductionPlanner:
             warnings.append(
                 "video_mode=keyframe_conditioned requested, but the current stable video backend path does not expose verified keyframe image conditioning; planner falls back per scene."
             )
-        if job.use_music:
-            warnings.append("Music requested but skipped in Phase 1 because no music backend is active.")
+        if job.use_music and music_capability is None:
+            warnings.append("Music requested but skipped because no music backend is active.")
+        elif job.use_music and music_capability is not None:
+            rules_applied.append("Background music generation is enabled and will be mixed under the final narration track.")
 
         frame_rate = self.DEFAULT_FRAME_RATE
         steps = [
@@ -223,8 +276,15 @@ class ProductionPlanner:
                 name="music",
                 kind="music",
                 adapter_name=music_capability.name if music_capability else None,
-                enabled=False,
-                skip_reason="Music pipeline reserved for future phases.",
+                enabled=bool(job.use_music and music_capability),
+                params={
+                    "instrumental": True,
+                    "duration_sec": target_duration,
+                    "music_prompt": job.metadata.get("music_prompt"),
+                    "mix_strategy": "background_supportive_under_voice",
+                },
+                notes=["When enabled, music is generated as an instrumental support bed and mixed below voiceover."],
+                skip_reason=None if job.use_music and music_capability else "Music disabled in job input or no backend available.",
             ),
             ProductionStep(
                 name="video",
@@ -316,6 +376,7 @@ class ProductionPlanner:
                 "director_llm_endpoint": director_output.llm_endpoint,
                 "style_lock": director_output.style_lock.model_dump(mode="json"),
                 "prompt_guidance": director_output.prompt_guidance.model_dump(mode="json"),
+                "social_tip_visual_guard": social_tip_visual_guard,
                 "max_quality_retries_per_scene": max_quality_retries_per_scene,
                 "voice_padding_sec": self.VOICE_PADDING_SEC,
                 "voice_enabled": job.use_voice,
@@ -328,6 +389,146 @@ class ProductionPlanner:
         if pipeline_preference in {"fast", "balanced", "quality"}:
             return pipeline_preference
         return "balanced"
+
+    def _is_social_tip_format(self, job: JobInput, target_duration_sec: float) -> bool:
+        orientation = (job.orientation or "landscape").lower()
+        subtitle_mode = str(job.metadata.get("subtitle_mode", "off")).strip().lower()
+        text = f"{job.idea} {job.script}".lower()
+        has_social_finish = bool(job.use_storyboard or job.use_music or subtitle_mode in {"sidecar", "burn"})
+        has_advice_markers = any(marker in text for marker in self.SOCIAL_TIP_MARKERS)
+        return bool(
+            orientation == "portrait"
+            and job.use_voice
+            and target_duration_sec <= self.SOCIAL_TIP_DURATION_MAX_SEC
+            and has_social_finish
+            and has_advice_markers
+        )
+
+    def _apply_social_tip_visual_guard(
+        self,
+        *,
+        director_output: DirectorOutput,
+        scene_beats: list[dict[str, Any]],
+    ) -> DirectorOutput:
+        guarded = director_output.model_copy(deep=True)
+        guarded.style_lock.keep = self._merge_unique_texts(
+            list(guarded.style_lock.keep),
+            [
+                "clean unlabeled surfaces",
+                "window-lit daily routine",
+                "readable human action without text props",
+            ],
+        )
+        guarded.style_lock.avoid = self._merge_unique_texts(
+            list(guarded.style_lock.avoid),
+            list(self.SOCIAL_TIP_AVOID_CUES),
+        )
+        guarded.prompt_guidance.prompt_rules = self._merge_unique_texts(
+            list(guarded.prompt_guidance.prompt_rules),
+            [
+                "for short social tip videos, prefer daily routine b-roll over literal instruction props",
+                "avoid readable text surfaces, writing actions, and screen-led compositions",
+                "keep desks, tables, and hands in neutral non-writing actions",
+            ],
+        )
+        guarded.prompt_guidance.negative_cues = self._merge_unique_texts(
+            list(guarded.prompt_guidance.negative_cues),
+            list(self.SOCIAL_TIP_AVOID_CUES),
+        )
+        guarded.world_notes = self._merge_unique_texts(
+            list(guarded.world_notes),
+            ["Use model-robust daily routine imagery with no readable text-bearing props."],
+        )
+        guarded.creative_brief.notes = self._merge_unique_texts(
+            list(guarded.creative_brief.notes),
+            ["Social tip visual guard is active: avoid literal note-taking, pages, and screens."],
+        )
+        guarded.metadata["social_tip_visual_guard"] = True
+        guarded.metadata["social_tip_visual_guard_version"] = "v1"
+
+        total_scene_count = len(scene_beats)
+        scene_text_by_id = {str(scene_beat["scene_id"]): str(scene_beat.get("scene_text") or "") for scene_beat in scene_beats}
+        for scene_intent in guarded.scene_intents:
+            scene_text = scene_text_by_id.get(scene_intent.scene_id, "")
+            motif = self._social_tip_scene_motif(
+                role=scene_intent.narrative_role,
+                scene_text=scene_text,
+                scene_index=scene_intent.scene_index,
+                total_scene_count=total_scene_count,
+            )
+            scene_intent.hook_focus = str(motif["hook_focus"])
+            scene_intent.visual_goal = str(motif["visual_goal"])
+            scene_intent.shot_intent = str(motif["shot_intent"])
+            scene_intent.prompt_keywords = list(motif["keywords"])
+            scene_intent.notes.append(
+                "Social tip visual guard replaced text-prone literal props with a model-robust daily-routine motif."
+            )
+
+        if guarded.scene_intents:
+            guarded.prompt_guidance.opening_shot = guarded.scene_intents[0].hook_focus
+        return guarded
+
+    def _social_tip_scene_motif(
+        self,
+        *,
+        role: str,
+        scene_text: str,
+        scene_index: int,
+        total_scene_count: int,
+    ) -> dict[str, object]:
+        lowered = scene_text.lower()
+        if role == "opening_hook":
+            return {
+                "hook_focus": "person waking up in a tidy room, opening curtains, soft window light, gentle stretch, calm morning atmosphere",
+                "visual_goal": "show a clean morning reset through window light, tidy bedding, and one readable human action with no text-bearing props",
+                "shot_intent": "start with a broad readable wake-up moment, then guide the eye toward the curtains and the subject",
+                "keywords": ["waking", "curtains", "window", "stretching", "tidy", "morning"],
+            }
+        if any(token in lowered for token in {"wasser", "water", "drink", "glas", "glass", "handy", "phone", "nachrichten", "message", "screen"}):
+            return {
+                "hook_focus": "hands placing a phone face down beside a clear glass of water on a clean wooden table, natural window light, no visible screen content",
+                "visual_goal": "make the habit instantly legible with clean tabletop b-roll, water, and one neutral hand action without labels or notes",
+                "shot_intent": "favor a medium close everyday action shot with simple object choreography and no readable surfaces",
+                "keywords": ["phone", "water", "glass", "table", "window", "routine"],
+            }
+        if any(
+            token in lowered
+            for token in {"schreib", "write", "writing", "aufgabe", "task", "notiz", "note", "notebook", "page", "document", "papier", "paper", "book"}
+        ):
+            return {
+                "hook_focus": "person pausing at a tidy desk, phone face down, closed notebook, hand moving a mug, calm window light, no visible text surfaces",
+                "visual_goal": "convey focused intention through a calm desk reset and body language instead of literal writing or readable pages",
+                "shot_intent": "use a composed medium shot or gentle top-down angle on a tidy desk with closed props and non-writing hand movement",
+                "keywords": ["focus", "desk", "closed notebook", "window", "mug", "pause"],
+            }
+        if role == "final_payoff" or scene_index == total_scene_count:
+            return {
+                "hook_focus": "person by a bright window with tea or coffee, slow breathing, tidy room, serene morning light",
+                "visual_goal": "land on the clearest calm payoff through window light, relaxed posture, and one simple lifestyle prop without text",
+                "shot_intent": "resolve with a wide or hero composition that feels calm, open, and easy to read at a glance",
+                "keywords": ["window", "coffee", "calm", "payoff", "morning", "serene"],
+            }
+        return {
+            "hook_focus": "simple morning b-roll, tidy room, soft daylight, calm walking or kitchen routine, no visible text-bearing props",
+            "visual_goal": "keep the beat readable through robust daily-routine visuals and uncluttered compositions",
+            "shot_intent": "favor simple readable human movement and atmospheric b-roll over literal instruction props",
+            "keywords": ["routine", "tidy", "daylight", "walking", "kitchen", "calm"],
+        }
+
+    @staticmethod
+    def _merge_unique_texts(values: list[str], additions: list[str]) -> list[str]:
+        merged: list[str] = []
+        seen: set[str] = set()
+        for value in [*values, *additions]:
+            normalized = " ".join(str(value).split()).strip()
+            if not normalized:
+                continue
+            key = normalized.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(normalized)
+        return merged
 
     def _resolve_pipeline(self, job: JobInput, voice_enabled: bool) -> str:
         requested = job.pipeline_preference
@@ -1024,7 +1225,7 @@ class ProductionPlanner:
             seed = stable_seed(f"{job.job_id or job.primary_text}:{candidate_id}:storyboard")
             prompt_text = (
                 f"{variation.prompt_variant_text} Storyboard keyframe still image. "
-                "One clean representative frame, sharp composition, no motion blur, no text overlay."
+                "One clean representative frame, sharp composition, no motion blur, blank unlabeled surfaces, no text overlay, no signage, no interface, no handwriting, no printed pages."
             )
             candidates.append(
                 KeyframeCandidatePlan(

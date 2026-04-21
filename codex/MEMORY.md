@@ -59,6 +59,7 @@
   - Binary: `/workspace/tools/llama.cpp/build/bin/llama-server`
   - Modellpfad: `/workspace/models/director/qwen3.6-35b-a3b/gguf/Qwen_Qwen3.6-35B-A3B-Q4_K_M.gguf`
 - Nach einem Pod-Restore kann das Build-Artefakt fuer `llama-server` fehlen, obwohl das GGUF-Modell noch vorhanden ist; der produktive Wiederherstellungspfad ist dann `scripts/serve_director_llm.sh`, das `llama.cpp` bei Bedarf neu baut.
+- Ein weiterer echter Restore-/Windows-Sonderfall ist moeglich: die ELF-Dateien in `tools/llama.cpp/build/bin` koennen real vorhanden sein, aber `llama-server`/`llama-cli` verlieren ihr Execute-Bit und die Linux-SONAME-Symlinks `.so.0` bzw. `.so`; dann ist kein Rebuild noetig, sondern nur ein Minimalfix direkt in `build/bin`.
 - Das produktive lokale Profil fuer den Director heisst `qwen36_llama_cpp_local`.
 - `config/director_llm.env` ist jetzt real vorhanden und bildet den lokalen Director-Defaultpfad fuer Host, Port, Modell, Timeouts und Readiness-Checks ab.
 - `start.sh`, `init.sh`, `app.main` und `scripts/check_director_llm.py` laden diese Director-Defaults jetzt konsistent; lokale Sonderwerte bleiben ueber `config/director_llm.env.local` moeglich.
@@ -76,7 +77,10 @@
 - `scripts/check_director_llm.py` nutzt jetzt konfigurierbare Timeouts und kleine Retries statt eines harten Einmalversuchs.
 - `init.sh` ist fuer den Director-Pfad jetzt idempotent: vorhandenes GGUF wird wiederverwendet, fehlendes GGUF wird geladen, optional kann der lokale Serve-Prozess gestartet werden.
 - `init.sh` loescht vor dem Director-Setup alte `director_llm_model_ready`- und `director_llm_server_ready`-Flags, damit ein frueher Erfolg keinen falschen aktuellen Ready-Zustand signalisiert.
+- `init.sh` darf den Director-Autostart nicht an einem zu fruehen Execute-Bit-Check verlieren: wenn `serve_director_llm.sh` beim Auto-Start noch nicht executable ist, spaeter im selben Skript aber erst `chmod +x /workspace/scripts/*.sh` kommt, bleibt der Director trotz korrekter Env und vorhandenem Modell unten.
+- Der konkrete echte Fall dafuer war `cli-test-basic-001`: `director_fallback_reason=director_llm_request_failed: <urlopen error [Errno 111] Connection refused>`, waehrend `final.mp4` trotzdem erfolgreich erzeugt wurde.
 - `scripts/ensure_llama_cpp.sh` sollte bei Restore-Rebuilds nicht nur `cmake`, sondern jetzt auch `ninja` sicherstellen.
+- `scripts/ensure_llama_cpp.sh` prueft `llama-server` und `llama-cli` ueber `-x`; fehlende Execute-Bits koennen deshalb einen falschen Rebuild triggern, obwohl die realen ELF-Dateien schon da sind.
 - Der reale verifizierte Modell-Download fuer den Director lief ueber `bartowski/Qwen_Qwen3.6-35B-A3B-GGUF`.
 - Der zuerst vermutete Dateiname ohne `Qwen_`-Praefix existierte nicht; der reale Dateiname ist `Qwen_Qwen3.6-35B-A3B-Q4_K_M.gguf`.
 - Echter erfolgreicher Phase-5B-Run:
@@ -122,6 +126,8 @@
 - Pfadkonflikt zwischen `/workspace/Codex` und `/workspace/codex`.
 - Paketunterschiede zwischen Root-Python und `qwen3-tts`-Venv.
 - Readiness-Flags bedeuten nicht automatisch, dass ein neuer Agent-Core existiert.
+- Ein `llama.cpp`-Restore aus Commit oder Windows-Upload kann die echten versionierten `.so.*`-Dateien enthalten, aber die Linux-Symlink-Aliase verlieren; dann zeigt `ldd` zunaechst `not found`, obwohl kein echter Rebuild-Fall vorliegt.
+- Ein `llama.cpp`-Restore aus Commit oder Windows-Upload kann bei `llama-server` und `llama-cli` die Execute-Bits verlieren; dann meldet `ensure_llama_cpp.sh` sonst faelschlich "fehlt".
 - Vorhandene HTTP-Endpunkte koennen fuer Recon hilfreich sein, sollen aber den neuen Core nicht definieren.
 - Tests sollten Fake-Adapter oder kleine HTTP-Fakes nutzen, damit der Core verifiziert werden kann, ohne echte Modelljobs auszufuehren.
 - `tests/test_director_layer.py` muss `DIRECTOR_LLM_*` im Testprozess bewusst isolieren; sonst kippen Fallback-Assertions je nach lokalem Pod-Director-Zustand.

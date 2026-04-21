@@ -40,6 +40,21 @@ class VideoAdapter(BackendAdapter):
         raise NotImplementedError
 
 
+class MusicBackendAdapter(BackendAdapter):
+    kind = "music"
+    phase1_enabled = True
+
+    @abstractmethod
+    def generate_music(
+        self,
+        job: JobInput,
+        plan: ProductionPlan,
+        workspace: Path,
+        voice_result: ExecutionResult | None = None,
+    ) -> ExecutionResult:
+        raise NotImplementedError
+
+
 class StoryboardAdapter(BackendAdapter):
     kind = "storyboard"
     phase1_enabled = True

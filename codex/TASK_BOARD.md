@@ -20,6 +20,9 @@
 - noch leer
 
 ## DONE
+- `llama.cpp`-Runtime-/Build-Stand unter `/workspace/tools/llama.cpp/build/bin` am 2026-04-20 ohne Rebuild erneut verifiziert
+- realen Windows-/Restore-Sonderfall dokumentiert und minimal behoben: Execute-Bits fuer `llama-server`/`llama-cli` fehlten, ebenso die Linux-Symlink-Aliase fuer die vorhandenen versionierten `.so.*`-Dateien
+- reale kurze Director-Serve-Probe ueber `scripts/serve_director_llm.sh` plus `check_director_llm.py` erfolgreich; Testprozess danach wieder beendet
 - Bootstrap- und Recon-Analyse durchgefuehrt
 - RunPod-Umgebung verifiziert
 - vorhandene lokale Modelle, Services und Wrapper dokumentiert

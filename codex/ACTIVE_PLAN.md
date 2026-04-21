@@ -24,6 +24,7 @@ Den bereits vorbereiteten Director-Layer produktiv an ein echtes lokales Directo
 
 ## Aktueller Operativer Fokus
 - Restore-/Startup-/Environment-Check nach Repo-Update und Pod-Neustart ist real verifiziert und fuer den lokalen Director-Pfad jetzt sauber geglaettet.
+- Der vorhandene `llama.cpp`-Runtime-/Build-Stand unter `/workspace/tools/llama.cpp/build/bin` ist am 2026-04-20 ohne Rebuild erneut verifiziert; noetig waren nur Minimalfixes fuer Execute-Bits und Linux-Symlink-Aliase im bestehenden `build/bin`.
 - Naechster sinnvolle Ausbaupunkt bleibt unveraendert: weitere echte Multi-Scene-/Storyboard-Validierung des bestehenden Qwen-Director-Pfads, kein neuer Feature-Sprung.
 - Vor dem naechsten Abschluss oder Backup muss die Dateiliste explizit auf Vollstaendigkeit gegen den realen Director-/Startup-Pfad geprueft werden, insbesondere `tools/llama.cpp`, `config/director_llm.env`, neue Director-Skripte sowie Fixes in `start.sh`, `init.sh` und `app/main.py`.
 

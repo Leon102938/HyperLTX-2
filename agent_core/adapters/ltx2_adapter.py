@@ -5,7 +5,7 @@ from pathlib import Path
 
 from agent_core.adapters.base import VideoAdapter
 from agent_core.schemas import ArtifactRef, BackendCapabilities, ExecutionResult, JobInput, ProductionPlan
-from agent_core.utils import frame_count_to_duration_sec, http_json, probe_media_duration
+from agent_core.utils import compress_visual_prompt, frame_count_to_duration_sec, http_json, probe_media_duration
 
 
 class LTX2Adapter(VideoAdapter):
@@ -104,9 +104,10 @@ class LTX2Adapter(VideoAdapter):
             keyframe_conditioning_status = str(selected_keyframe_usage.get("usage_mode") or "unused")
         effective_num_frames = int(overrides.get("num_frames", planned_num_frames))
         expected_duration_sec = frame_count_to_duration_sec(effective_num_frames, frame_rate)
+        effective_prompt = compress_visual_prompt(plan.prompt_text)
         payload = {
             "job_id": f"{job.job_id}_video",
-            "prompt": plan.prompt_text,
+            "prompt": effective_prompt,
             "overrides": overrides,
         }
 
@@ -164,6 +165,7 @@ class LTX2Adapter(VideoAdapter):
                         "expected_duration_sec": expected_duration_sec,
                         "planned_num_frames": planned_num_frames,
                         "effective_num_frames": effective_num_frames,
+                        "effective_prompt": effective_prompt,
                     },
                 )
             )
@@ -186,6 +188,7 @@ class LTX2Adapter(VideoAdapter):
                 "render_mode": render_mode,
                 "selected_keyframe_usage": selected_keyframe_usage,
                 "keyframe_conditioning_status": keyframe_conditioning_status,
+                "effective_prompt": effective_prompt,
                 "duration_contract": {
                     "planned_duration_sec": plan.target_duration_sec,
                     "expected_duration_sec": expected_duration_sec,

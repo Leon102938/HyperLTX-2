@@ -3,6 +3,29 @@
 ## Scope
 Stand der technischen Bestandsaufnahme am 2026-04-11 in der laufenden RunPod-Umgebung.
 
+## Nachtrag 2026-04-20 llama.cpp Runtime-Check
+
+### Verifizierte Fakten
+- `/workspace/tools/llama.cpp/build/bin` existiert real.
+- Reale Dateien vorhanden: `llama-server`, `llama-cli`, `libggml-base.so.0.9.11`, `libggml-cpu.so.0.9.11`, `libggml-cuda.so.0.9.11`, `libggml.so.0.9.11`, `libllama-common.so.0.0.1`, `libllama.so.0.0.1`, `libmtmd.so.0.0.1`.
+- Vor dem Minimalfix hatten `llama-server` und `llama-cli` Modus `644`; die versionierten Libraries waren da, aber die Loader-Aliase wie `libllama.so.0` und `libggml-base.so.0` fehlten.
+- `ldd /workspace/tools/llama.cpp/build/bin/llama-server` meldete davor mehrere lokale Dependencies als `not found`.
+- Minimaler Fix nur in `/workspace/tools/llama.cpp/build/bin`: Execute-Bit fuer `llama-server` und `llama-cli` gesetzt sowie Symlink-Ketten fuer `libggml-base`, `libggml-cpu`, `libggml-cuda`, `libggml`, `libllama-common`, `libllama` und `libmtmd` angelegt.
+- Danach loesen `ldd`, `llama-server --help` und `llama-cli --help` den vorhandenen Runtime-Stand erfolgreich auf.
+- `scripts/ensure_llama_cpp.sh` meldete danach korrekt `llama.cpp already available`; fuer diese Verifikation wurde kein Rebuild ausgefuehrt.
+- Der bestehende produktive Director-Pfad zeigt weiter auf denselben Stand: `scripts/serve_director_llm.sh` nutzt `/workspace/tools/llama.cpp/build/bin/llama-server`, und `config/director_llm.env` zeigt auf das reale GGUF-Modell `/workspace/models/director/qwen3.6-35b-a3b/gguf/Qwen_Qwen3.6-35B-A3B-Q4_K_M.gguf`.
+- Eine kurze echte Serve-Probe ueber `DIRECTOR_LLM_DAEMON=1 /workspace/scripts/serve_director_llm.sh` war erfolgreich; `/v1/models` und `python3 /workspace/scripts/check_director_llm.py` antworteten erfolgreich mit dem realen Modell. Der Testprozess wurde danach wieder beendet.
+
+### Annahmen
+- Die Kombination aus fehlenden Symlink-Aliasen und verlorenen Execute-Bits stammt plausibel von einem Restore-/Windows-/Archivierungsweg, nicht von einem fehlenden eigentlichen Build.
+
+### Offene Punkte
+- Ob die Symlinks und Execute-Bits bereits im getrackten Repo-Stand stabil konserviert werden oder nur lokal nachgezogen wurden, ist noch nicht separat ueber einen gezielten Commit-/Checkout-Drill verifiziert.
+
+### Empfehlungen
+- Keinen Rebuild triggern, solange die echten ELF-Dateien und versionierten `.so.*`-Dateien vorhanden sind und der Fehler nur bei Execute-Bits oder Symlink-Aliasen liegt.
+- Beim naechsten sauberen Repo-Abschluss den Runtime-Stand so persistieren, dass `ensure_llama_cpp.sh` nach Restore nicht erneut faelschlich auf Rebuild faellt.
+
 ## 1. Verifizierte Fakten
 
 ### Umgebung
@@ -181,8 +204,10 @@ Stand der technischen Bestandsaufnahme am 2026-04-11 in der laufenden RunPod-Umg
 - Bisher fehlt ein einheitlicher Core-State fuer zusammengesetzte Jobs ueber mehrere Backends.
 
 ## 5. Luecken
-- kein vollstaendig real verifizierter Heavy-Run des neuen Core ueber Qwen TTS plus LTX2 in dieser Session
-- noch keine produktiven Integrationen fuer Music, Storyboard, ZImage, ACE-Step oder Editor/Upscaler im neuen Core
+- produktive Integrationen fuer Music, Storyboard, ZImage und ACE-Step sind jetzt real vorhanden, aber der Content-Output zeigt weiterhin sichtbare und run-abhaengige Text-/Gibberish-Artefakte im generierten Bildmaterial
+- Subtitle-Erzeugung und Burn-in sind produktiv vorhanden; die Segmentierung ist jetzt besser, aber in kurzen Abschlussphrasen noch nicht voll social-poliert
+- der Titel-Overlay ist technisch vorhanden und nach dem Quality-Fix fuer typische Social-Titel robust genug; groesste verbleibende Luecke ist nicht mehr das Layout, sondern die visuelle Textunterdrueckung im Modelloutput
+- fuer kurze Social-Tipp-Videos gibt es jetzt einen produktiven Planner-Guard, der textnahe Motivklassen aktiv vermeidet; verbleibende Luecke ist damit weniger die Szenenwahl als die Restartefakte des Modells selbst
 - noch keine externe API-Schicht fuer `agent_core`
 - noch keine n8n-Anbindung fuer `agent_core`
 

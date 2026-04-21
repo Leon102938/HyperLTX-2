@@ -5,7 +5,7 @@ from pathlib import Path
 
 from agent_core.adapters.base import StoryboardAdapter
 from agent_core.schemas import ArtifactRef, BackendCapabilities, ExecutionResult, JobInput, ProductionPlan
-from agent_core.utils import http_json
+from agent_core.utils import compress_visual_prompt, http_json
 
 
 class ZImageStoryboardAdapter(StoryboardAdapter):
@@ -44,9 +44,10 @@ class ZImageStoryboardAdapter(StoryboardAdapter):
 
     def generate_storyboard(self, job: JobInput, plan: ProductionPlan, workspace: Path) -> ExecutionResult:
         storyboard_step = next(step for step in plan.steps if step.name == "storyboard")
+        effective_prompt = compress_visual_prompt(plan.prompt_text)
         payload = {
             "job_id": str(storyboard_step.params.get("candidate_id") or f"{job.job_id}_storyboard"),
-            "prompt": plan.prompt_text,
+            "prompt": effective_prompt,
             "width": int(storyboard_step.params.get("width", plan.width)),
             "height": int(storyboard_step.params.get("height", plan.height)),
             "steps": int(storyboard_step.params.get("steps", 9)),
@@ -96,6 +97,7 @@ class ZImageStoryboardAdapter(StoryboardAdapter):
                         "scene_id": storyboard_step.params.get("scene_id"),
                         "variation_id": storyboard_step.params.get("variation_id"),
                         "candidate_id": storyboard_step.params.get("candidate_id"),
+                        "effective_prompt": effective_prompt,
                     },
                 )
             )
@@ -109,5 +111,5 @@ class ZImageStoryboardAdapter(StoryboardAdapter):
             output_path=output_path or None,
             output_url=output_url if isinstance(output_url, str) else None,
             artifacts=artifacts,
-            metadata={"submit": submit, "status": latest_status},
+            metadata={"submit": submit, "status": latest_status, "effective_prompt": effective_prompt},
         )

@@ -3,7 +3,16 @@ from __future__ import annotations
 from pathlib import Path
 
 from agent_core.schemas import ArtifactRef, ExecutionResult, JobInput, JobState, ProductionPlan, ResultSummary
-from agent_core.utils import concat_video_segments, copy_media_file, mux_voice_into_video, probe_media_duration
+from agent_core.utils import (
+    assemble_final_video,
+    build_scene_subtitle_entries,
+    concat_video_segments,
+    copy_media_file,
+    format_overlay_title_text,
+    mux_voice_into_video,
+    probe_media_duration,
+    write_srt_subtitles,
+)
 
 
 class ResultAssembler:
@@ -16,6 +25,7 @@ class ResultAssembler:
         voice_result: ExecutionResult | None,
         video_result: ExecutionResult,
         storyboard_result: ExecutionResult | None = None,
+        music_result: ExecutionResult | None = None,
     ) -> ResultSummary:
         success = bool(video_result.success)
         message = "Video agent run completed." if success else (video_result.error or "Video generation failed.")
@@ -61,12 +71,111 @@ class ResultAssembler:
                 and voice_result.output_path
                 and Path(voice_result.output_path).exists()
             )
+            has_music_artifact = bool(
+                music_result
+                and music_result.output_path
+                and Path(music_result.output_path).exists()
+                and music_result.success
+            )
             audio_duration_sec = probe_media_duration(voice_result.output_path) if has_voice_artifact and voice_result else None
+            music_duration_sec = probe_media_duration(music_result.output_path) if has_music_artifact and music_result else None
 
             if video_duration_sec is None:
                 raise RuntimeError("Assembler could not probe the rendered video duration")
 
-            if has_voice_artifact and voice_result and voice_result.output_path:
+            subtitle_mode = str(job.metadata.get("subtitle_mode", "off")).strip().lower()
+            overlay_text = " ".join(str(job.metadata.get("overlay_text") or job.metadata.get("overlay_title") or "").split())
+            subtitle_path: Path | None = None
+            subtitle_entries: list[dict[str, object]] = []
+            if subtitle_mode in {"sidecar", "burn"} and job.use_voice:
+                subtitle_entries = build_scene_subtitle_entries(
+                    plan.scenes,
+                    max_words=int(job.metadata.get("subtitle_max_words", 7)),
+                    max_chars=int(job.metadata.get("subtitle_max_chars", 42)),
+                    min_words=int(job.metadata.get("subtitle_min_words", 2)),
+                    min_chars=int(job.metadata.get("subtitle_min_chars", 8)),
+                    min_segment_duration_sec=float(job.metadata.get("subtitle_min_duration_sec", 1.0)),
+                )
+                if subtitle_entries:
+                    subtitle_path = write_srt_subtitles(workspace / "captions.srt", subtitle_entries)
+                    subtitle_artifact = ArtifactRef(
+                        key="subtitle_file",
+                        kind="subtitle",
+                        path=str(subtitle_path),
+                        origin="agent_core.assembler",
+                        exists=subtitle_path.exists(),
+                        metadata={"subtitle_mode": subtitle_mode, "entry_count": len(subtitle_entries)},
+                    )
+                    self._upsert_state_artifact(state, subtitle_artifact)
+
+            overlay_text_file: Path | None = None
+            if overlay_text:
+                overlay_text_file = workspace / "overlay_title.txt"
+                formatted_overlay_text = format_overlay_title_text(
+                    overlay_text,
+                    max_chars_per_line=int(job.metadata.get("overlay_max_chars_per_line", 18)),
+                    max_lines=int(job.metadata.get("overlay_max_lines", 3)),
+                )
+                overlay_text_file.write_text(formatted_overlay_text + "\n", encoding="utf-8")
+                overlay_artifact = ArtifactRef(
+                    key="overlay_title_text",
+                    kind="text",
+                    path=str(overlay_text_file),
+                    origin="agent_core.assembler",
+                    exists=overlay_text_file.exists(),
+                )
+                self._upsert_state_artifact(state, overlay_artifact)
+
+            needs_enhanced_assembly = bool(
+                has_music_artifact or subtitle_mode == "burn" or overlay_text or (has_voice_artifact and subtitle_mode == "sidecar")
+            )
+
+            if needs_enhanced_assembly:
+                assemble_final_video(
+                    effective_video_path,
+                    final_path,
+                    duration_sec=video_duration_sec,
+                    voice_path=voice_result.output_path if has_voice_artifact and voice_result else None,
+                    music_path=music_result.output_path if has_music_artifact and music_result else None,
+                    subtitle_path=subtitle_path,
+                    burn_subtitles=subtitle_mode == "burn" and subtitle_path is not None,
+                    overlay_text_file=overlay_text_file,
+                    overlay_duration_sec=float(job.metadata.get("overlay_duration_sec", 3.5)),
+                    voice_volume=float(job.metadata.get("voice_volume", 1.0)),
+                    music_volume=float(job.metadata.get("music_volume", 0.18 if has_voice_artifact else 0.35)),
+                    music_fade_out_sec=float(job.metadata.get("music_fade_out_sec", 1.5)),
+                )
+                final_duration_sec = probe_media_duration(final_path)
+                timing_mode = (
+                    "voice_music_mixed"
+                    if has_voice_artifact and has_music_artifact
+                    else "music_only_mixed"
+                    if has_music_artifact
+                    else "voice_with_finishing"
+                )
+                assembly_metadata = {
+                    "mode": "enhanced_mix",
+                    "timing_mode": timing_mode,
+                    "source_video_path": effective_video_path,
+                    "source_audio_path": voice_result.output_path if voice_result else None,
+                    "source_music_path": music_result.output_path if music_result else None,
+                    "subtitle_file_path": str(subtitle_path) if subtitle_path else None,
+                    "subtitle_mode": subtitle_mode,
+                    "subtitle_burned": subtitle_mode == "burn" and subtitle_path is not None,
+                    "subtitle_entry_count": len(subtitle_entries),
+                    "overlay_text": overlay_text or None,
+                    "final_output_path": str(final_path),
+                    "planned_duration_sec": plan.target_duration_sec,
+                    "video_duration_sec": video_duration_sec,
+                    "voice_duration_sec": audio_duration_sec,
+                    "music_duration_sec": music_duration_sec,
+                    "final_duration_sec": final_duration_sec,
+                    "video_minus_planned_sec": round(video_duration_sec - plan.target_duration_sec, 3),
+                    "scene_count": len(plan.scenes),
+                }
+                message = "Video agent run completed with music/subtitle-aware final assembly."
+                actual_final_duration_sec = final_duration_sec
+            elif has_voice_artifact and voice_result and voice_result.output_path:
                 mux_voice_into_video(
                     effective_video_path,
                     voice_result.output_path,
@@ -88,10 +197,17 @@ class ResultAssembler:
                     "timing_mode": timing_mode,
                     "source_video_path": effective_video_path,
                     "source_audio_path": voice_result.output_path,
+                    "source_music_path": None,
+                    "subtitle_file_path": str(subtitle_path) if subtitle_path else None,
+                    "subtitle_mode": subtitle_mode,
+                    "subtitle_burned": False,
+                    "subtitle_entry_count": len(subtitle_entries),
+                    "overlay_text": overlay_text or None,
                     "final_output_path": str(final_path),
                     "planned_duration_sec": plan.target_duration_sec,
                     "video_duration_sec": video_duration_sec,
                     "voice_duration_sec": audio_duration_sec,
+                    "music_duration_sec": music_duration_sec,
                     "final_duration_sec": final_duration_sec,
                     "video_minus_planned_sec": round(video_duration_sec - plan.target_duration_sec, 3),
                     "scene_count": len(plan.scenes),
@@ -106,10 +222,17 @@ class ResultAssembler:
                     "timing_mode": "no_voice_artifact",
                     "source_video_path": effective_video_path,
                     "source_audio_path": voice_result.output_path if voice_result else None,
+                    "source_music_path": music_result.output_path if music_result else None,
+                    "subtitle_file_path": str(subtitle_path) if subtitle_path else None,
+                    "subtitle_mode": subtitle_mode,
+                    "subtitle_burned": False,
+                    "subtitle_entry_count": len(subtitle_entries),
+                    "overlay_text": overlay_text or None,
                     "final_output_path": str(final_path),
                     "planned_duration_sec": plan.target_duration_sec,
                     "video_duration_sec": video_duration_sec,
                     "voice_duration_sec": None,
+                    "music_duration_sec": music_duration_sec,
                     "final_duration_sec": final_duration_sec,
                     "video_minus_planned_sec": round(video_duration_sec - plan.target_duration_sec, 3),
                     "scene_count": len(plan.scenes),
@@ -144,6 +267,7 @@ class ResultAssembler:
             artifacts=list(state.artifacts),
             backend_runs={
                 "voice": voice_result.model_dump(mode="json") if voice_result else None,
+                "music": music_result.model_dump(mode="json") if music_result else None,
                 "storyboard": storyboard_result.model_dump(mode="json") if storyboard_result else None,
                 "video": video_result.model_dump(mode="json"),
             },
@@ -154,6 +278,7 @@ class ResultAssembler:
                 "resolution": {"width": plan.width, "height": plan.height, "label": plan.resolution_label},
                 "scene_count": len(plan.scenes),
                 "storyboard_enabled": bool(plan.metadata.get("storyboard_enabled", False)),
+                "music_requested": bool(plan.metadata.get("music_requested", False)),
                 "storyboard_selection_mode": plan.metadata.get("storyboard_selection_mode"),
                 "selected_scene_storyboards": (
                     storyboard_result.metadata.get("selected_scene_storyboards", []) if storyboard_result else []
@@ -191,6 +316,7 @@ class ResultAssembler:
         state: JobState,
         message: str,
         voice_result: ExecutionResult | None = None,
+        music_result: ExecutionResult | None = None,
         storyboard_result: ExecutionResult | None = None,
     ) -> ResultSummary:
         return ResultSummary(
@@ -207,6 +333,7 @@ class ResultAssembler:
             artifacts=list(state.artifacts),
             backend_runs={
                 "voice": voice_result.model_dump(mode="json") if voice_result else None,
+                "music": music_result.model_dump(mode="json") if music_result else None,
                 "storyboard": storyboard_result.model_dump(mode="json") if storyboard_result else None,
             },
             metadata={"errors": list(state.errors)},

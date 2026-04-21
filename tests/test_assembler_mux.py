@@ -5,7 +5,7 @@ import wave
 from pathlib import Path
 
 from agent_core.assembler import ResultAssembler
-from agent_core.schemas import ExecutionResult, JobInput, JobState, ProductionPlan
+from agent_core.schemas import ExecutionResult, JobInput, JobState, ProductionPlan, ScenePlan
 from agent_core.utils import probe_media_duration, utc_now_iso
 
 
@@ -255,6 +255,77 @@ class AssemblerMuxTest(unittest.TestCase):
                         },
                     ),
                 )
+
+    def test_enhanced_assembly_writes_subtitles_and_mixes_music(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            video_path = workspace / "video.mp4"
+            voice_path = workspace / "voice.wav"
+            music_path = workspace / "music.wav"
+            _build_video(video_path, 2.0)
+            _build_wav(voice_path, 2.0)
+            _build_wav(music_path, 2.0)
+
+            plan = _build_plan("enhanced-case", 2.0).model_copy(
+                update={
+                    "scenes": [
+                        ScenePlan(
+                    scene_id="scene_01",
+                    index=1,
+                    title="Scene 1",
+                    description="A useful beat.",
+                    target_duration_sec=2.0,
+                    num_frames=49,
+                    prompt_text="test prompt",
+                    narration_text="One sharp tip that stays readable.",
+                    narration_start_sec=0.0,
+                    narration_end_sec=2.0,
+                )
+                    ]
+                }
+            )
+
+            result = ResultAssembler().assemble(
+                JobInput(
+                    job_id="enhanced-case",
+                    idea="enhanced",
+                    use_music=True,
+                    metadata={"subtitle_mode": "sidecar", "overlay_text": "Quick Tip"},
+                ),
+                plan,
+                _build_state("enhanced-case"),
+                workspace,
+                ExecutionResult(
+                    step_name="voice",
+                    success=True,
+                    status="succeeded",
+                    backend_name="fake_voice",
+                    output_path=str(voice_path),
+                    duration_sec=probe_media_duration(str(voice_path)),
+                ),
+                ExecutionResult(
+                    step_name="video",
+                    success=True,
+                    status="succeeded",
+                    backend_name="fake_video",
+                    output_path=str(video_path),
+                    duration_sec=probe_media_duration(str(video_path)),
+                ),
+                music_result=ExecutionResult(
+                    step_name="music",
+                    success=True,
+                    status="succeeded",
+                    backend_name="fake_music",
+                    output_path=str(music_path),
+                    duration_sec=probe_media_duration(str(music_path)),
+                ),
+            )
+
+            self.assertEqual(result.metadata["assembly"]["mode"], "enhanced_mix")
+            self.assertEqual(result.metadata["assembly"]["subtitle_mode"], "sidecar")
+            self.assertTrue((workspace / "captions.srt").exists())
+            self.assertTrue((workspace / "final.mp4").exists())
+            self.assertAlmostEqual(result.actual_final_duration_sec, 2.0, places=1)
 
 
 if __name__ == "__main__":

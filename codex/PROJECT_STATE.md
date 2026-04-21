@@ -14,7 +14,7 @@ Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E, 3A, 3B, 4A, 4B und
 - `app.main`, `start.sh` und `init.sh` legen die Basis-Laufzeitordner `agent_runs/`, `exports/`, `jobs/`, `status/` und `venvs/` jetzt defensiv bzw. idempotent an, bevor FastAPI oder Folgepfade darauf zugreifen.
 - `config/director_llm.env` ist jetzt als reale lokale Default-Konfiguration vorhanden; `start.sh`, `init.sh`, `app.main` und `scripts/check_director_llm.py` laden diese Defaults jetzt konsistent, optional ergaenzt durch `config/director_llm.env.local`.
 - Ein zentraler API-Prozess laeuft jetzt wieder sauber ueber `uvicorn app.main:app` auf Port `8000`.
-- Der lokale Director-Serve und FastAPI laufen im aktuellen verifizierten Stand wieder als echte Hintergrundprozesse mit PPID `1`.
+- Im Snapshot vom 2026-04-20 lief FastAPI real auf Port `8000`; der Director-Serve auf `127.0.0.1:8011` lief nicht dauerhaft im Hintergrund, liess sich aber ueber den produktiven Pfad `scripts/serve_director_llm.sh` erfolgreich kurz starten und danach wieder sauber beenden.
 - JupyterLab laeuft bereits auf Port `8888`.
 - Der Pod meldet `RUNPOD_GPU_NAME=NVIDIA RTX 6000 Ada Generation`, `RUNPOD_GPU_COUNT=1`, `RUNPOD_CPU_COUNT=10`, `RUNPOD_MEM_GB=167`.
 - GPU und Torch sind nutzbar: `torch 2.7.0+cu128`, CUDA verfuegbar, 1 GPU erkannt.
@@ -75,6 +75,7 @@ Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E, 3A, 3B, 4A, 4B und
   - `app/agent_core_api.py` ist im Workspace wieder real vorhanden und in `app.main` eingebunden; die dokumentierte Phase-4-Bridge ist damit wieder konsistent mit Code und Tests
 - Verifiziert implementierte Phase 5B:
   - `llama.cpp` wurde im Pod real mit CUDA gebaut; produktives Binary: `/workspace/tools/llama.cpp/build/bin/llama-server`
+  - im aktuellen Pod-Snapshot liegen unter `/workspace/tools/llama.cpp/build/bin` reale ELF-Artefakte fuer `llama-server`, `llama-cli`, `libggml-base.so.0.9.11`, `libggml-cpu.so.0.9.11`, `libggml-cuda.so.0.9.11`, `libggml.so.0.9.11`, `libllama-common.so.0.0.1`, `libllama.so.0.0.1` und `libmtmd.so.0.0.1`
   - das Director-Modell laeuft real als GGUF unter `/workspace/models/director/qwen3.6-35b-a3b/gguf/Qwen_Qwen3.6-35B-A3B-Q4_K_M.gguf`
   - `scripts/download_director_model.py`, `scripts/serve_director_llm.sh` und `scripts/check_director_llm.py` bilden jetzt den minimalen produktiven Download-/Serve-/Smoke-Pfad
   - `scripts/agent_core_cli.py` bietet jetzt einen kleinen lokalen Manual-Testpfad ueber denselben produktiven `POST /agent-core/jobs` plus Polling-Vertrag
@@ -89,6 +90,12 @@ Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E, 3A, 3B, 4A, 4B und
   - lokaler Endpoint: `http://127.0.0.1:8011/v1/chat/completions`
   - reales Modell: `Qwen_Qwen3.6-35B-A3B-Q4_K_M.gguf`
   - reale Download-Quelle im verifizierten Pod-Lauf: `bartowski/Qwen_Qwen3.6-35B-A3B-GGUF`
+  - aktueller Runtime-Befund am 2026-04-20 vor Minimalfix: die echten versionierten `.so.*`-Dateien waren bereits vorhanden, aber `llama-server` und `llama-cli` hatten Modus `644`, und die Linux-SONAME-Aliase wie `libllama.so.0` bzw. `libggml-base.so.0` fehlten
+  - dadurch meldete `ldd /workspace/tools/llama.cpp/build/bin/llama-server` zunaechst mehrere `not found`, und `scripts/ensure_llama_cpp.sh` haette wegen seiner `-x`-Pruefung einen unnoetigen Rebuild ausgelost
+  - minimaler Fix nur in `/workspace/tools/llama.cpp/build/bin`: Execute-Bit fuer `llama-server` und `llama-cli` gesetzt sowie Symlink-Ketten fuer `libggml-base`, `libggml-cpu`, `libggml-cuda`, `libggml`, `libllama-common`, `libllama` und `libmtmd` nachgezogen
+  - nach diesem Minimalfix loesen `ldd`, `llama-server --help`, `llama-cli --help` und `scripts/ensure_llama_cpp.sh` den vorhandenen Runtime-Stand erfolgreich auf; ein voller Rebuild war dafuer nicht noetig
+  - kurze echte Serve-Probe am 2026-04-20: `DIRECTOR_LLM_DAEMON=1 /workspace/scripts/serve_director_llm.sh` meldete `server ready`, `/v1/models` lieferte das reale GGUF-Modell, und `python3 /workspace/scripts/check_director_llm.py` antwortete mit `chat_ok=true`
+  - die Serve-Probe wurde danach bewusst wieder beendet; Port `8011` wird in diesem Snapshot deshalb nicht als dauerhaft laufender Hintergrunddienst behauptet
   - der zuerst vermutete Dateiname ohne `Qwen_`-Praefix war falsch und fuehrte zu einem echten `404`; danach wurde auf den real existierenden Dateinamen umgestellt
   - der kleine Restore-Folgecheck `restore-health-check-20260419` lief zwar real mit `llm_augmented`, scheiterte danach aber im LTX2-Schritt an CUDA-OOM, waehrend der Director noch mit `-ngl 8` lief
   - aktuell verifiziert koexistenzfaehiges Restore-Profil fuer den kleinen Director+LTX2-Kombipfad: `DIRECTOR_LLM_N_GPU_LAYERS=0`, `-c 2048`, `--reasoning off`, `--no-warmup`
@@ -97,6 +104,12 @@ Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E, 3A, 3B, 4A, 4B und
   - `scripts/check_director_llm.py` war nach dem Restore real unbenutzbar wegen eines Syntaxfehlers; der Smoke-Check ist jetzt repariert und antwortet wieder produktiv
   - `scripts/check_director_llm.py` nutzt jetzt konfigurierbare Timeouts und kleine Retries; `scripts/serve_director_llm.sh` nutzt jetzt konfigurierbare Health-Checks, Readiness-Retries, PID-Bereinigung und fruehes Fail-fast bei vorzeitig beendetem `llama-server`
   - `scripts/ensure_llama_cpp.sh` installiert bei Bedarf jetzt auch `ninja`, damit ein Rebuild nach Restore nicht still an einem fehlenden Generator scheitert
+  - der konkrete Fallback-Job `cli-test-basic-001` lief trotz erfolgreichem `final.mp4` im Director-Modus `rule_based_fallback`, weil der Director-Request zur Laufzeit real auf `Connection refused` gegen `127.0.0.1:8011` fiel
+  - die Artefakte `director_output.json`, `result.json`, `state.json` und `logs/agent.log` dokumentieren dort konsistent `director_fallback_reason=director_llm_request_failed: <urlopen error [Errno 111] Connection refused>`
+  - die direkte Ursache war kein LLM-Payload-Problem, sondern ein Startup-Problem: `init_download.log` zeigt `WARN: /workspace/scripts/serve_director_llm.sh missing or not executable; skipping auto-start`
+  - damit war der Director beim Pod-Init zwar konfiguriert und das Modell vorhanden, der lokale Serve-Prozess wurde aber wegen der `-x`-Pruefung in `init.sh` vor dem spaeteren globalen `chmod +x /workspace/scripts/*.sh` uebersprungen
+  - minimaler Fix dafuer in `init.sh`: fuer den Director-Autostart wird `serve_director_llm.sh` jetzt bei vorhandener Datei vor dem Start explizit `chmod +x` gesetzt und ueber `bash` ausgefuehrt
+  - danach wurde der reale Director-Daemon ohne Rebuild erneut ueber `DIRECTOR_LLM_DAEMON=1 /workspace/scripts/serve_director_llm.sh` gestartet; `/v1/models` und `python3 /workspace/scripts/check_director_llm.py` waren danach gruen
   - `tests/test_director_layer.py` isoliert `DIRECTOR_LLM_*` jetzt explizit im Test-Setup, damit lokale Director-Defaults keine env-sensitiven Fallback-Assertions verfaelschen
 - Verifizierter echter Phase-5A-Fallback-Lauf:
   - Job-ID: `phase5a-live-fallback-1776420785`
@@ -159,6 +172,14 @@ Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E, 3A, 3B, 4A, 4B und
   - Assembly: Voice wurde erfolgreich in das finale MP4 gemuxt
   - finales MP4: `/workspace/agent_runs/voice-stability-check-20260419/final.mp4`
   - Artefakte: `result.json`, `state.json` und `final.mp4` liegen vollstaendig im Job-Workspace vor
+- Verifizierter echter CLI-Restore-/Runtime-Recheck:
+  - Job-ID: `cli-test-basic-001-reverify`
+  - Einstieg: `python3 /workspace/scripts/agent_core_cli.py`
+  - Scope: identisch klein zu `cli-test-basic-001` mit `use_voice=false`, `resolution=768x448`, `duration_sec=4`
+  - Director-Modus: `llm_augmented`
+  - Director-LLM aktiv: `true`
+  - `director_fallback_reason=null`
+  - finales MP4: `/workspace/agent_runs/cli-test-basic-001-reverify/final.mp4`
 - Verifizierter lokaler CLI-Manual-Testpfad:
   - Datei: `/workspace/scripts/agent_core_cli.py`
   - Scope: Job submitten, Polling anzeigen und finale Artefaktpfade/-URLs ausgeben
@@ -443,7 +464,7 @@ Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E, 3A, 3B, 4A, 4B und
 
 ## Verifizierte Luecken
 - ACE-Step, Editor und Upscaler sind noch nicht im neuen Core integriert.
-- Music-Adapter bleibt bewusst ein Future-ready-Stub.
+- Music ist nicht mehr Stub-only: ein echter ACE-Step-basierter Music-Adapter ist jetzt produktiv im Core verdrahtet und wurde in echten End-to-End-Runs verifiziert.
 - Es gibt jetzt eine minimale lokale Worker-/n8n-Bridge, aber noch keine groessere externe API-Plattform fuer den neuen Core.
 - Es gibt noch keine eigentliche n8n-spezifische Orchestrierung oder Queue-Anbindung.
 - Es gibt noch keinen AI-basierten Hook-/Quality-/Storyboard-Produktionspfad im Core.
@@ -487,3 +508,118 @@ Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E, 3A, 3B, 4A, 4B und
 - Vor einer externen API zuerst die internen Artefakt- und Fehlervertraege stabilisieren.
 - Phase 1 kann fuer den definierten Scope jetzt als technisch sauber abgeschlossen gelten.
 - Fuer den Tagesabschluss sollte `agent_core/`, `tests/`, `examples/`, `.gitignore` und `/workspace/codex` priorisiert werden; Laufzeitordner sollten draussen bleiben.
+
+## Update 2026-04-20 Content-Output-Pass
+### Verifizierte Fakten
+- Der Core erzeugt jetzt real produktive Endformate mit:
+  - Director `llm_augmented`
+  - Qwen-TTS-Voiceover
+  - ACE-Step-Hintergrundmusik
+  - ZImage-Storyboard-Keyframes
+  - keyframe-konditioniertem LTX2-Multiszene-Video
+  - finalem ffmpeg-Mix mit genau einem Video- und einem Audio-Stream
+  - Sidecar-`captions.srt` plus Burn-in-Subtitles
+  - optionalem Titel-Overlay im finalen MP4
+- Reale End-to-End-Live-Runs:
+  - `demo-social-morning-001`
+  - `demo-social-morning-002`
+- Beide Runs endeten erfolgreich mit:
+  - `success=true`
+  - `director_mode=llm_augmented`
+  - `assembly.mode=enhanced_mix`
+  - `assembly.timing_mode=voice_music_mixed`
+  - `final.mp4` unter `/workspace/agent_runs/<job_id>/final.mp4`
+  - `23.209s`, `576x1024`, `24 fps`, `h264 + aac stereo`
+- Verifizierte neue produktive Codepfade:
+  - echter `agent_core/adapters/music_adapter.py` ueber `/Ace_step_1.5`
+  - erweiterter `agent_core/assembler.py` fuer Mix, Subtitle-Datei, Burn-in und Overlay
+  - neue ffmpeg-/Subtitle-Helfer in `agent_core/utils.py`
+  - minimal erweiterte `scripts/agent_core_cli.py`-Flags fuer Music/Subtitles/Overlay
+
+### Annahmen
+- Fuer den aktuellen Pod-Stand ist ein kleiner produktiver Finish-Layer ueber dem bestehenden Core wertvoller als ein groesserer Architekturumbau.
+- Die sichtbaren Textartefakte kommen hauptsaechlich aus dem LTX-Bildpfad selbst und nicht aus dem ffmpeg-Mix.
+
+### Offene Punkte
+- Subtitle-Segmentierung ist funktional, aber noch nicht social-sauber genug; `captions.srt` enthaelt im verifizierten Demo weiterhin eine Ein-Wort-Zeile (`auf`).
+- Der Titel-Overlay funktioniert technisch, wird bei laengeren Strings am oberen Bildrand aber aktuell zu gross gesetzt und im Frame angeschnitten.
+- Trotz Prompt-Bereinigung bleiben in den verifizierten Vergleichsframes von `demo-social-morning-002` sichtbare Text-/Gibberish-Artefakte innerhalb des generierten Videobilds.
+
+### Empfehlungen
+- Naechster sinnvoller Fokus ist kein weiterer Ausbau des Kernpfads, sondern gezielte Qualitaetskontrolle gegen LTX-Textartefakte und bessere Subtitle-/Overlay-Layoutregeln.
+- Vor weiterem Feature-Ausbau sollte ein kleiner produktiver Anti-Text-Artefakt- und Caption-Polish-Pass erfolgen.
+
+## Update 2026-04-20 Quality-Fix-First
+### Verifizierte Fakten
+- Minimaler Quality-Pass umgesetzt in:
+  - `agent_core/utils.py`
+  - `agent_core/assembler.py`
+  - `agent_core/planner.py`
+  - `tests/test_output_quality_utils.py`
+- Neue verifizierte Logik:
+  - Prompt-Sanitizing verwirft jetzt mehr narrativen Satztext vor Storyboard-/Video-Render und verstaerkt negative Text-/UI-/Dokument-Cues.
+  - textanfaellige Objektphrasen wie offene Papier-/Notizflaechen werden gezielter auf textfreiere Kompositionen umgebogen.
+  - Subtitle-Building hat jetzt Merge-Regeln fuer sehr kurze Segmente plus Mindestdauersteuerung.
+  - Overlay-Titel werden vor dem ffmpeg-Burn-in automatisch umgebrochen; das Layout nutzt kleinere dynamische Schriftgroessen und eine sichere Top-Margin.
+- Verifizierte Testlaeufe:
+  - `python3 -m unittest /workspace/tests/test_output_quality_utils.py /workspace/tests/test_assembler_mux.py /workspace/tests/test_planner_rules.py`
+- Reale End-to-End-Runs ueber den produktiven API-Pfad:
+  - `demo-social-morning-003`
+  - `demo-social-morning-004`
+- Beide Runs endeten erfolgreich mit:
+  - `success=true`
+  - `director_mode=llm_augmented`
+  - `assembly.mode=enhanced_mix`
+  - `subtitle_mode=burn`
+  - `final.mp4` real vorhanden
+- Sichtbarer Vergleich gegen `demo-social-morning-002`:
+  - Overlay-Clipping oben ist in `demo-social-morning-003` und `demo-social-morning-004` behoben.
+  - Die Caption-Segmentierung hat die verifizierte Ein-Wort-Zeile `auf` entfernt.
+  - Text-/Gibberish-Artefakte wurden reduziert, aber nicht stabil eliminiert; sie bleiben szenen- und run-abhaengig.
+
+### Annahmen
+- Die verbleibenden Textartefakte kommen weiterhin primaer aus dem generativen Bild-/Videomodell und nur begrenzt aus dem Prompt-Wrapper.
+
+### Offene Punkte
+- `demo-social-morning-003` zeigt sichtbare Verbesserung bei Overlay und fruehen Szenen, hat aber noch Artefakte auf einer Papierflaeche im spaeten Frame.
+- `demo-social-morning-004` verbessert den spaeten Payoff-Frame deutlich, regrediert aber in einer Schreibszene wieder mit starkem Dokument-/Gibberish-Muell.
+- Subtitle-Segmentierung ist jetzt brauchbarer, aber die letzte Dreiergruppe `Drei kleine Schritte / weniger Reibung / mehr Klarheit ...` bleibt noch etwas fragmentiert.
+
+### Empfehlungen
+- Naechster sinnvollster Schritt ist kein weiterer Kernumbau, sondern ein gezielter inhaltlicher Anti-Text-Pass fuer textanfaellige Szenentypen wie Schreiben, Papier, Notizbuch und Tischoberflaechen.
+- Die aktuelle Overlay- und Subtitle-Logik kann als neuer Basisstand gelten; der groesste verbleibende Qualitaetsengpass ist die inkonsistente Bildsynthese bei textnahen Motiven.
+
+## Update 2026-04-20 Social-Tipp-Format-Guard
+### Verifizierte Fakten
+- Ein enger produktiver Social-Tipp-Guard wurde im Planner eingebaut:
+  - kurze Portrait-Voice-Social-Clips mit Storyboard/Music/Subtitles bekommen jetzt eine gezielte Motiv-Nachsteuerung
+  - textanfaellige Literal-Motive wie Notizbuch, Papier, Schreiben, Screens und Dokumente werden in der Szenenintention aktiv vermieden
+- Geaenderte produktive Codepfade:
+  - `agent_core/planner.py`
+  - `tests/test_planner_rules.py`
+- Verifizierter Real-Run:
+  - `demo-social-morning-005`
+  - `success=true`
+  - `director_mode=llm_augmented`
+  - `assembly.mode=enhanced_mix`
+  - `subtitle_mode=burn`
+  - `final.mp4` real vorhanden
+- Verifizierte Planner-Ausgabe in `demo-social-morning-005`:
+  - `social_tip_visual_guard=true`
+  - Szene 1: Wake-up + Vorhaenge + Fensterlicht
+  - Szene 2: Handy face-down + Glas Wasser
+  - Szene 3: neutrales Morgen-B-Roll statt Schreib-/Notizmotiv
+  - Szene 4: ruhiger Window-/Coffee-Payoff
+- Sichtbarer Output-Vergleich:
+  - Gegen `demo-social-morning-004` ist `demo-social-morning-005` klar sauberer, weil keine Papier-/Dokument-/Notiz-Szene mehr geplant und gerendert wurde.
+  - Kleine runabhaengige Glyph-/Gibberish-Artefakte sind trotzdem noch vereinzelt sichtbar.
+
+### Annahmen
+- Fuer kurze Social-Tipp-Videos ist eine enge Motiv-Einschraenkung aktuell wirksamer als weiterer breiter Anti-Text-Prompt-Feinschliff.
+
+### Offene Punkte
+- Auch bei robusteren Motiven kann das Modell noch vereinzelte schwebende Text-/Glyph-Artefakte erzeugen, z. B. in `demo-social-morning-005` ueber dem Tisch bzw. im unteren Bildbereich.
+- Der neue Guard ist bewusst heuristisch; er verbessert dieses Format, ist aber keine allgemeine Loesung fuer alle Videoarten.
+
+### Empfehlungen
+- Der naechste sinnvolle Qualitaetsschritt fuer dieses Format waere kein breiter Prompt-Refactor, sondern eine kleine weitere Motivbibliothek fuer robuste Social-Formate wie Morgenroutine, Mini-Fitness, Fokus-Pause oder Kuechenroutine.

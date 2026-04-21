@@ -1,5 +1,43 @@
 # CHANGELOG.md
 
+## 2026-04-20 Director Restore Runtime Debug
+- konkreten Fallback-Fall `cli-test-basic-001` forensisch geprueft
+- belastbar bestaetigt:
+  - kein Payload-Fehler
+  - kein Config-Fehler
+  - kein fehlender `llama.cpp`-Build
+  - echter Fallback-Grund war `director_llm_request_failed: <urlopen error [Errno 111] Connection refused>`
+- direkte Ursache im Startup-Pfad belegt:
+  - `init_download.log` zeigte `WARN: /workspace/scripts/serve_director_llm.sh missing or not executable; skipping auto-start`
+  - `init.sh` pruefte den Director-Autostart ueber `-x`, bevor spaeter im selben Skript erst `chmod +x /workspace/scripts/*.sh` lief
+  - dadurch blieb der lokale Director-Serve trotz vorhandenem Modell und vorhandener Runtime beim Pod-Start unten
+- minimaler Fix:
+  - `init.sh` setzt fuer den Director-Autostart `serve_director_llm.sh` jetzt vor dem Start explizit auf executable und ruft es per `bash` auf
+- danach real verifiziert:
+  - `DIRECTOR_LLM_DAEMON=1 /workspace/scripts/serve_director_llm.sh`
+  - `curl -fsS http://127.0.0.1:8011/v1/models`
+  - `python3 /workspace/scripts/check_director_llm.py`
+  - ein echter kleiner CLI-Live-Run `cli-test-basic-001-reverify` lief wieder mit `director_mode=llm_augmented`
+- kein `llama.cpp`-Rebuild noetig
+
+## 2026-04-20 llama.cpp Runtime Verification
+- vorhandenen `llama.cpp`-Runtime-/Build-Stand im aktuellen Pod ohne Rebuild erneut verifiziert
+- bestaetigt: unter `/workspace/tools/llama.cpp/build/bin` lagen reale ELF-Artefakte fuer `llama-server`, `llama-cli` und die versionierten `libggml*`, `libllama*` und `libmtmd`-Libraries bereits vor
+- realer Sonderfall im aktuellen Snapshot:
+  - `llama-server` und `llama-cli` hatten nur Modus `644`
+  - die echten versionierten `.so.*`-Dateien waren da, aber die Linux-Loader-Aliase `.so.0` und `.so` fehlten
+  - dadurch meldete `ldd` zunaechst `not found`, und `scripts/ensure_llama_cpp.sh` haette faelschlich einen Rebuild angestossen
+- minimaler Fix ausschliesslich in `tools/llama.cpp/build/bin` umgesetzt:
+  - Execute-Bit fuer `llama-server` und `llama-cli` gesetzt
+  - Symlink-Ketten fuer `libggml-base`, `libggml-cpu`, `libggml-cuda`, `libggml`, `libllama-common`, `libllama` und `libmtmd` angelegt
+- danach erneut verifiziert:
+  - `ldd /workspace/tools/llama.cpp/build/bin/llama-server` loest alle lokalen Libraries korrekt auf
+  - `llama-server --help` und `llama-cli --help` laufen erfolgreich
+  - `scripts/ensure_llama_cpp.sh` meldet jetzt korrekt `llama.cpp already available`
+  - kurze echte Serve-Probe ueber `DIRECTOR_LLM_DAEMON=1 /workspace/scripts/serve_director_llm.sh` erfolgreich
+  - `/v1/models` und `python3 /workspace/scripts/check_director_llm.py` antworteten erfolgreich mit dem realen Modell `Qwen_Qwen3.6-35B-A3B-Q4_K_M.gguf`
+- wichtiger Abschluss: kein Rebuild noetig; Testprozess danach wieder sauber beendet
+
 ## 2026-04-18 Capability Map
 - neue kanonische Uebersicht `/workspace/codex/CAPABILITY_MAP.md` erstellt
 - produktive Kernpfade, Stub-/Fallback-Bereiche, externe Schnittstellen und Laufzeitabhaengigkeiten dort kompakt zusammengezogen
@@ -369,3 +407,72 @@
   - Testpfad `tests/test_director_layer.py::test_local_llama_cpp_profile_falls_back_when_server_is_unreachable`
 - Backup-Archiv fuer den heutigen uebernehmbaren Stand erzeugt:
   - `/workspace/backups/hyperltx_phase5b_qwen_director_2026-04-18.tar.gz`
+
+## 2026-04-20 Content-Output-Ausbau
+- produktiver Music-Step in den bestehenden Core eingebaut:
+  - `agent_core/adapters/music_adapter.py` nutzt jetzt real `/Ace_step_1.5`
+  - `planner` aktiviert Music nur noch bei real verfuegbarem Backend
+  - `agent_core/agent.py` fuehrt Music als echten optionalen Step aus
+- `agent_core/assembler.py` auf echten Final-Finish-Pfad erweitert:
+  - Voice + Music werden sauber unter explizitem Audio-Mapping gemischt
+  - Burn-in-Subtitles und Sidecar-`captions.srt` werden erzeugt
+  - optionales Titel-Overlay wird im Final-MP4 eingebrannt
+  - finaler Mix bleibt bei genau einem Audio-Stream statt unbeabsichtigter Mehrfach-Audios
+- `agent_core/utils.py` um ffmpeg-/Subtitle-Helfer erweitert:
+  - Subtitle-Segmentierung und SRT-Schreiben
+  - finaler Mix-Renderer
+  - spaeter ergaenzter Prompt-Cleanup fuer Storyboard- und Video-Render
+- `scripts/agent_core_cli.py` um produktive Flags fuer `--use-music`, `--subtitle-mode`, `--overlay-text`, `--scene-count`, `--variations-per-scene`, `--takes-per-scene` erweitert
+- Tests gruen:
+  - `python3 -m unittest /workspace/tests/test_planner_rules.py /workspace/tests/test_assembler_mux.py`
+- reale Demo-Runs:
+  - `demo-social-morning-001`: erster verifizierter Content-Run mit Voice, Music, Storyboard, Burn-in-Subtitles und finalem Mix
+  - `demo-social-morning-002`: zweiter echter Vergleichsrun nach Prompt-Bereinigung
+- ehrliche Qualitätsnotiz:
+  - der Finish-Layer funktioniert real, aber die visuelle Ausgabe hat weiterhin sichtbare Text-/Gibberish-Artefakte im LTX-Bildmaterial
+  - Subtitle-Timing stimmt grob, die Segmentierung ist fuer Social-Output aber noch nicht sauber genug
+  - der Titel-Overlay ist technisch aktiv, aber bei laengeren Strings noch zu gross und oben angeschnitten
+
+## 2026-04-20 Quality-Fix-First fuer Social-Output
+- kleiner produktiver Prompt-/Caption-/Overlay-Pass statt weiterem Kernumbau umgesetzt
+- `agent_core/utils.py` erweitert um:
+  - haerteres `compress_visual_prompt(...)` gegen Narrationssatztext und Text-/UI-/Dokument-Artefakte
+  - gezielte Sanitizer fuer textanfaellige Papier-/Notizbuch-Phrasen
+  - Merge-/Mindestdauer-Regeln fuer Subtitle-Segmente
+  - Auto-Wrap und Layout-Profil fuer Titel-Overlay
+- `agent_core/assembler.py` nutzt jetzt:
+  - neue Subtitle-Parameter fuer Minimum-Dauer und Short-Merge
+  - vorformatierte Overlay-Titeldateien statt ungewrappter Rohstrings
+- `agent_core/planner.py` haertet Storyboard-Keyframe-Prompts zusaetzlich gegen Text-/Dokument-Artefakte
+- neuer Utility-Test `tests/test_output_quality_utils.py`
+- Tests gruen:
+  - `python3 -m unittest /workspace/tests/test_output_quality_utils.py /workspace/tests/test_assembler_mux.py /workspace/tests/test_planner_rules.py`
+- reale Vergleichslaeufe:
+  - `demo-social-morning-003`: Overlay-Clipping behoben, Caption-Split besser, fruehe Textartefakte klar reduziert; spaeter Frame weiterhin Papier-Artefakte
+  - `demo-social-morning-004`: zweiter echter Nachfix-Run; spaeter Payoff-Frame deutlich sauberer, aber Schreibszene wieder mit starkem Dokument-/Gibberish-Muell
+- ehrlicher Stand:
+  - Overlay-Layout jetzt robust genug fuer typische Social-Titel
+  - Subtitle-Segmentierung sichtbar besser als `demo-social-morning-002`
+  - Anti-Text-Steuerung bleibt modellseitig inkonsistent und ist der groesste verbleibende Qualitaetsengpass
+
+## 2026-04-20 Social-Tipp-Format-Guard
+- enger produktiver Guard in `agent_core/planner.py` eingebaut statt weiterer allgemeiner Anti-Text-Experimente
+- kurze Portrait-Voice-Social-Clips mit Storyboard/Music/Subtitles werden jetzt auf robuste Motivklassen eingeschraenkt
+- explizit vermiedene Planner-Motive:
+  - Papier, Notizbuch, Dokumente, Seiten, Handschrift, Schreiben, Label, Signs, Posters, UI, App-Screens, Monitor-Closeups, Buchseiten, Sticky Notes, Printed Notes
+- bevorzugte Guard-Motive:
+  - Aufwachen + Vorhaenge
+  - Fensterlicht + Stretch
+  - Glas Wasser + Handy face-down
+  - ruhiges neutrales B-Roll
+  - Window-/Coffee-/Breathing-Payoff
+- neuer Test in `tests/test_planner_rules.py` verifiziert, dass textnahe Schreib-/Papiermotive fuer dieses Format nicht mehr im Planner landen
+- Tests gruen:
+  - `python3 -m unittest /workspace/tests/test_planner_rules.py /workspace/tests/test_output_quality_utils.py /workspace/tests/test_assembler_mux.py`
+- realer E2E-Run:
+  - `demo-social-morning-005`
+  - `director_mode=llm_augmented`
+  - `success=true`
+  - visuell klar sauberer als `demo-social-morning-004`, weil keine textnahen Papier-/Notizszenen mehr auftauchen
+- ehrliche Restrisiko-Notiz:
+  - trotz robusterer Motive bleiben kleine runabhaengige Glyph-/Textfragmente im Modelloutput moeglich

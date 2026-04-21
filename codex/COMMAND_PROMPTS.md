@@ -123,6 +123,33 @@ curl -sS http://127.0.0.1:8011/v1/models
 ps -eo pid,ppid,cmd | rg 'llama-server|uvicorn app.main:app'
 ```
 
+### llama.cpp Runtime ohne Rebuild pruefen
+```bash
+ls -lah /workspace/tools/llama.cpp/build/bin
+stat -c '%A %a %n' \
+  /workspace/tools/llama.cpp/build/bin/llama-server \
+  /workspace/tools/llama.cpp/build/bin/llama-cli
+find /workspace/tools/llama.cpp/build/bin -maxdepth 1 \
+  \( -name 'libggml*.so*' -o -name 'libllama*.so*' -o -name 'libmtmd.so*' \) | sort
+ldd /workspace/tools/llama.cpp/build/bin/llama-server
+timeout 10s /workspace/tools/llama.cpp/build/bin/llama-server --help | sed -n '1,40p'
+timeout 10s /workspace/tools/llama.cpp/build/bin/llama-cli --help | sed -n '1,40p'
+/workspace/scripts/ensure_llama_cpp.sh
+```
+
+### Director-Serve kurz antesten und wieder beenden
+```bash
+PREV_PID="$(cat /workspace/status/director_llm_server.pid 2>/dev/null || true)"
+DIRECTOR_LLM_DAEMON=1 /workspace/scripts/serve_director_llm.sh
+curl -sS http://127.0.0.1:8011/v1/models
+python3 /workspace/scripts/check_director_llm.py
+NEW_PID="$(cat /workspace/status/director_llm_server.pid 2>/dev/null || true)"
+if [ -n "$NEW_PID" ] && [ "$NEW_PID" != "$PREV_PID" ]; then
+  kill "$NEW_PID"
+  rm -f /workspace/status/director_llm_server.pid /workspace/status/director_llm_server_ready
+fi
+```
+
 ### Director-Defaultpfad klein verifizieren
 ```bash
 curl -sS -X POST http://127.0.0.1:8000/agent-core/jobs \
@@ -845,4 +872,104 @@ print(plan.director_output.mode)
 print(plan.director_output.llm_model)
 print(plan.director_output.fallback_reason)
 PY
+```
+
+### Content-Demo mit Voice, Music und Burn-in-Subtitles
+```bash
+python3 /workspace/scripts/agent_core_cli.py \
+  --job-id demo-social-morning-002 \
+  --idea "Drei einfache Gewohnheiten fuer einen ruhigeren, fokussierten Morgen." \
+  --script "Wenn dein Morgen hektisch startet, aendere nicht alles auf einmal. Leg zuerst dein Handy ausser Reichweite und trink direkt ein Glas Wasser. Dann schreib genau eine wichtige Aufgabe auf, bevor du Nachrichten oeffnest. Drei kleine Schritte, weniger Reibung, mehr Klarheit fuer den Rest des Tages." \
+  --duration-sec 22 \
+  --orientation portrait \
+  --resolution 576x1024 \
+  --use-voice \
+  --voice-id Ryan \
+  --language German \
+  --use-storyboard \
+  --use-music \
+  --subtitle-mode burn \
+  --overlay-text "3 kleine Morgen-Gewohnheiten" \
+  --music-prompt "Warm, modern, calm motivational instrumental for a short productivity tip video, no vocals, supportive under narration." \
+  --scene-count 4 \
+  --variations-per-scene 1 \
+  --takes-per-scene 1 \
+  --style "clean editorial cinematic" \
+  --pipeline-preference balanced \
+  --timeout-sec 7200
+```
+
+### Quality-Fix-Vergleichsrun mit langem Overlay-Titel
+```bash
+python3 /workspace/scripts/agent_core_cli.py \
+  --job-id demo-social-morning-003 \
+  --idea "Drei einfache Gewohnheiten fuer einen ruhigeren, fokussierten Morgen." \
+  --script "Wenn dein Morgen hektisch startet, aendere nicht alles auf einmal. Leg zuerst dein Handy ausser Reichweite und trink direkt ein Glas Wasser. Dann schreib genau eine wichtige Aufgabe auf, bevor du Nachrichten oeffnest. Drei kleine Schritte, weniger Reibung, mehr Klarheit fuer den Rest des Tages." \
+  --duration-sec 22 \
+  --orientation portrait \
+  --resolution 576x1024 \
+  --use-voice \
+  --voice-id Ryan \
+  --language German \
+  --use-storyboard \
+  --use-music \
+  --subtitle-mode burn \
+  --overlay-text "3 kleine Morgen-Gewohnheiten fuer weniger Stress" \
+  --music-prompt "Warm, modern, calm motivational instrumental for a short productivity tip video, no vocals, supportive under narration." \
+  --scene-count 4 \
+  --variations-per-scene 1 \
+  --takes-per-scene 1 \
+  --style "clean editorial cinematic" \
+  --pipeline-preference balanced \
+  --timeout-sec 7200
+```
+
+### Quality-Fix-Nachverifikation nach Anti-Text-Nachfix
+```bash
+python3 /workspace/scripts/agent_core_cli.py \
+  --job-id demo-social-morning-004 \
+  --idea "Drei einfache Gewohnheiten fuer einen ruhigeren, fokussierten Morgen." \
+  --script "Wenn dein Morgen hektisch startet, aendere nicht alles auf einmal. Leg zuerst dein Handy ausser Reichweite und trink direkt ein Glas Wasser. Dann schreib genau eine wichtige Aufgabe auf, bevor du Nachrichten oeffnest. Drei kleine Schritte, weniger Reibung, mehr Klarheit fuer den Rest des Tages." \
+  --duration-sec 22 \
+  --orientation portrait \
+  --resolution 576x1024 \
+  --use-voice \
+  --voice-id Ryan \
+  --language German \
+  --use-storyboard \
+  --use-music \
+  --subtitle-mode burn \
+  --overlay-text "3 kleine Morgen-Gewohnheiten fuer weniger Stress" \
+  --music-prompt "Warm, modern, calm motivational instrumental for a short productivity tip video, no vocals, supportive under narration." \
+  --scene-count 4 \
+  --variations-per-scene 1 \
+  --takes-per-scene 1 \
+  --style "clean editorial cinematic" \
+  --pipeline-preference balanced \
+  --timeout-sec 7200
+```
+
+### Social-Tipp-Format-Guard pruefen
+```bash
+python3 /workspace/scripts/agent_core_cli.py \
+  --job-id demo-social-morning-005 \
+  --idea "3 ruhige Morgen-Moves fuer einen klareren Start." \
+  --script "Oeffne direkt nach dem Aufwachen die Vorhaenge und hol dir Tageslicht. Trink dann langsam ein Glas Wasser und lass das Handy noch kurz liegen. Mach drei ruhige Atemzuege am Fenster, bevor du in den Tag startest." \
+  --duration-sec 22 \
+  --orientation portrait \
+  --resolution 576x1024 \
+  --use-voice \
+  --voice-id Ryan \
+  --language German \
+  --use-storyboard \
+  --use-music \
+  --subtitle-mode burn \
+  --overlay-text "3 ruhige Morgen-Moves" \
+  --music-prompt "Warm, calm, lightly uplifting instrumental for a short morning routine tip video, no vocals, supportive under narration." \
+  --scene-count 4 \
+  --variations-per-scene 1 \
+  --takes-per-scene 1 \
+  --style "clean editorial cinematic" \
+  --pipeline-preference balanced \
+  --timeout-sec 7200
 ```

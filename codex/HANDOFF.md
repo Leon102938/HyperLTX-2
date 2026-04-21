@@ -82,6 +82,10 @@
   - `/workspace/tools/llama.cpp/build/bin/llama-server` fehlte nach dem Restore zunaechst wieder, wurde aber ueber `scripts/serve_director_llm.sh` real neu gebaut
   - `config/director_llm.env` ist jetzt real vorhanden und wird von `start.sh`, `init.sh`, `app.main` und `scripts/check_director_llm.py` konsistent geladen
   - `scripts/serve_director_llm.sh` ist jetzt mit kleinen Health-/Retry-/PID-Guards gehaertet; `scripts/ensure_llama_cpp.sh` sichert bei Restore-Rebuilds jetzt auch `ninja`
+  - ein zusaetzlicher echter Restore-/Startup-Fall wurde am 2026-04-20 belegt: `cli-test-basic-001` fiel auf `rule_based_fallback`, weil `init.sh` den Director-Autostart uebersprang, als `serve_director_llm.sh` zu diesem Zeitpunkt noch nicht executable war
+  - minimaler Fix dafuer in `init.sh`: vor dem Director-Autostart wird `serve_director_llm.sh` jetzt explizit `chmod +x` gesetzt und per `bash` gestartet
+  - der direkte Healthcheck danach war wieder gruen: `/v1/models` und `python3 /workspace/scripts/check_director_llm.py`
+  - neuer echter enger Recheck ueber den produktiven CLI/API-Pfad: `cli-test-basic-001-reverify` lief danach wieder mit `director_mode=llm_augmented`
   - neuer echter Restore-Live-Run mit aktivem Director-LLM: `restore-startup-check-20260418`
   - neuer echter Defaultpfad-Live-Run mit aktivem Director-LLM: `director-stability-check-20260418`
   - der kleine Restore-Folgecheck `restore-health-check-20260419` lief real mit `llm_augmented`, scheiterte danach aber in LTX2 an einem CUDA-OOM

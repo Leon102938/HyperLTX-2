@@ -53,7 +53,7 @@ def build_default_registry(base_url: str = "http://127.0.0.1:8000") -> BackendRe
             QwenTTSAdapter(base_url=base_url),
             LTX2Adapter(base_url=base_url),
             ZImageStoryboardAdapter(base_url=base_url),
-            MusicAdapter(),
+            MusicAdapter(base_url=base_url),
             StoryboardStubAdapter(),
         ]
     )

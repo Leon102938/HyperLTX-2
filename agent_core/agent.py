@@ -4,7 +4,7 @@ import traceback
 from pathlib import Path
 from typing import Any
 
-from agent_core.adapters.base import StoryboardAdapter, VideoAdapter, VoiceAdapter
+from agent_core.adapters.base import MusicBackendAdapter, StoryboardAdapter, VideoAdapter, VoiceAdapter
 from agent_core.assembler import ResultAssembler
 from agent_core.backend_registry import BackendRegistry, build_default_registry
 from agent_core.planner import ProductionPlanner
@@ -59,6 +59,7 @@ class VideoAgent:
         state = self.state_store.initialize(job)
         plan: ProductionPlan | None = None
         voice_result = None
+        music_result = None
         storyboard_result = None
 
         try:
@@ -102,6 +103,22 @@ class VideoAgent:
                             "Plan updated after real voice duration became available.",
                         )
 
+            music_step = next(step for step in plan.steps if step.name == "music")
+            if music_step.enabled:
+                music_adapter = self.registry.primary("music")
+                if music_adapter is None or not isinstance(music_adapter, MusicBackendAdapter):
+                    raise RuntimeError("Planner enabled music but no music adapter is available")
+                self.state_store.start_step(state, "music", music_adapter.name)
+                music_result = music_adapter.generate_music(job, plan, self.state_store.job_dir(job.job_id or ""), voice_result)
+                self.state_store.finish_step(state, music_result)
+                if music_result.success:
+                    self.state_store.append_log(state.job_id, "Background music generation completed.")
+                else:
+                    self.state_store.append_log(
+                        state.job_id,
+                        f"Music step failed softly and assembly will continue without background music: {music_result.error}",
+                    )
+
             storyboard_step = next(step for step in plan.steps if step.name == "storyboard")
             if storyboard_step.enabled:
                 storyboard_adapter = self.registry.primary("storyboard")
@@ -141,6 +158,7 @@ class VideoAgent:
                 voice_result,
                 video_result,
                 storyboard_result,
+                music_result=music_result,
             )
             self.state_store.transition(state, "assembled", "Result assembled.")
             self.state_store.save_result(state, result)
@@ -156,6 +174,7 @@ class VideoAgent:
                 state,
                 str(exc),
                 voice_result=voice_result,
+                music_result=music_result,
                 storyboard_result=storyboard_result,
             )
             self.state_store.save_result(state, failed_result)

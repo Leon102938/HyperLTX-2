@@ -47,6 +47,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Resolution label or explicit WxH. Default: %(default)s",
     )
     parser.add_argument("--voice-id", default="Ryan", help="Voice id used when voice is enabled. Default: %(default)s")
+    parser.add_argument("--language", default="German", help="Narration language metadata. Default: %(default)s")
     parser.add_argument(
         "--use-voice",
         dest="use_voice",
@@ -73,6 +74,30 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_false",
         help="Disable storyboard generation. Default: disabled.",
     )
+    parser.add_argument(
+        "--use-music",
+        dest="use_music",
+        action="store_true",
+        default=False,
+        help="Enable instrumental background music generation.",
+    )
+    parser.add_argument(
+        "--no-music",
+        dest="use_music",
+        action="store_false",
+        help="Disable background music generation. Default: disabled.",
+    )
+    parser.add_argument(
+        "--subtitle-mode",
+        choices=("off", "sidecar", "burn"),
+        default="off",
+        help="Subtitle handling mode. Default: %(default)s",
+    )
+    parser.add_argument("--overlay-text", default="", help="Optional opening title overlay text.")
+    parser.add_argument("--music-prompt", default="", help="Optional explicit music prompt override.")
+    parser.add_argument("--scene-count", type=int, help="Optional forced scene count via metadata.")
+    parser.add_argument("--variations-per-scene", type=int, help="Optional variation count per scene.")
+    parser.add_argument("--takes-per-scene", type=int, help="Optional take count per scene.")
     parser.add_argument("--style", default="cinematic", help="Style hint. Default: %(default)s")
     parser.add_argument(
         "--pipeline-preference",
@@ -138,16 +163,31 @@ def _build_payload(args: argparse.Namespace) -> dict[str, Any]:
         "script": args.script,
         "resolution": args.resolution,
         "use_voice": args.use_voice,
+        "use_music": args.use_music,
         "use_storyboard": args.use_storyboard,
         "style": args.style,
         "pipeline_preference": args.pipeline_preference,
         "orientation": args.orientation,
+        "metadata": {
+            "language": args.language,
+            "subtitle_mode": args.subtitle_mode,
+        },
     }
 
     if args.duration_sec is not None:
         job["duration_sec"] = args.duration_sec
     if args.use_voice:
         job["voice_id"] = args.voice_id
+    if args.overlay_text:
+        job["metadata"]["overlay_text"] = args.overlay_text
+    if args.music_prompt:
+        job["metadata"]["music_prompt"] = args.music_prompt
+    if args.scene_count is not None:
+        job["metadata"]["scene_count"] = args.scene_count
+    if args.variations_per_scene is not None:
+        job["metadata"]["variations_per_scene"] = args.variations_per_scene
+    if args.takes_per_scene is not None:
+        job["metadata"]["takes_per_scene"] = args.takes_per_scene
 
     return {"job": job}
 

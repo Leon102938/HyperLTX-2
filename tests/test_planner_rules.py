@@ -5,7 +5,7 @@ from pydantic import ValidationError
 from agent_core.backend_registry import BackendRegistry
 from agent_core.planner import ProductionPlanner
 from agent_core.schemas import BackendCapabilities, JobInput
-from agent_core.adapters.base import VideoAdapter, VoiceAdapter
+from agent_core.adapters.base import MusicBackendAdapter, VideoAdapter, VoiceAdapter
 from agent_core.utils import quantize_duration_to_frame_contract
 
 
@@ -32,6 +32,16 @@ class PlannerVideoAdapter(VideoAdapter):
         )
 
     def generate_video(self, job, plan, workspace, voice_result=None):  # pragma: no cover
+        raise NotImplementedError
+
+
+class PlannerMusicAdapter(MusicBackendAdapter):
+    name = "planner_music"
+
+    def capabilities(self) -> BackendCapabilities:
+        return BackendCapabilities(name=self.name, kind="music", available=True, phase1_enabled=True)
+
+    def generate_music(self, job, plan, workspace, voice_result=None):  # pragma: no cover
         raise NotImplementedError
 
 
@@ -99,6 +109,23 @@ class PlannerRulesTest(unittest.TestCase):
         self.assertIn("storyboard", skipped)
         self.assertTrue(plan.warnings)
 
+    def test_music_is_enabled_when_backend_is_available(self) -> None:
+        registry = BackendRegistry([PlannerVoiceAdapter(), PlannerVideoAdapter(), PlannerMusicAdapter()])
+        plan = ProductionPlanner(registry).build_plan(
+            JobInput(
+                idea="Agent teaser",
+                use_voice=False,
+                use_music=True,
+                resolution="draft",
+                orientation="landscape",
+            )
+        )
+
+        music_step = next(step for step in plan.steps if step.name == "music")
+        self.assertTrue(music_step.enabled)
+        self.assertEqual(music_step.adapter_name, "planner_music")
+        self.assertFalse(any("Music requested but skipped" in warning for warning in plan.warnings))
+
     def test_a2vid_is_rejected_in_phase1(self) -> None:
         job = JobInput(
             idea="Agent teaser",
@@ -119,6 +146,45 @@ class PlannerRulesTest(unittest.TestCase):
 
         with self.assertRaises(ValidationError):
             JobInput(idea="x", script="", duration_sec=0)
+
+    def test_social_tip_visual_guard_avoids_text_prone_scene_motifs(self) -> None:
+        job = JobInput(
+            idea="Drei Morgen-Gewohnheiten fuer einen fokussierten Start.",
+            script=(
+                "Wenn dein Morgen hektisch startet, aendere nicht alles auf einmal. "
+                "Leg zuerst dein Handy ausser Reichweite und trink direkt ein Glas Wasser. "
+                "Dann schreib genau eine wichtige Aufgabe auf, bevor du Nachrichten oeffnest. "
+                "Drei kleine Schritte, weniger Reibung, mehr Klarheit fuer den Rest des Tages."
+            ),
+            duration_sec=22,
+            use_voice=True,
+            use_storyboard=True,
+            use_music=True,
+            orientation="portrait",
+            resolution="draft",
+            metadata={"subtitle_mode": "burn"},
+        )
+
+        plan = self.planner.build_plan(job)
+
+        self.assertTrue(plan.metadata["social_tip_visual_guard"])
+        guarded_text = []
+        for scene in plan.scenes:
+            if not scene.scene_intent:
+                continue
+            guarded_text.extend(
+                [
+                    scene.scene_intent.hook_focus,
+                    scene.scene_intent.visual_goal,
+                    scene.scene_intent.shot_intent,
+                ]
+            )
+        flattened = " ".join(guarded_text).lower()
+        self.assertNotIn("writing on notepad", flattened)
+        self.assertNotIn("handwriting", flattened)
+        self.assertNotIn("paper", flattened)
+        self.assertIn("window", flattened)
+        self.assertIn("water", flattened)
 
 
 if __name__ == "__main__":
