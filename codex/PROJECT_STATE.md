@@ -15,6 +15,11 @@ Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E, 3A, 3B, 4A, 4B und
 - `config/director_llm.env` ist jetzt als reale lokale Default-Konfiguration vorhanden; `start.sh`, `init.sh`, `app.main` und `scripts/check_director_llm.py` laden diese Defaults jetzt konsistent, optional ergaenzt durch `config/director_llm.env.local`.
 - Ein zentraler API-Prozess laeuft jetzt wieder sauber ueber `uvicorn app.main:app` auf Port `8000`.
 - Im Snapshot vom 2026-04-20 lief FastAPI real auf Port `8000`; der Director-Serve auf `127.0.0.1:8011` lief nicht dauerhaft im Hintergrund, liess sich aber ueber den produktiven Pfad `scripts/serve_director_llm.sh` erfolgreich kurz starten und danach wieder sauber beenden.
+- Neuer enger Startup-Recheck am 2026-04-21:
+  - vor dem Recheck lief FastAPI real auf `8000`, waehrend `127.0.0.1:8011` real `Connection refused` lieferte
+  - ein kompletter Pod-Neustart war in der Session nicht praktikabel; der engste reale frische Startpfad wurde deshalb direkt ueber `bash /workspace/init.sh` ausgefuehrt
+  - dieser frische `init.sh`-Lauf hat den Director danach ohne manuelles Vorstarten von `scripts/serve_director_llm.sh` selbst hochgebracht
+  - direkt danach waren `ps`, `curl http://127.0.0.1:8011/v1/models` und `python3 /workspace/scripts/check_director_llm.py` real gruen
 - JupyterLab laeuft bereits auf Port `8888`.
 - Der Pod meldet `RUNPOD_GPU_NAME=NVIDIA RTX 6000 Ada Generation`, `RUNPOD_GPU_COUNT=1`, `RUNPOD_CPU_COUNT=10`, `RUNPOD_MEM_GB=167`.
 - GPU und Torch sind nutzbar: `torch 2.7.0+cu128`, CUDA verfuegbar, 1 GPU erkannt.
@@ -110,6 +115,8 @@ Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E, 3A, 3B, 4A, 4B und
   - damit war der Director beim Pod-Init zwar konfiguriert und das Modell vorhanden, der lokale Serve-Prozess wurde aber wegen der `-x`-Pruefung in `init.sh` vor dem spaeteren globalen `chmod +x /workspace/scripts/*.sh` uebersprungen
   - minimaler Fix dafuer in `init.sh`: fuer den Director-Autostart wird `serve_director_llm.sh` jetzt bei vorhandener Datei vor dem Start explizit `chmod +x` gesetzt und ueber `bash` ausgefuehrt
   - danach wurde der reale Director-Daemon ohne Rebuild erneut ueber `DIRECTOR_LLM_DAEMON=1 /workspace/scripts/serve_director_llm.sh` gestartet; `/v1/models` und `python3 /workspace/scripts/check_director_llm.py` waren danach gruen
+  - neuer realer Beleg am 2026-04-21: derselbe `init.sh`-Fix funktioniert nicht nur bei manuellem Director-Start, sondern auch ueber einen frischen `bash /workspace/init.sh`-Lauf selbst
+  - `scripts/ensure_llama_cpp.sh` repariert im aktuellen Workspace den vorhandenen `llama.cpp`-Runtime-Stand jetzt vor einem Rebuild zuerst ueber Execute-Bits und Linux-Symlink-Aliase; dadurch blieb auch der frische `init.sh`-Recheck ein Restore-/Runtime-Fix und kein Rebuild-Fall
   - `tests/test_director_layer.py` isoliert `DIRECTOR_LLM_*` jetzt explizit im Test-Setup, damit lokale Director-Defaults keine env-sensitiven Fallback-Assertions verfaelschen
 - Verifizierter echter Phase-5A-Fallback-Lauf:
   - Job-ID: `phase5a-live-fallback-1776420785`
@@ -180,6 +187,19 @@ Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E, 3A, 3B, 4A, 4B und
   - Director-LLM aktiv: `true`
   - `director_fallback_reason=null`
   - finales MP4: `/workspace/agent_runs/cli-test-basic-001-reverify/final.mp4`
+- Verifizierter echter frischer Startup-Recheck:
+  - Einstieg: direkter frischer Lauf `bash /workspace/init.sh` als engster realistischer Startpfad in dieser Session
+  - Einordnung: kein kompletter Pod-Neustart, aber bewusst kein manueller Director-Start vor dem Check
+  - Director danach real im Hintergrund aktiv: `llama-server` auf `127.0.0.1:8011`, PPID `1`
+  - `/v1/models` und `python3 /workspace/scripts/check_director_llm.py` danach real gruen
+- Verifizierter echter Produktivlauf nach frischem Startup-Recheck:
+  - Job-ID: `startup-recheck-20260421`
+  - Einstieg: `POST http://127.0.0.1:8000/agent-core/jobs` ueber `python3 /workspace/scripts/agent_core_cli.py`
+  - Director-Modus: `llm_augmented`
+  - Director-LLM aktiv: `true`
+  - `director_fallback_reason=null`
+  - finales MP4: `/workspace/agent_runs/startup-recheck-20260421/final.mp4`
+  - verifizierte Finaldaten laut `result.json`: `final_phase=assembled`, `actual_final_duration_sec=4.042`
 - Verifizierter lokaler CLI-Manual-Testpfad:
   - Datei: `/workspace/scripts/agent_core_cli.py`
   - Scope: Job submitten, Polling anzeigen und finale Artefaktpfade/-URLs ausgeben
@@ -623,3 +643,70 @@ Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E, 3A, 3B, 4A, 4B und
 
 ### Empfehlungen
 - Der naechste sinnvolle Qualitaetsschritt fuer dieses Format waere kein breiter Prompt-Refactor, sondern eine kleine weitere Motivbibliothek fuer robuste Social-Formate wie Morgenroutine, Mini-Fitness, Fokus-Pause oder Kuechenroutine.
+
+## Update 2026-04-21 Narrow Social Quality Pass
+
+### Einordnung
+- Die alten Run-Ordner `demo-social-morning-003`, `004` und `005` fehlten im aktuellen Workspace.
+- Der Baseline-Vergleich dieses Schritts basiert deshalb ehrlich auf:
+  - den kanonischen Doku-Notizen zu `003` bis `005`
+  - den neuen Realruns dieser Session
+
+### Minimaler produktiver Pass
+- Produktive Codepfade erweitert in:
+  - `agent_core/planner.py`
+  - `agent_core/assembler.py`
+  - `tests/test_planner_rules.py`
+  - `tests/test_assembler_mux.py`
+- Neuer enger Planner-Hebel:
+  - kleine Motivbibliothek fuer `morning_reset`, `focus_break`, `kitchen_reset`, `movement_reset`
+  - Social-Tipp-Subtitles bekommen im produktiven Plan jetzt `subtitle_min_words=3` und `subtitle_min_duration_sec=1.1`
+  - der Assembler liest diese Subtitle-Defaults jetzt aus `plan.metadata`
+- Nach realem Output-Befund kam ein zweiter Minimalstich dazu:
+  - Social-Tipp-Familien ueberschreiben jetzt auch `style_lock.visual_identity`
+  - Ziel: textnahe Director-Stilanker wie Screen-/Office-Nahbilder nicht ungefiltert in den finalen Prompt uebernehmen
+
+### Real verifizierte Runs
+- `demo-social-morning-006`
+  - real erfolgreich mit `final.mp4`
+  - aber noch kein valider Nachweis fuer den neuen Pass: `plan.json` zeigte noch `social_tip_visual_guard_version=v1`
+  - Ursache: der produktive Uvicorn auf `8000` lief ohne Auto-Reload noch mit stale Code
+- `demo-social-morning-007`
+  - real erfolgreich mit `director_mode=llm_augmented`, `director_llm_active=true`, `final.mp4`
+  - `plan.json` zeigt real:
+    - `social_tip_visual_guard_version=v2`
+    - `social_tip_visual_guard_family=morning_reset`
+    - `subtitle_min_words=3`
+    - Szene 3 jetzt als `quiet kitchen routine with kettle steam, ceramic mug, fruit bowl, clean counter`
+  - Sichtbefund:
+    - Szene 1 und 2 lesen sich auf dem Phone sofort klarer als die dokumentierte `005`-Basis
+    - Szene 3 ist kohaerenter als das fruehere generische neutrale B-Roll und vermeidet Papier-/Notiznaehe weiter
+    - Overlay und Burn-in-Subtitles bleiben funktional
+    - Restrisiko bleibt sichtbar: im finalen Payoff tauchen weiter runabhaengige Glyph-/Textfragmente auf
+- `demo-social-focus-break-001`
+  - real erfolgreich mit `director_mode=llm_augmented`, `final.mp4`
+  - `plan.json` zeigt real die neue `focus_break`-Szenenfolge:
+    - Desk-Reset
+    - Wasser + geschlossener Laptop
+    - Fenster-Stretch
+    - ruhiger Desk-Return
+  - Sichtbefund:
+    - trotz sauberer Szenenfolge kippte der Output stark auf Whiteboard-/Screen-/Dokument-/Textmuell
+    - der Hauptverursacher lag nicht nur in den Szenenmotiven, sondern auch im geerbten Director-`style_lock.visual_identity`
+- `demo-social-focus-break-002`
+  - real erfolgreich mit `director_mode=llm_augmented`, `director_llm_active=true`, `final.mp4`
+  - `plan.json` zeigt real den Nachfix:
+    - `social_tip_visual_guard_version=v2`
+    - `social_tip_visual_guard_family=focus_break`
+    - `style_lock.visual_identity=Calm portrait desk reset in soft daylight, uncluttered workspace turned away from displays, readable body movement, no readable props`
+  - Sichtbefund:
+    - etwas weniger direkter Whiteboard-Look als `focus-break-001`
+    - aber weiterhin klar ungenuegend: Papier-/Desk-/Screen-/Glyph-Artefakte dominieren den fertigen Clip noch sichtbar
+
+### Verifizierte Wirkung
+- Wirksam:
+  - die kleine Motivbibliothek verbessert das Morning-Format real und macht Szene 3 stabiler/social-lesbarer
+  - der Subtitle-Hebel ist produktiv verdrahtet und real in `plan.json` belegt
+- Noch nicht geloest:
+  - `focus_break` bleibt trotz neutralisiertem `style_lock.visual_identity` modellseitig deutlich text-/screen-anfaellig
+  - Burn-in-Subtitles sind funktional, aber der neue Subtitle-Hebel verbessert diese beiden realen Clips nur leicht; die groessere sichtbare Schwachstelle bleibt das Bildmaterial

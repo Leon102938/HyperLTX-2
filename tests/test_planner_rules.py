@@ -168,6 +168,9 @@ class PlannerRulesTest(unittest.TestCase):
         plan = self.planner.build_plan(job)
 
         self.assertTrue(plan.metadata["social_tip_visual_guard"])
+        self.assertEqual(plan.metadata["social_tip_visual_guard_family"], "morning_reset")
+        self.assertEqual(plan.metadata["subtitle_min_words"], 3)
+        self.assertAlmostEqual(plan.metadata["subtitle_min_duration_sec"], 1.1)
         guarded_text = []
         for scene in plan.scenes:
             if not scene.scene_intent:
@@ -185,6 +188,41 @@ class PlannerRulesTest(unittest.TestCase):
         self.assertNotIn("paper", flattened)
         self.assertIn("window", flattened)
         self.assertIn("water", flattened)
+
+    def test_social_tip_visual_guard_focus_break_family_uses_stable_motifs(self) -> None:
+        job = JobInput(
+            idea="Vier kurze Focus-Break Moves fuer mehr Klarheit im Arbeitstag.",
+            script=(
+                "Wenn dein Kopf am Bildschirm dicht macht, steh kurz auf. "
+                "Trink erst einen Schluck Wasser, roll die Schultern und atme am Fenster tief durch. "
+                "Dann geh mit ruhigerem Blick zurueck an den Tisch."
+            ),
+            duration_sec=18,
+            use_voice=True,
+            use_storyboard=True,
+            use_music=True,
+            orientation="portrait",
+            resolution="draft",
+            metadata={"subtitle_mode": "burn"},
+        )
+
+        plan = self.planner.build_plan(job)
+
+        self.assertTrue(plan.metadata["social_tip_visual_guard"])
+        self.assertEqual(plan.metadata["social_tip_visual_guard_family"], "focus_break")
+        self.assertIn("workspace turned away from displays", plan.director_output.style_lock.visual_identity.lower())
+        self.assertNotIn("screen", plan.director_output.style_lock.visual_identity.lower())
+        flattened = " ".join(
+            f"{scene.scene_intent.hook_focus} {scene.scene_intent.visual_goal} {scene.scene_intent.shot_intent}"
+            for scene in plan.scenes
+            if scene.scene_intent
+        ).lower()
+        self.assertIn("stretch", flattened)
+        self.assertIn("window", flattened)
+        self.assertIn("water", flattened)
+        self.assertNotIn("paper", flattened)
+        self.assertNotIn("screen", flattened)
+        self.assertNotIn("notebook", flattened)
 
 
 if __name__ == "__main__":

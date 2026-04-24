@@ -95,6 +95,14 @@
   - dieser Voice-Run lief real mit `director_mode=llm_augmented`, `director_llm_active=true`, Qwen-TTS, LTX2 und erzeugte erfolgreich `final.mp4`
   - fuer schnelle lokale Manual-Checks gibt es jetzt zusaetzlich `scripts/agent_core_cli.py` als kleinen Submit-/Polling-Wrapper ueber denselben produktiven API-Vertrag
   - `tests/test_director_layer.py` isoliert `DIRECTOR_LLM_*` jetzt bewusst im Test-Setup, damit lokale Pod-Defaults die Fallback-Tests nicht kippen
+  - neuer enger frischer Startup-Recheck am 2026-04-21:
+    - kompletter Pod-Neustart war in der Session nicht praktikabel; der engste reale Startpfad wurde deshalb direkt ueber `bash /workspace/init.sh` erneut ausgefuehrt
+    - vor dem Recheck war `127.0.0.1:8011` real down, waehrend FastAPI auf `8000` lief
+    - der frische `init.sh`-Lauf hat den Director danach ohne manuelles `serve_director_llm.sh` selbst gestartet
+    - direkt danach waren `ps`, `/v1/models` und `python3 /workspace/scripts/check_director_llm.py` gruen
+    - neuer echter enger Produktivcheck danach: `startup-recheck-20260421`
+    - dieser Lauf lief real mit `director_mode=llm_augmented`, `director_llm_active=true` und erzeugte erfolgreich `/workspace/agent_runs/startup-recheck-20260421/final.mp4`
+    - wichtiger Abschluss fuer diesen Punkt: der minimale `init.sh`-Autostart-Fix ist damit nicht mehr nur wahrscheinlich, sondern ueber einen frischen `init.sh`-Startpfad real verifiziert
 
 ## Was real verifiziert wurde
 - Tests:
@@ -125,11 +133,20 @@
   - `director-stability-check-20260418` via `POST http://127.0.0.1:8000/agent-core/jobs` mit Director-Defaults aus `config/director_llm.env` und erneut real verifiziertem `llm_augmented`-Pfad
   - `director-gpu-fix-check-20260419` via `POST http://127.0.0.1:8000/agent-core/jobs` mit erneut real verifiziertem `llm_augmented`-Director-Pfad und erfolgreichem kleinem LTX2-Render nach dem GPU-Fix
   - `voice-stability-check-20260419` via `POST http://127.0.0.1:8000/agent-core/jobs` mit aktivem Voice-Pfad, `llm_augmented`, erfolgreichem Qwen-TTS-Render, erfolgreichem LTX2-Video und finalem muxed `final.mp4`
+  - `startup-recheck-20260421` via frischem `bash /workspace/init.sh` plus `POST http://127.0.0.1:8000/agent-core/jobs` mit erneut real verifiziertem `llm_augmented`-Director-Pfad und erfolgreichem `final.mp4`
 - Reale lokale Backends verifiziert:
   - Qwen TTS ueber vorhandene FastAPI-Endpunkte
   - LTX2 `ti2vid` ueber vorhandene FastAPI-Endpunkte
   - Z-Image ueber vorhandene FastAPI-Endpunkte
   - lokaler Director-LLM-Serve ueber `llama.cpp` auf `127.0.0.1:8011`
+- Reale Quality-Verifikation am 2026-04-21:
+  - die alten Artefaktordner `demo-social-morning-003` bis `005` fehlten im aktuellen Workspace; die Baseline musste deshalb ehrlich ueber die kanonische Doku plus neue Realruns gezogen werden
+  - `demo-social-morning-006` lief noch ueber einen stale Live-Server und zeigte in `plan.json` weiter `social_tip_visual_guard_version=v1`; der produktive Uvicorn auf `8000` musste fuer echte Live-Verifikation manuell neu gestartet werden
+  - `demo-social-morning-007` lief danach real mit `director_mode=llm_augmented`, `social_tip_visual_guard_version=v2`, `social_tip_visual_guard_family=morning_reset` und `final.mp4`
+  - `demo-social-morning-007` zeigt real die neue robustere Szene 3 als Kuechenroutine statt generischem neutralem B-Roll; Overlay und Burn-in-Subtitles bleiben funktionsfaehig
+  - `demo-social-focus-break-001` lief real mit der neuen `focus_break`-Szenenfolge, blieb aber visuell schlecht: Whiteboard-/Screen-/Textmuell dominierte trotz sauberer Szenenintents
+  - minimaler produktiver Nachfix in `agent_core/planner.py`: Social-Tipp-Familien ueberschreiben jetzt auch `style_lock.visual_identity`, damit textnahe Director-Style-Locks nicht ungefiltert in den Prompt rutschen
+  - `demo-social-focus-break-002` lief danach real mit dem neuen display-fernen `style_lock.visual_identity` und `final.mp4`; der sichtbare Screen-/Papier-/Glyph-Muell blieb aber weiterhin deutlich vorhanden
 - Backup-Status dieses Schritts:
   - in diesem Schritt wurde bewusst kein neues Backup erzeugt
   - beim naechsten Abschluss oder Backup muss die Dateiliste explizit auf Vollstaendigkeit gegen den realen Director-/Startup-Pfad geprueft werden
@@ -169,7 +186,7 @@
 
 ## Was als Naechstes sinnvoll ist
 - Kleinster sinnvoller naechster Schritt:
-  - den jetzigen Qwen3.6-Director-Pfad ueber einen kleinen Multi-Scene- oder Storyboard-Live-Run weiter validieren; der enge Single-Scene-Voice-Kernpfad und ein lokales Manual-Test-CLI sind jetzt real vorhanden
+  - nach dem jetzt real gruenen frischen `init.sh`-Startup-Recheck den bestehenden Qwen3.6-Director-Pfad ueber einen kleinen Multi-Scene- oder Storyboard-Live-Run weiter validieren
 - Alternative:
   - Character-/Voice-/World-Lock kontrolliert ausbauen
 - Nicht sinnvoll als naechster Schritt:

@@ -5,12 +5,58 @@ ROOT_DIR="${ROOT_DIR:-/workspace}"
 LLAMA_CPP_DIR="${LLAMA_CPP_DIR:-$ROOT_DIR/tools/llama.cpp}"
 LLAMA_SERVER_BIN="${LLAMA_SERVER_BIN:-$LLAMA_CPP_DIR/build/bin/llama-server}"
 LLAMA_CLI_BIN="${LLAMA_CLI_BIN:-$LLAMA_CPP_DIR/build/bin/llama-cli}"
+LLAMA_BIN_DIR="${LLAMA_BIN_DIR:-$LLAMA_CPP_DIR/build/bin}"
 LLAMA_CPP_REPO="${LLAMA_CPP_REPO:-https://github.com/ggml-org/llama.cpp.git}"
 LLAMA_CPP_BUILD_JOBS="${LLAMA_CPP_BUILD_JOBS:-$(nproc)}"
 LLAMA_CPP_FALLBACK_SRC_DIR="${LLAMA_CPP_FALLBACK_SRC_DIR:-$ROOT_DIR/tools/llama.cpp.upstream}"
 
-if [ -x "$LLAMA_SERVER_BIN" ] && [ -x "$LLAMA_CLI_BIN" ]; then
+runtime_ready() {
+  if [ ! -x "$LLAMA_SERVER_BIN" ] || [ ! -x "$LLAMA_CLI_BIN" ]; then
+    return 1
+  fi
+  if ldd "$LLAMA_SERVER_BIN" 2>/dev/null | grep -q 'not found'; then
+    return 1
+  fi
+  return 0
+}
+
+repair_runtime() {
+  local lib_name
+  local versioned_path
+  local versioned_file
+
+  if [ ! -d "$LLAMA_BIN_DIR" ]; then
+    return 1
+  fi
+
+  chmod +x "$LLAMA_SERVER_BIN" "$LLAMA_CLI_BIN" 2>/dev/null || true
+
+  for lib_name in \
+    libggml-base \
+    libggml-cpu \
+    libggml-cuda \
+    libggml \
+    libllama-common \
+    libllama \
+    libmtmd
+  do
+    versioned_path="$(find "$LLAMA_BIN_DIR" -maxdepth 1 -type f -name "$lib_name.so.*" | sort -V | tail -n 1)"
+    if [ -n "$versioned_path" ]; then
+      versioned_file="$(basename "$versioned_path")"
+      ln -sfn "$versioned_file" "$LLAMA_BIN_DIR/$lib_name.so.0"
+      ln -sfn "$lib_name.so.0" "$LLAMA_BIN_DIR/$lib_name.so"
+    fi
+  done
+}
+
+if runtime_ready; then
   echo "[director-llm] llama.cpp already available at $LLAMA_SERVER_BIN"
+  exit 0
+fi
+
+repair_runtime
+if runtime_ready; then
+  echo "[director-llm] repaired existing llama.cpp runtime at $LLAMA_BIN_DIR"
   exit 0
 fi
 

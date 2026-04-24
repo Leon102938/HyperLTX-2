@@ -81,6 +81,15 @@
 - Der konkrete echte Fall dafuer war `cli-test-basic-001`: `director_fallback_reason=director_llm_request_failed: <urlopen error [Errno 111] Connection refused>`, waehrend `final.mp4` trotzdem erfolgreich erzeugt wurde.
 - `scripts/ensure_llama_cpp.sh` sollte bei Restore-Rebuilds nicht nur `cmake`, sondern jetzt auch `ninja` sicherstellen.
 - `scripts/ensure_llama_cpp.sh` prueft `llama-server` und `llama-cli` ueber `-x`; fehlende Execute-Bits koennen deshalb einen falschen Rebuild triggern, obwohl die realen ELF-Dateien schon da sind.
+- Der engste realistische frische Startup-Recheck innerhalb einer laufenden Session ist `bash /workspace/init.sh`; wenn ein kompletter Pod-Neustart nicht praktikabel ist, ist genau dieser Pfad der naechste ehrliche Beleg fuer den Autostart.
+- Dieser frische `init.sh`-Pfad ist am 2026-04-21 real gruen gelaufen: vor dem Lauf war `127.0.0.1:8011` down, danach lief `llama-server` ohne separates manuelles `serve_director_llm.sh`.
+- Der aktuelle Restore-Fix in `scripts/ensure_llama_cpp.sh` sollte vorhandene `llama.cpp`-ELFs zuerst ueber Execute-Bits und `.so`-/`.so.0`-Symlink-Aliase reparieren; erst wenn das nicht reicht, ist ein Rebuild ueberhaupt gerechtfertigt.
+- Ein erfolgreicher frischer `init.sh`-Recheck plus ein anschliessender kleiner API-Job mit `director_mode=llm_augmented` ist derzeit der beste enge Beleg, dass der Startup-Pfad wirklich wieder sauber ist.
+- Fuer alte Quality-Baselines darf nicht angenommen werden, dass die frueheren `agent_runs/`-Ordner noch lokal existieren; in dieser Session fehlten `demo-social-morning-003` bis `005`, sodass der Vergleich ehrlich ueber die kanonische Doku plus neue Realruns laufen musste.
+- Der produktive `uvicorn app.main:app` auf Port `8000` laeuft ohne Auto-Reload; nach Planner-Aenderungen kann ein frischer API-Run sonst noch stale Regeln verwenden. Der reale Beleg dafuer war `demo-social-morning-006`, dessen `plan.json` nach Codeaenderung noch `social_tip_visual_guard_version=v1` zeigte.
+- Die kleine Social-Motivbibliothek verbessert das Morning-Format real, besonders wenn textnahe Mittelbilder auf Kuechen-/Haushaltsmotive umgebogen werden.
+- `focus_break` bleibt deutlich schwieriger: selbst mit sauberer Szenenfolge koennen Director-Style-Locks oder modellinterne Office-Assoziationen Whiteboard-/Screen-/Papiermotive wieder hereinziehen.
+- Ein family-spezifischer Override von `style_lock.visual_identity` ist ein valider Minimalhebel fuer Social-Tipp-Guards, reduziert aber modellseitigen Text-/Glyph-Muell in textnahen Office-Szenen noch nicht ausreichend.
 - Der reale verifizierte Modell-Download fuer den Director lief ueber `bartowski/Qwen_Qwen3.6-35B-A3B-GGUF`.
 - Der zuerst vermutete Dateiname ohne `Qwen_`-Praefix existierte nicht; der reale Dateiname ist `Qwen_Qwen3.6-35B-A3B-Q4_K_M.gguf`.
 - Echter erfolgreicher Phase-5B-Run:

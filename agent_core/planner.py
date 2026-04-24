@@ -59,6 +59,46 @@ class ProductionPlanner:
         "before",
         "start",
     )
+    SOCIAL_TIP_FAMILY_MARKERS: dict[str, tuple[str, ...]] = {
+        "focus_break": (
+            "focus break",
+            "fokus pause",
+            "fokus-break",
+            "pause",
+            "break",
+            "desk",
+            "deep work",
+            "schirm",
+            "bildschirm",
+            "screen",
+            "meeting",
+            "arbeit",
+            "workday",
+        ),
+        "kitchen_reset": (
+            "kitchen",
+            "kueche",
+            "breakfast",
+            "fruehstueck",
+            "tea",
+            "tee",
+            "coffee",
+            "kaffee",
+            "counter",
+            "kettle",
+        ),
+        "movement_reset": (
+            "stretch",
+            "mobility",
+            "walk",
+            "gehen",
+            "bewegung",
+            "fitness",
+            "mini workout",
+            "mini-fitness",
+            "reset move",
+        ),
+    }
     SOCIAL_TIP_AVOID_CUES = (
         "paper",
         "notebook",
@@ -77,7 +117,12 @@ class ProductionPlanner:
         "book pages",
         "sticky notes",
         "printed notes",
+        "book covers",
+        "packaging text",
+        "product labels",
     )
+    SOCIAL_TIP_SUBTITLE_MIN_WORDS = 3
+    SOCIAL_TIP_SUBTITLE_MIN_DURATION_SEC = 1.1
 
     def __init__(
         self,
@@ -155,13 +200,15 @@ class ProductionPlanner:
             scene_beats=scene_beats,
         )
         social_tip_visual_guard = self._is_social_tip_format(job, target_duration)
+        social_tip_family = self._social_tip_family(job) if social_tip_visual_guard else None
         if social_tip_visual_guard:
             director_output = self._apply_social_tip_visual_guard(
                 director_output=director_output,
                 scene_beats=scene_beats,
+                family=social_tip_family or "morning_reset",
             )
             rules_applied.append(
-                "Social tip visual guard replaced text-prone literal props with model-robust daily-routine motifs."
+                "Social tip visual guard replaced text-prone literal props with a small model-robust motif library for short portrait social clips."
             )
         prompt_text = self.prompt_builder.build_global_prompt(job, director_output)
         rules_applied.append(f"Phase 5A director mode active: {director_output.mode}.")
@@ -204,6 +251,20 @@ class ProductionPlanner:
         takes_per_variation = self._determine_take_count(job)
         max_quality_retries_per_scene = self._determine_retry_limit(job)
         storyboard_selection_mode = "preferred_variation_then_first_valid"
+        subtitle_max_words = int(job.metadata.get("subtitle_max_words", 7))
+        subtitle_max_chars = int(job.metadata.get("subtitle_max_chars", 42))
+        subtitle_min_words = int(job.metadata.get("subtitle_min_words", 2))
+        subtitle_min_chars = int(job.metadata.get("subtitle_min_chars", 8))
+        subtitle_min_duration_sec = float(job.metadata.get("subtitle_min_duration_sec", 1.0))
+        if social_tip_visual_guard:
+            subtitle_min_words = max(subtitle_min_words, self.SOCIAL_TIP_SUBTITLE_MIN_WORDS)
+            subtitle_min_duration_sec = max(
+                subtitle_min_duration_sec,
+                self.SOCIAL_TIP_SUBTITLE_MIN_DURATION_SEC,
+            )
+            rules_applied.append(
+                "Social tip subtitle defaults prefer fewer short fragments for faster portrait readability."
+            )
         if variations_per_scene > 1:
             rules_applied.append(
                 "Each scene now emits controlled shot and prompt variations before take rendering."
@@ -377,6 +438,12 @@ class ProductionPlanner:
                 "style_lock": director_output.style_lock.model_dump(mode="json"),
                 "prompt_guidance": director_output.prompt_guidance.model_dump(mode="json"),
                 "social_tip_visual_guard": social_tip_visual_guard,
+                "social_tip_visual_guard_family": social_tip_family,
+                "subtitle_max_words": subtitle_max_words,
+                "subtitle_max_chars": subtitle_max_chars,
+                "subtitle_min_words": subtitle_min_words,
+                "subtitle_min_chars": subtitle_min_chars,
+                "subtitle_min_duration_sec": subtitle_min_duration_sec,
                 "max_quality_retries_per_scene": max_quality_retries_per_scene,
                 "voice_padding_sec": self.VOICE_PADDING_SEC,
                 "voice_enabled": job.use_voice,
@@ -409,14 +476,17 @@ class ProductionPlanner:
         *,
         director_output: DirectorOutput,
         scene_beats: list[dict[str, Any]],
+        family: str,
     ) -> DirectorOutput:
         guarded = director_output.model_copy(deep=True)
+        guarded.style_lock.visual_identity = self._social_tip_style_identity(family)
         guarded.style_lock.keep = self._merge_unique_texts(
             list(guarded.style_lock.keep),
             [
                 "clean unlabeled surfaces",
                 "window-lit daily routine",
                 "readable human action without text props",
+                "plain everyday props with hidden logos and covers",
             ],
         )
         guarded.style_lock.avoid = self._merge_unique_texts(
@@ -427,8 +497,9 @@ class ProductionPlanner:
             list(guarded.prompt_guidance.prompt_rules),
             [
                 "for short social tip videos, prefer daily routine b-roll over literal instruction props",
-                "avoid readable text surfaces, writing actions, and screen-led compositions",
+                "avoid readable text surfaces, writing actions, and interface-led compositions",
                 "keep desks, tables, and hands in neutral non-writing actions",
+                "prefer calm repeatable social-safe motifs like curtains, water, stretch, window light, kitchen routine, and clean b-roll",
             ],
         )
         guarded.prompt_guidance.negative_cues = self._merge_unique_texts(
@@ -441,16 +512,18 @@ class ProductionPlanner:
         )
         guarded.creative_brief.notes = self._merge_unique_texts(
             list(guarded.creative_brief.notes),
-            ["Social tip visual guard is active: avoid literal note-taking, pages, and screens."],
+            ["Social tip visual guard is active: avoid literal note-taking, pages, and visible device displays."],
         )
         guarded.metadata["social_tip_visual_guard"] = True
-        guarded.metadata["social_tip_visual_guard_version"] = "v1"
+        guarded.metadata["social_tip_visual_guard_version"] = "v2"
+        guarded.metadata["social_tip_visual_guard_family"] = family
 
         total_scene_count = len(scene_beats)
         scene_text_by_id = {str(scene_beat["scene_id"]): str(scene_beat.get("scene_text") or "") for scene_beat in scene_beats}
         for scene_intent in guarded.scene_intents:
             scene_text = scene_text_by_id.get(scene_intent.scene_id, "")
             motif = self._social_tip_scene_motif(
+                family=family,
                 role=scene_intent.narrative_role,
                 scene_text=scene_text,
                 scene_index=scene_intent.scene_index,
@@ -468,52 +541,157 @@ class ProductionPlanner:
             guarded.prompt_guidance.opening_shot = guarded.scene_intents[0].hook_focus
         return guarded
 
+    def _social_tip_family(self, job: JobInput) -> str:
+        lowered = f"{job.idea} {job.script}".lower()
+        for family, markers in self.SOCIAL_TIP_FAMILY_MARKERS.items():
+            if any(marker in lowered for marker in markers):
+                return family
+        return "morning_reset"
+
+    def _social_tip_style_identity(self, family: str) -> str:
+        identities = {
+            "morning_reset": "Quiet portrait morning routine in soft window light, tidy room, calm human action, no readable props",
+            "focus_break": "Calm portrait desk reset in soft daylight, uncluttered workspace turned away from displays, readable body movement, no readable props",
+            "kitchen_reset": "Clean portrait kitchen routine in soft daylight, uncluttered counter, tactile household detail, no readable packaging",
+            "movement_reset": "Simple portrait movement reset in soft window light, uncluttered room, readable body action, no readable props",
+        }
+        return identities.get(family, identities["morning_reset"])
+
     def _social_tip_scene_motif(
         self,
         *,
+        family: str,
         role: str,
         scene_text: str,
         scene_index: int,
         total_scene_count: int,
     ) -> dict[str, object]:
         lowered = scene_text.lower()
+        motif_library: dict[str, list[dict[str, object]]] = {
+            "morning_reset": [
+                {
+                    "hook_focus": "person waking up in a tidy room, opening curtains, soft window light, gentle stretch, calm morning atmosphere",
+                    "visual_goal": "show a clean morning reset through window light, tidy bedding, and one readable human action with no text-bearing props",
+                    "shot_intent": "start with a broad readable wake-up moment, then guide the eye toward the curtains and the subject",
+                    "keywords": ["waking", "curtains", "window", "stretching", "tidy", "morning"],
+                },
+                {
+                    "hook_focus": "plain phone placed face down beside a clear glass of water on a clean wooden table, natural daylight, hidden display, no visible logos",
+                    "visual_goal": "make the habit instantly legible with clean tabletop b-roll, water, and one neutral hand action without labels or notes",
+                    "shot_intent": "favor a medium close everyday action shot with simple object choreography and no readable surfaces",
+                    "keywords": ["phone", "water", "glass", "table", "daylight", "routine"],
+                },
+                {
+                    "hook_focus": "quiet kitchen routine with kettle steam, ceramic mug, fruit bowl, clean counter, soft morning daylight, no packaging front faces",
+                    "visual_goal": "bridge the middle beat with stable household b-roll that feels warm, tidy, and free of readable text props",
+                    "shot_intent": "use simple counter-level or side-profile coverage of hands, mug, and steam with uncluttered surfaces",
+                    "keywords": ["kitchen", "kettle", "mug", "steam", "counter", "morning"],
+                },
+                {
+                    "hook_focus": "person by a bright window with tea or coffee, slow breathing, tidy room, serene morning light",
+                    "visual_goal": "land on the clearest calm payoff through window light, relaxed posture, and one simple lifestyle prop without text",
+                    "shot_intent": "resolve with a wide or hero composition that feels calm, open, and easy to read at a glance",
+                    "keywords": ["window", "coffee", "calm", "payoff", "morning", "serene"],
+                },
+            ],
+            "focus_break": [
+                {
+                    "hook_focus": "person easing back from a tidy desk, shoulder roll by a bright window, calm daylight, uncluttered work corner, no readable surfaces",
+                    "visual_goal": "show an immediate focus reset through one clear body movement and a clean workspace with hidden interfaces",
+                    "shot_intent": "open on a readable stand-up or shoulder-roll gesture with a calm editorial side angle",
+                    "keywords": ["desk", "window", "shoulders", "reset", "daylight", "focus"],
+                },
+                {
+                    "hook_focus": "clear glass of water beside a closed laptop turned away, hand reaches for the glass, tidy desk, natural daylight",
+                    "visual_goal": "make the pause feel practical through water, a closed device, and a clean desk with no readable text props",
+                    "shot_intent": "use a medium close desk action shot with water, hands, and hidden device surfaces",
+                    "keywords": ["water", "desk", "closed laptop", "hands", "pause", "clarity"],
+                },
+                {
+                    "hook_focus": "mini stretch near the window, relaxed neck and shoulder release, soft daylight, calm breathing, tidy room",
+                    "visual_goal": "keep the middle beat legible with one stable stretch or breath cue and no literal device-display imagery",
+                    "shot_intent": "favor a simple standing profile or silhouette stretch with clean negative space",
+                    "keywords": ["stretch", "window", "breathing", "posture", "calm", "reset"],
+                },
+                {
+                    "hook_focus": "person returning to a tidy desk with a warm mug and calmer posture, daylight still soft, work area clean and quiet",
+                    "visual_goal": "resolve the tip through a calmer return-to-focus image rather than literal task props or text surfaces",
+                    "shot_intent": "close with a composed hero frame of the desk, mug, and relaxed posture in soft daylight",
+                    "keywords": ["mug", "desk", "return", "calm", "focus", "daylight"],
+                },
+            ],
+            "kitchen_reset": [
+                {
+                    "hook_focus": "clean kitchen counter in soft window light, kettle warming, ceramic mug ready, tidy morning atmosphere",
+                    "visual_goal": "open with stable kitchen b-roll that feels fresh, calm, and free of readable packaging or labels",
+                    "shot_intent": "favor a bright counter-level opening with steam, mug, and simple hand movement",
+                    "keywords": ["kitchen", "counter", "kettle", "mug", "window", "calm"],
+                },
+                {
+                    "hook_focus": "hands pouring water into a mug beside sliced citrus and a glass carafe on a clean counter, no visible labels",
+                    "visual_goal": "make the reset tangible through water, fruit, and clean surfaces with no text-bearing props",
+                    "shot_intent": "use a close household action shot with water, citrus, and steam as the readable anchors",
+                    "keywords": ["water", "mug", "citrus", "carafe", "counter", "routine"],
+                },
+                {
+                    "hook_focus": "quiet breakfast prep with fruit bowl, folded towel, warm steam, soft daylight, tidy kitchen surfaces",
+                    "visual_goal": "bridge the middle beat through stable domestic b-roll and slow hand movement instead of text-prone objects",
+                    "shot_intent": "prefer side angles and tactile close-ups of steam, fruit, and towel movement",
+                    "keywords": ["breakfast", "fruit", "steam", "towel", "daylight", "tidy"],
+                },
+                {
+                    "hook_focus": "person leaning by a bright kitchen window with tea or coffee, calm pause, warm steam, uncluttered frame",
+                    "visual_goal": "resolve with the simplest kitchen payoff image: window light, steam, calm posture, and no readable props",
+                    "shot_intent": "end on a calm hero composition with the mug, window, and relaxed body language",
+                    "keywords": ["window", "tea", "coffee", "kitchen", "calm", "payoff"],
+                },
+            ],
+            "movement_reset": [
+                {
+                    "hook_focus": "person stepping into soft window light, easy stretch, tidy room, calm editorial framing, no visible text props",
+                    "visual_goal": "open with one clean movement reset that reads instantly on a phone screen",
+                    "shot_intent": "favor a simple wide vertical frame with one readable stretch or step into daylight",
+                    "keywords": ["movement", "stretch", "window", "light", "reset", "calm"],
+                },
+                {
+                    "hook_focus": "hands setting down a glass of water near a folded towel and plain sneakers, clean floor, daylight, hidden branding",
+                    "visual_goal": "show practical reset cues through water and neutral movement props without readable logos or labels",
+                    "shot_intent": "use a medium close floor-level or bench-level composition with clear object separation",
+                    "keywords": ["water", "towel", "sneakers", "daylight", "reset", "routine"],
+                },
+                {
+                    "hook_focus": "gentle mobility break with arm circles or neck release near a bright wall, calm breathing, uncluttered room",
+                    "visual_goal": "keep the middle beat human and stable through one small repeatable movement and clean negative space",
+                    "shot_intent": "favor side-profile movement against a plain bright background with no distracting props",
+                    "keywords": ["mobility", "breathing", "profile", "bright wall", "movement", "calm"],
+                },
+                {
+                    "hook_focus": "person standing calmer by the window with relaxed posture and soft daylight, tidy room, simple reset payoff",
+                    "visual_goal": "land on a clear post-break payoff with calm posture and no literal task or text props",
+                    "shot_intent": "close with a clean hero silhouette or front three-quarter frame in soft daylight",
+                    "keywords": ["window", "posture", "silhouette", "reset", "daylight", "calm"],
+                },
+            ],
+        }
+        family_key = family if family in motif_library else "morning_reset"
+        motifs = motif_library[family_key]
         if role == "opening_hook":
-            return {
-                "hook_focus": "person waking up in a tidy room, opening curtains, soft window light, gentle stretch, calm morning atmosphere",
-                "visual_goal": "show a clean morning reset through window light, tidy bedding, and one readable human action with no text-bearing props",
-                "shot_intent": "start with a broad readable wake-up moment, then guide the eye toward the curtains and the subject",
-                "keywords": ["waking", "curtains", "window", "stretching", "tidy", "morning"],
-            }
+            return motifs[0]
         if any(token in lowered for token in {"wasser", "water", "drink", "glas", "glass", "handy", "phone", "nachrichten", "message", "screen"}):
-            return {
-                "hook_focus": "hands placing a phone face down beside a clear glass of water on a clean wooden table, natural window light, no visible screen content",
-                "visual_goal": "make the habit instantly legible with clean tabletop b-roll, water, and one neutral hand action without labels or notes",
-                "shot_intent": "favor a medium close everyday action shot with simple object choreography and no readable surfaces",
-                "keywords": ["phone", "water", "glass", "table", "window", "routine"],
-            }
+            return motifs[min(1, len(motifs) - 1)]
         if any(
             token in lowered
             for token in {"schreib", "write", "writing", "aufgabe", "task", "notiz", "note", "notebook", "page", "document", "papier", "paper", "book"}
         ):
             return {
-                "hook_focus": "person pausing at a tidy desk, phone face down, closed notebook, hand moving a mug, calm window light, no visible text surfaces",
-                "visual_goal": "convey focused intention through a calm desk reset and body language instead of literal writing or readable pages",
-                "shot_intent": "use a composed medium shot or gentle top-down angle on a tidy desk with closed props and non-writing hand movement",
-                "keywords": ["focus", "desk", "closed notebook", "window", "mug", "pause"],
+                "hook_focus": "person pausing at a tidy desk, hand moving a plain mug beside water, calm window light, no visible text surfaces or paper props",
+                "visual_goal": "convey focused intention through a calm desk reset and body language instead of literal writing, pages, or screens",
+                "shot_intent": "use a composed medium shot or gentle top-down angle on a tidy desk with mug, water, and non-writing hand movement",
+                "keywords": ["focus", "desk", "window", "mug", "water", "pause"],
             }
         if role == "final_payoff" or scene_index == total_scene_count:
-            return {
-                "hook_focus": "person by a bright window with tea or coffee, slow breathing, tidy room, serene morning light",
-                "visual_goal": "land on the clearest calm payoff through window light, relaxed posture, and one simple lifestyle prop without text",
-                "shot_intent": "resolve with a wide or hero composition that feels calm, open, and easy to read at a glance",
-                "keywords": ["window", "coffee", "calm", "payoff", "morning", "serene"],
-            }
-        return {
-            "hook_focus": "simple morning b-roll, tidy room, soft daylight, calm walking or kitchen routine, no visible text-bearing props",
-            "visual_goal": "keep the beat readable through robust daily-routine visuals and uncluttered compositions",
-            "shot_intent": "favor simple readable human movement and atmospheric b-roll over literal instruction props",
-            "keywords": ["routine", "tidy", "daylight", "walking", "kitchen", "calm"],
-        }
+            return motifs[-1]
+        return motifs[min(max(scene_index - 1, 0), len(motifs) - 1)]
 
     @staticmethod
     def _merge_unique_texts(values: list[str], additions: list[str]) -> list[str]:

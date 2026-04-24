@@ -1,5 +1,25 @@
 # CHANGELOG.md
 
+## 2026-04-21 Fresh Startup Recheck
+- Vorher-Zustand real festgehalten:
+  - `uvicorn app.main:app` lief auf `8000`
+  - `127.0.0.1:8011` lieferte real `Connection refused`
+  - `init.sh` und `scripts/ensure_llama_cpp.sh` waren lokal geaendert, aber der frische Startup-Pfad war noch nicht neu bewiesen
+- kompletter Pod-Neustart war in der Session nicht praktikabel; deshalb den engsten realistischen frischen Startpfad direkt ueber `bash /workspace/init.sh` gefahren
+- wichtiger Befund:
+  - `init.sh` hat den Director ohne manuelles Vorstarten von `scripts/serve_director_llm.sh` selbst hochgebracht
+  - danach liefen `uvicorn app.main:app` und `llama-server` parallel sauber
+  - `curl http://127.0.0.1:8011/v1/models` und `python3 /workspace/scripts/check_director_llm.py` waren danach gruen
+- kleiner echter Produktivcheck direkt danach:
+  - Job `startup-recheck-20260421` ueber den produktiven API-/CLI-Pfad gestartet
+  - `director_mode=llm_augmented`
+  - `director_llm_active=true`
+  - `director_fallback_reason=null`
+  - `final.mp4` erfolgreich unter `/workspace/agent_runs/startup-recheck-20260421/final.mp4`
+- Einordnung:
+  - der `init.sh`-Autostart-Fix ist jetzt nicht mehr nur indirekt oder ueber manuellen Director-Start belegt
+  - ein kompletter Pod-Neustart bleibt zwar weiter ein eigener noch strengerer Beleg, war in diesem Lauf aber bewusst nicht der durchgefuehrte Pfad
+
 ## 2026-04-20 Director Restore Runtime Debug
 - konkreten Fallback-Fall `cli-test-basic-001` forensisch geprueft
 - belastbar bestaetigt:
@@ -476,3 +496,34 @@
   - visuell klar sauberer als `demo-social-morning-004`, weil keine textnahen Papier-/Notizszenen mehr auftauchen
 - ehrliche Restrisiko-Notiz:
   - trotz robusterer Motive bleiben kleine runabhaengige Glyph-/Textfragmente im Modelloutput moeglich
+
+## 2026-04-21 Narrow Social Quality Pass
+
+- produktiver Social-Tipp-Guard in `agent_core/planner.py` zu einer kleinen Motivbibliothek erweitert:
+  - `morning_reset`
+  - `focus_break`
+  - `kitchen_reset`
+  - `movement_reset`
+- produktiver Subtitle-Hebel nachgezogen:
+  - Social-Tipp-Plaene setzen jetzt `subtitle_min_words=3`
+  - Social-Tipp-Plaene setzen jetzt `subtitle_min_duration_sec=1.1`
+  - `agent_core/assembler.py` liest diese Subtitle-Defaults jetzt aus `plan.metadata`
+- neue Tests:
+  - `tests/test_planner_rules.py` verifiziert Family-Zuordnung und display-fernen `focus_break`-Style-Lock
+  - `tests/test_assembler_mux.py` verifiziert, dass der Assembler die produktiven Subtitle-Defaults aus dem Plan uebernimmt
+- Tests gruen:
+  - `python3 -m unittest /workspace/tests/test_planner_rules.py /workspace/tests/test_output_quality_utils.py /workspace/tests/test_assembler_mux.py`
+- realer Kontrollbefund:
+  - `demo-social-morning-006` lief noch ueber stale Uvicorn-Live-Code und zeigte in `plan.json` weiter `social_tip_visual_guard_version=v1`
+  - daraus folgte ein minimaler produktiver Uvicorn-Neustart auf `8000`, weil der Pod-Server ohne Auto-Reload laeuft
+- reale Nachverifikation Morning:
+  - `demo-social-morning-007`
+  - `director_mode=llm_augmented`
+  - `final.mp4` real vorhanden
+  - `plan.json` zeigt `social_tip_visual_guard_version=v2`, Family `morning_reset` und die neue Kuechenroutine in Szene 3
+  - sichtbarer Befund: kohaerenter und social-lesbarer als die dokumentierte `demo-social-morning-005`-Basis, aber weiter mit kleinem Glyph-/Textmuell im Payoff
+- reale Nachverifikation Focus-Break:
+  - `demo-social-focus-break-001` zeigte trotz neuer Szenenfolge starkes Whiteboard-/Screen-/Textmuell
+  - daraufhin minimaler Nachfix in `agent_core/planner.py`: Social-Tipp-Familien ueberschreiben jetzt auch `style_lock.visual_identity`
+  - `demo-social-focus-break-002` lief danach real mit display-fernem Style-Lock und `final.mp4`
+  - ehrlicher Sichtbefund: leicht entschärft, aber weiterhin klar ungenuegend; Office-/Papier-/Screen-/Glyph-Artefakte bleiben fuer diese Familie offen

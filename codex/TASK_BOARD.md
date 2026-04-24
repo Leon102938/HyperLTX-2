@@ -20,6 +20,8 @@
 - noch leer
 
 ## DONE
+- frischen engen Startup-Recheck am 2026-04-21 erfolgreich gefahren: `bash /workspace/init.sh` brachte den Director ohne manuelles `serve_director_llm.sh` selbst hoch
+- echter Produktivcheck `startup-recheck-20260421` danach erfolgreich mit `director_mode=llm_augmented`, `director_llm_active=true` und `final.mp4`
 - `llama.cpp`-Runtime-/Build-Stand unter `/workspace/tools/llama.cpp/build/bin` am 2026-04-20 ohne Rebuild erneut verifiziert
 - realen Windows-/Restore-Sonderfall dokumentiert und minimal behoben: Execute-Bits fuer `llama-server`/`llama-cli` fehlten, ebenso die Linux-Symlink-Aliase fuer die vorhandenen versionierten `.so.*`-Dateien
 - reale kurze Director-Serve-Probe ueber `scripts/serve_director_llm.sh` plus `check_director_llm.py` erfolgreich; Testprozess danach wieder beendet

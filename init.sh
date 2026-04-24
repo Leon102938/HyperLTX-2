@@ -339,8 +339,9 @@ if [ "$DIRECTOR_LLM_AUTO_SETUP" = "on" ]; then
   fi
 
   if [ "$DIRECTOR_LLM_AUTO_START" = "on" ] && [ -f "$DIRECTOR_LLM_MODEL_PATH" ]; then
-    if [ -x "/workspace/scripts/serve_director_llm.sh" ]; then
-      if DIRECTOR_LLM_DAEMON=1 /workspace/scripts/serve_director_llm.sh; then
+    if [ -f "/workspace/scripts/serve_director_llm.sh" ]; then
+      chmod +x "/workspace/scripts/serve_director_llm.sh" 2>/dev/null || true
+      if DIRECTOR_LLM_DAEMON=1 bash /workspace/scripts/serve_director_llm.sh; then
         touch "$DIRECTOR_LLM_SERVER_READY_FLAG"
         echo "[director-llm] Local Director server is ready."
       else

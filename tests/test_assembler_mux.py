@@ -327,6 +327,70 @@ class AssemblerMuxTest(unittest.TestCase):
             self.assertTrue((workspace / "final.mp4").exists())
             self.assertAlmostEqual(result.actual_final_duration_sec, 2.0, places=1)
 
+    def test_enhanced_assembly_prefers_plan_subtitle_defaults_for_social_format(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            video_path = workspace / "video.mp4"
+            voice_path = workspace / "voice.wav"
+            _build_video(video_path, 4.5)
+            _build_wav(voice_path, 4.5)
+
+            plan = _build_plan("social-subtitle-case", 4.5).model_copy(
+                update={
+                    "metadata": {
+                        "frame_rate": 24,
+                        "subtitle_min_words": 3,
+                        "subtitle_min_duration_sec": 1.1,
+                    },
+                    "scenes": [
+                        ScenePlan(
+                            scene_id="scene_01",
+                            index=1,
+                            title="Scene 1",
+                            description="A social beat.",
+                            target_duration_sec=4.5,
+                            num_frames=109,
+                            prompt_text="test prompt",
+                            narration_text="Drei kleine Schritte, weniger Reibung, mehr Klarheit fuer den Rest des Tages.",
+                            narration_start_sec=0.0,
+                            narration_end_sec=4.5,
+                        )
+                    ],
+                }
+            )
+
+            ResultAssembler().assemble(
+                JobInput(
+                    job_id="social-subtitle-case",
+                    idea="social",
+                    use_voice=True,
+                    metadata={"subtitle_mode": "sidecar"},
+                ),
+                plan,
+                _build_state("social-subtitle-case"),
+                workspace,
+                ExecutionResult(
+                    step_name="voice",
+                    success=True,
+                    status="succeeded",
+                    backend_name="fake_voice",
+                    output_path=str(voice_path),
+                    duration_sec=probe_media_duration(str(voice_path)),
+                ),
+                ExecutionResult(
+                    step_name="video",
+                    success=True,
+                    status="succeeded",
+                    backend_name="fake_video",
+                    output_path=str(video_path),
+                    duration_sec=probe_media_duration(str(video_path)),
+                ),
+            )
+
+            captions = (workspace / "captions.srt").read_text(encoding="utf-8")
+            self.assertIn("Drei kleine Schritte weniger Reibung", captions)
+            self.assertNotIn("\nweniger Reibung\n", captions)
+
 
 if __name__ == "__main__":
     unittest.main()

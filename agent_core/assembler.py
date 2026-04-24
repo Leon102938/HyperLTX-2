@@ -88,13 +88,23 @@ class ResultAssembler:
             subtitle_path: Path | None = None
             subtitle_entries: list[dict[str, object]] = []
             if subtitle_mode in {"sidecar", "burn"} and job.use_voice:
+                subtitle_max_words = int(plan.metadata.get("subtitle_max_words", job.metadata.get("subtitle_max_words", 7)))
+                subtitle_max_chars = int(plan.metadata.get("subtitle_max_chars", job.metadata.get("subtitle_max_chars", 42)))
+                subtitle_min_words = int(plan.metadata.get("subtitle_min_words", job.metadata.get("subtitle_min_words", 2)))
+                subtitle_min_chars = int(plan.metadata.get("subtitle_min_chars", job.metadata.get("subtitle_min_chars", 8)))
+                subtitle_min_duration_sec = float(
+                    plan.metadata.get(
+                        "subtitle_min_duration_sec",
+                        job.metadata.get("subtitle_min_duration_sec", 1.0),
+                    )
+                )
                 subtitle_entries = build_scene_subtitle_entries(
                     plan.scenes,
-                    max_words=int(job.metadata.get("subtitle_max_words", 7)),
-                    max_chars=int(job.metadata.get("subtitle_max_chars", 42)),
-                    min_words=int(job.metadata.get("subtitle_min_words", 2)),
-                    min_chars=int(job.metadata.get("subtitle_min_chars", 8)),
-                    min_segment_duration_sec=float(job.metadata.get("subtitle_min_duration_sec", 1.0)),
+                    max_words=subtitle_max_words,
+                    max_chars=subtitle_max_chars,
+                    min_words=subtitle_min_words,
+                    min_chars=subtitle_min_chars,
+                    min_segment_duration_sec=subtitle_min_duration_sec,
                 )
                 if subtitle_entries:
                     subtitle_path = write_srt_subtitles(workspace / "captions.srt", subtitle_entries)
