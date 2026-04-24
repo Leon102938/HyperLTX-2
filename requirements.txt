@@ -35,5 +35,5 @@ soundfile
 fastapi
 uvicorn[standard]
 pydantic>=2.7,<3
-jupyterlab
-ipykernel
+jupyterlab==4.2.5
+ipykernel==6.29.5
