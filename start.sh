@@ -35,6 +35,31 @@ else
 fi
 
 
+# ============ 🔷 JUPYTERLAB THEME ============
+mkdir -p /root/.jupyter/lab/user-settings/@jupyterlab/apputils-extension
+echo '{ "theme": "JupyterLab Dark" }' \
+  > /root/.jupyter/lab/user-settings/@jupyterlab/apputils-extension/themes.jupyterlab-settings
+
+
+
+# ============ 🔷 JUPYTERLAB (Port 8888) ============
+if [ "${JUPYTER:-off}" = "on" ]; then
+  echo "🧠 Starte JupyterLab (Port 8888)..."
+  nohup jupyter lab \
+    --ip=0.0.0.0 \
+    --port=8888 \
+    --no-browser \
+    --allow-root \
+    --ServerApp.token='' \
+    --ServerApp.password='' \
+    --ServerApp.disable_check_xsrf=True \
+    --ServerApp.root_dir=/workspace \
+    --ServerApp.allow_origin='*' \
+    > /workspace/jupyter.log 2>&1 &
+  echo "✅ Jupyter gestartet. Log: /workspace/jupyter.log"
+else
+  echo "⏭️  JUPYTER=off – überspringe Jupyter."
+fi
 
 
 
