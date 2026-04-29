@@ -25,7 +25,15 @@ from agent_core.schemas import (
     TakeValidationReport,
 )
 from agent_core.state_store import StateStore
-from agent_core.utils import build_job_id, mirror_media_file, read_json, stable_seed, validate_image_candidate, validate_video_take
+from agent_core.utils import (
+    build_job_id,
+    evaluate_keyframe_visual_risk,
+    mirror_media_file,
+    read_json,
+    stable_seed,
+    validate_image_candidate,
+    validate_video_take,
+)
 
 
 class VideoAgent:
@@ -231,6 +239,7 @@ class VideoAgent:
                 candidate_job = self._build_storyboard_job(job, scene, candidate)
                 candidate_workspace = scene_workspace / "candidates" / candidate.candidate_id
                 candidate_plan = self.planner.build_storyboard_render_plan(plan, scene, candidate)
+                candidate_storyboard_step = next(step for step in candidate_plan.steps if step.name == "storyboard")
                 try:
                     candidate_result = storyboard_adapter.generate_storyboard(candidate_job, candidate_plan, candidate_workspace)
                 except Exception as exc:
@@ -269,6 +278,27 @@ class VideoAgent:
 
                 validation = self._validate_keyframe_output(plan, candidate, mirrored_output_path or candidate_result.output_path)
                 review_status = self._resolve_keyframe_review_status(candidate_result, validation)
+                effective_prompt = candidate_result.metadata.get(
+                    "effective_prompt", candidate_storyboard_step.params.get("effective_prompt")
+                )
+                prompt_source = candidate_result.metadata.get(
+                    "prompt_source", candidate_storyboard_step.params.get("prompt_source")
+                )
+                storyboard_prompt_metadata = candidate_result.metadata.get(
+                    "storyboard_prompt_metadata",
+                    candidate_storyboard_step.params.get("storyboard_prompt_metadata"),
+                )
+                scene_world_contract = candidate_storyboard_step.params.get("scene_world_contract")
+                visual_risk_review = evaluate_keyframe_visual_risk(
+                    scene_world_contract=scene_world_contract if isinstance(scene_world_contract, dict) else {},
+                    candidate_prompt_text=candidate.prompt_text,
+                    effective_prompt=str(effective_prompt or ""),
+                    scene_id=scene.scene_id,
+                    candidate_id=candidate.candidate_id,
+                    image_validation=validation,
+                )
+                if review_status == "passed":
+                    review_status = visual_risk_review["visual_risk_status"]
                 candidate_records.append(
                     KeyframeCandidateResult(
                         candidate_id=candidate.candidate_id,
@@ -285,6 +315,11 @@ class VideoAgent:
                         validation=validation,
                         metadata={
                             "prompt_text": candidate.prompt_text,
+                            "effective_prompt": effective_prompt,
+                            "prompt_source": prompt_source,
+                            "storyboard_prompt_metadata": storyboard_prompt_metadata,
+                            "scene_world_contract": scene_world_contract,
+                            "visual_risk_review": visual_risk_review,
                             "priority_rank": candidate.priority_rank,
                             "relation_type": candidate.relation_type,
                             "backend_metadata": candidate_result.metadata,
@@ -955,23 +990,52 @@ class VideoAgent:
             for record in candidate_records
             if record.status == "succeeded" and record.output_path and record.validation and record.validation.passed
         ]
+        risk_order = {"passed": 0, "needs_review": 1, "rejected": 2}
         preferred_variation_id = scene.storyboard_config.preferred_variation_id if scene.storyboard_config else None
+        selectable_candidates = [
+            record
+            for record in valid_candidates
+            if str((record.metadata.get("visual_risk_review") or {}).get("visual_risk_status") or "needs_review")
+            in risk_order
+        ]
         selection_details: dict[str, Any] = {
-            "selection_mode": "preferred_variation_then_first_valid",
+            "selection_mode": "visual_risk_guarded_preferred_variation_then_first_valid",
             "preferred_variation_id": preferred_variation_id,
-            "candidate_ids": [record.candidate_id for record in valid_candidates],
+            "candidate_ids": [record.candidate_id for record in selectable_candidates],
             "technical_status": "valid_candidates_available",
-            "selection_reason": "prefer successful valid keyframes that match the preferred scene variation",
+            "visual_risk_status_counts": self._keyframe_visual_risk_counts(valid_candidates),
+            "selection_reason": "prefer passed visual risk keyframes, then needs_review, then rejected only if no safer valid candidate exists",
         }
-        if not valid_candidates:
+        if not selectable_candidates:
             selection_details["technical_status"] = "no_valid_candidates"
             selection_details["selection_reason"] = "no technically valid storyboard candidates available"
             return None, selection_details
 
-        preferred_candidates = [
-            record for record in valid_candidates if preferred_variation_id and record.variation_id == preferred_variation_id
+        best_risk_rank = min(
+            risk_order.get(
+                str((record.metadata.get("visual_risk_review") or {}).get("visual_risk_status") or "needs_review"),
+                1,
+            )
+            for record in selectable_candidates
+        )
+        risk_filtered_candidates = [
+            record
+            for record in selectable_candidates
+            if risk_order.get(
+                str((record.metadata.get("visual_risk_review") or {}).get("visual_risk_status") or "needs_review"),
+                1,
+            )
+            == best_risk_rank
         ]
-        candidate_pool = preferred_candidates or valid_candidates
+        selected_visual_risk_status = next(
+            status for status, rank in risk_order.items() if rank == best_risk_rank
+        )
+        preferred_candidates = [
+            record
+            for record in risk_filtered_candidates
+            if preferred_variation_id and record.variation_id == preferred_variation_id
+        ]
+        candidate_pool = preferred_candidates or risk_filtered_candidates
         selected_record = min(
             candidate_pool,
             key=lambda record: (
@@ -981,21 +1045,30 @@ class VideoAgent:
         )
 
         if preferred_candidates:
-            selected_by_rule = "preferred_variation_match"
-            selection_reason = "selected the first valid keyframe candidate from the preferred storyboard variation"
+            selected_by_rule = f"visual_risk_{selected_visual_risk_status}_preferred_variation_match"
+            selection_reason = (
+                f"selected {selected_visual_risk_status} visual-risk keyframe from the preferred storyboard variation"
+            )
             technical_status = "preferred_variation_valid"
         else:
-            selected_by_rule = "priority_rank_first_valid"
-            selection_reason = "preferred variation was unavailable; selected the first valid storyboard candidate by priority rank"
+            selected_by_rule = f"visual_risk_{selected_visual_risk_status}_priority_rank_first_valid"
+            selection_reason = (
+                f"preferred variation was unavailable at visual risk status {selected_visual_risk_status}; "
+                "selected first valid storyboard candidate by priority rank"
+            )
             technical_status = "preferred_variation_unavailable"
+        if selected_visual_risk_status == "rejected":
+            selection_reason += "; WARNING: only visually rejected valid candidates were available"
 
         selection_details.update(
             {
                 "technical_status": technical_status,
+                "visual_risk_selection_status": selected_visual_risk_status,
                 "selected_by_rule": selected_by_rule,
                 "selection_reason": selection_reason,
                 "selected_candidate_id": selected_record.candidate_id,
                 "selected_variation_id": selected_record.variation_id,
+                "selected_visual_risk_review": selected_record.metadata.get("visual_risk_review"),
             }
         )
         selected_keyframe = SelectedKeyframe(
@@ -1014,6 +1087,14 @@ class VideoAgent:
             metadata=dict(selected_record.metadata),
         )
         return selected_keyframe, selection_details
+
+    @staticmethod
+    def _keyframe_visual_risk_counts(candidate_records: list[KeyframeCandidateResult]) -> dict[str, int]:
+        counts = {"passed": 0, "needs_review": 0, "rejected": 0, "unknown": 0}
+        for record in candidate_records:
+            status = str((record.metadata.get("visual_risk_review") or {}).get("visual_risk_status") or "unknown")
+            counts[status if status in counts else "unknown"] += 1
+        return counts
 
     def _select_take_record(
         self,

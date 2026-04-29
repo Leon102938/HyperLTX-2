@@ -11,7 +11,18 @@ from agent_core.adapters.base import StoryboardAdapter, VideoAdapter, VoiceAdapt
 from agent_core.assembler import ResultAssembler
 from agent_core.backend_registry import BackendRegistry
 from agent_core.planner import ProductionPlanner
-from agent_core.schemas import ArtifactRef, BackendCapabilities, ExecutionResult, JobInput, ProductionPlan
+from agent_core.schemas import (
+    ArtifactRef,
+    BackendCapabilities,
+    ExecutionResult,
+    ImageValidationReport,
+    JobInput,
+    KeyframeCandidateResult,
+    ProductionPlan,
+    ScenePlan,
+    SelectedKeyframe,
+    StoryboardConfig,
+)
 from agent_core.state_store import StateStore
 
 
@@ -234,7 +245,7 @@ class StoryboardPipelineTest(unittest.TestCase):
             scene_storyboard = storyboard_payload["scene_storyboards"][0]
             self.assertTrue(result.success)
             self.assertEqual(scene_storyboard["selected_keyframe"]["candidate_id"], "scene_01_var_02_keyframe_02")
-            self.assertEqual(scene_storyboard["selection"]["selected_by_rule"], "priority_rank_first_valid")
+            self.assertIn("priority_rank_first_valid", scene_storyboard["selection"]["selected_by_rule"])
 
     def test_keyframe_conditioned_video_falls_back_cleanly_when_no_selected_keyframe_exists(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -313,6 +324,120 @@ class StoryboardPipelineTest(unittest.TestCase):
             self.assertEqual(takes_payload["render_mode_counts"]["keyframe_conditioned"], 2)
             self.assertTrue(all(scene["render_mode"] == "keyframe_conditioned" for scene in takes_payload["scene_outputs"]))
             self.assertTrue(all(scene["selected_take"]["render_mode"] == "keyframe_conditioned" for scene in takes_payload["scene_outputs"]))
+
+    def test_storyboard_report_contains_visual_risk_review_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            agent, store = self._agent(tmpdir)
+            result = agent.run_job(
+                {
+                    "job_id": "storyboard-risk-report",
+                    "idea": "A modular agent previsualizes a scene.",
+                    "script": "Scene one opens on the pod waking up.",
+                    "duration_sec": 6,
+                    "use_voice": False,
+                    "use_storyboard": True,
+                    "resolution": "320x256",
+                    "orientation": "landscape",
+                    "metadata": {
+                        "force_single_scene": True,
+                        "variations_per_scene": 2,
+                        "takes_per_scene": 1,
+                        "storyboard_candidates_per_scene": 2,
+                    },
+                }
+            )
+
+            storyboard_payload = json.loads((store.job_dir("storyboard-risk-report") / "storyboard_plan.json").read_text())
+            generated = storyboard_payload["scene_storyboards"][0]["generated_candidates"]
+
+            self.assertTrue(result.success)
+            self.assertTrue(generated)
+            self.assertIn("visual_risk_review", generated[0]["metadata"])
+            self.assertIn(generated[0]["metadata"]["visual_risk_review"]["visual_risk_status"], {"passed", "needs_review"})
+            self.assertIn("prompt_source", generated[0]["metadata"])
+
+    def test_keyframe_selection_prefers_passed_over_needs_review_and_rejected(self) -> None:
+        agent = VideoAgent()
+        scene = ScenePlan(
+            scene_id="scene_01",
+            index=1,
+            title="Scene",
+            description="Scene",
+            target_duration_sec=4.0,
+            num_frames=105,
+            prompt_text="Scene prompt",
+            storyboard_config=StoryboardConfig(
+                scene_id="scene_01",
+                enabled=True,
+                candidate_count=3,
+                preferred_variation_id="var_rejected",
+            ),
+        )
+        validation = ImageValidationReport(validation_status="passed", passed=True, file_exists=True, image_open_ok=True)
+        records = [
+            self._candidate_record("candidate_rejected", "var_rejected", 1, "rejected", validation),
+            self._candidate_record("candidate_needs_review", "var_needs", 2, "needs_review", validation),
+            self._candidate_record("candidate_passed", "var_passed", 3, "passed", validation),
+        ]
+
+        selected, details = agent._select_keyframe_candidate(scene, records)
+
+        self.assertIsNotNone(selected)
+        self.assertEqual(selected.candidate_id, "candidate_passed")
+        self.assertEqual(details["visual_risk_selection_status"], "passed")
+        self.assertIn("visual_risk_passed", details["selected_by_rule"])
+
+    def test_keyframe_selection_prefers_needs_review_over_rejected(self) -> None:
+        agent = VideoAgent()
+        scene = ScenePlan(
+            scene_id="scene_01",
+            index=1,
+            title="Scene",
+            description="Scene",
+            target_duration_sec=4.0,
+            num_frames=105,
+            prompt_text="Scene prompt",
+            storyboard_config=StoryboardConfig(scene_id="scene_01", enabled=True, candidate_count=2),
+        )
+        validation = ImageValidationReport(validation_status="passed", passed=True, file_exists=True, image_open_ok=True)
+        records = [
+            self._candidate_record("candidate_rejected", "var_rejected", 1, "rejected", validation),
+            self._candidate_record("candidate_needs_review", "var_needs", 2, "needs_review", validation),
+        ]
+
+        selected, details = agent._select_keyframe_candidate(scene, records)
+
+        self.assertIsNotNone(selected)
+        self.assertEqual(selected.candidate_id, "candidate_needs_review")
+        self.assertEqual(details["visual_risk_selection_status"], "needs_review")
+
+    @staticmethod
+    def _candidate_record(
+        candidate_id: str,
+        variation_id: str,
+        priority_rank: int,
+        visual_risk_status: str,
+        validation: ImageValidationReport,
+    ) -> KeyframeCandidateResult:
+        return KeyframeCandidateResult(
+            candidate_id=candidate_id,
+            scene_id="scene_01",
+            candidate_index=priority_rank,
+            variation_id=variation_id,
+            variation_index=priority_rank,
+            shot_type="establishing",
+            status="succeeded",
+            review_status=visual_risk_status,
+            output_path=f"/tmp/{candidate_id}.png",
+            validation=validation,
+            metadata={
+                "priority_rank": priority_rank,
+                "visual_risk_review": {
+                    "visual_risk_status": visual_risk_status,
+                    "risk_score": {"passed": 0, "needs_review": 30, "rejected": 80}[visual_risk_status],
+                },
+            },
+        )
 
 
 if __name__ == "__main__":

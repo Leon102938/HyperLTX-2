@@ -234,7 +234,59 @@ class ScenePlannerTest(unittest.TestCase):
         self.assertEqual(storyboard_plan.steps[0].params["candidate_id"], candidate.candidate_id)
         self.assertEqual(storyboard_plan.steps[0].params["variation_id"], candidate.variation_id)
         self.assertEqual(storyboard_plan.scenes[0].keyframe_candidates[0].candidate_id, candidate.candidate_id)
-        self.assertEqual(storyboard_plan.prompt_text, candidate.prompt_text)
+        self.assertEqual(storyboard_plan.prompt_text, storyboard_plan.steps[0].params["effective_prompt"])
+        self.assertNotEqual(storyboard_plan.prompt_text, candidate.prompt_text)
+        self.assertEqual(storyboard_plan.steps[0].params["candidate_prompt_text"], candidate.prompt_text)
+        self.assertEqual(
+            storyboard_plan.steps[0].params["prompt_source"],
+            "scene_world_contract_candidate_variation",
+        )
+
+    def test_social_storyboard_effective_prompt_preserves_contract_forbidden_visuals(self) -> None:
+        job = JobInput(
+            idea="Vier kurze Focus-Break Moves fuer mehr Klarheit im Arbeitstag.",
+            script=(
+                "Wenn dein Kopf am Bildschirm dicht macht, steh kurz auf. "
+                "Trink erst einen Schluck Wasser, roll die Schultern und atme am Fenster tief durch. "
+                "Dann geh mit ruhigerem Blick zurueck an den Tisch."
+            ),
+            duration_sec=18,
+            use_voice=True,
+            use_storyboard=True,
+            orientation="portrait",
+            resolution="draft",
+            metadata={"subtitle_mode": "burn", "variations_per_scene": 4, "storyboard_candidates_per_scene": 2},
+        )
+
+        plan = self.planner.build_plan(job)
+        scene = plan.scenes[0]
+        candidate = scene.keyframe_candidates[0]
+        storyboard_plan = self.planner.build_storyboard_render_plan(plan, scene, candidate)
+        storyboard_step = storyboard_plan.steps[0]
+        effective_prompt = storyboard_step.params["effective_prompt"].lower()
+        prompt_metadata = storyboard_step.params["storyboard_prompt_metadata"]
+
+        self.assertIn("scene_world_contract", storyboard_step.params)
+        self.assertTrue(prompt_metadata["contract_preserved"])
+        self.assertEqual(prompt_metadata["prompt_kind"], "storyboard_effective")
+        self.assertNotEqual(effective_prompt, plan.prompt_text.lower())
+        for cue in [
+            "no readable text",
+            "no handwriting",
+            "no paper",
+            "no notebook",
+            "no document pages",
+            "no screens",
+            "no labels",
+            "no logos",
+            "no posters",
+            "no signs",
+            "no typography",
+            "no glyphs",
+            "no letters",
+            "no numbers",
+        ]:
+            self.assertIn(cue, effective_prompt)
 
     def test_scene_video_mode_override_can_force_storyboard_reference_or_text_only(self) -> None:
         job = JobInput(

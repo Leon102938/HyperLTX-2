@@ -52,6 +52,20 @@
 - `ProductionPlan` enthaelt jetzt optional `director_output`; `ScenePlan` enthaelt `scene_intent` und `prompt_build_metadata`.
 - `VariationPlan` und `TakePlan` dokumentieren jetzt `creative_intent` und `prompt_build_metadata`.
 - Der neue `prompt_builder` erzeugt staerkere Opening-Shots, kompaktere Stil-/Kamera-Hinweise und konsistentere Varianten, ohne in Wortwuesten zu kippen.
+- Phase A des aktuellen Output-Quality-Fokus haertet den `prompt_builder` weiter: pro Szene wird jetzt ein `scene_world_contract` in `prompt_build_metadata` gespeichert und als strukturierte Prompt-Sektion gerendert.
+- Der Scene World Contract ist bewusst kein grosser neuer Schema-Umbau; er nutzt vorhandene `SceneIntent`, `StyleLock`, `PromptGuidance` und Social-Guard-Metadaten.
+- Variation-Prompts duerfen den Scene World Contract nicht verwässern: sie wiederholen Forbidden-Visuals und markieren `contract_preserved=true`.
+- Fuer kurze Portrait-Social-Tips muessen Prompts hart gegen readable text, handwriting, paper/notebook/document pages, screens/UI, labels/logos/posters/signs, generated in-scene subtitles, typography/glyphs/letters/numbers und Focus-Break-Desk-Drift bleiben.
+- Phase A wurde code- und unittest-seitig geprueft, aber noch nicht visuell ueber neue GPU-Videoausgaben bewertet; Phase B soll Storyboard scene-specific prompts und Keyframe Visual Eval angehen.
+- Phase B1 ist der erste Storyboard-Qualitaetshebel: Keyframe-Kandidaten bekommen jetzt pro Szene einen `effective_prompt`, der Scene World Contract, Szene, Candidate Prompt und Variation-Kontext zusammenzieht.
+- Der Z-Image-Storyboard-Adapter darf nicht mehr blind nur `plan.prompt_text` komprimieren; er bevorzugt `storyboard_step.params.effective_prompt` und faellt erst danach auf Candidate-/Global-Prompt-Fallbacks zurueck.
+- `storyboard_plan.json` soll fuer Phase-B1-Dry-Runs pro Kandidat `effective_prompt`, `prompt_source`, `storyboard_prompt_metadata` und `scene_world_contract` nachvollziehbar zeigen.
+- Phase B1 behauptet noch keine bessere Bildqualitaet; Vision-/Keyframe-Risk-Review und echte visuelle Bewertung bleiben Phase B2.
+- Phase B2 fuehrt `evaluate_keyframe_visual_risk()` als ersten leichten Storyboard-Candidate-Quality-Gate ein.
+- Die Keyframe Visual Risk Review ist heuristisch: Contract-/Prompt-Felder plus bestehende technische Image Validation, aber kein OCR-Zwang und keine Vision-LLM-Behauptung.
+- Wichtig fuer False Positives: Forbidden-Worte in `forbidden_props`, `text_risk_policy`, `FORBIDDEN VISUALS` oder `no ...`-Clauses duerfen nicht allein zur Rejection fuehren; nur positive sichtbare Inhalte in Subject/Action/Allowed Props oder aktive Prompt-Anforderungen sind riskant.
+- Storyboard-Auswahl soll technisch valide Kandidaten nach Visual Risk priorisieren: `passed` vor `needs_review` vor `rejected`.
+- Phase B2 bleibt ein Vorfilter vor Video, kein finaler Qualitaetsnachweis. Naechster Schritt ist Phase C Take Visual Review / Postability Score; spaeter Phase D Final Quality Verdict und Phase E CLI Produktions-Cockpit.
 - Der neue `llm_adapter` erwartet einen echten lokalen OpenAI-kompatiblen Director-Endpunkt; ohne konfigurierten und erreichbaren Dienst faellt der Planner ehrlich auf `rule_based_fallback` zurueck.
 - Phase 5B nutzt fuer den echten lokalen Director-LLM-Pfad bewusst `llama.cpp` + GGUF statt einen grossen neuen Serving-Stack.
 - Wegen nur rund `33G` freiem Speicher im Pod ist ein GGUF-Pfad fuer das Director-Modell deutlich praktikabler als ein voller Safetensor-/Transformers-Download.

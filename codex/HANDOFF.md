@@ -103,6 +103,12 @@
     - neuer echter enger Produktivcheck danach: `startup-recheck-20260421`
     - dieser Lauf lief real mit `director_mode=llm_augmented`, `director_llm_active=true` und erzeugte erfolgreich `/workspace/agent_runs/startup-recheck-20260421/final.mp4`
     - wichtiger Abschluss fuer diesen Punkt: der minimale `init.sh`-Autostart-Fix ist damit nicht mehr nur wahrscheinlich, sondern ueber einen frischen `init.sh`-Startpfad real verifiziert
+- Output-Quality-Fokus Phase A/B1/B2 ist umgesetzt:
+  - Phase A: Scene World Contract + PromptBuilder v2; Scene-/Variation-Prompts enthalten harte Text-/Screen-/Paper-Verbote
+  - Phase B1: Storyboard-/Keyframe-Prompts sind scene-specific und contract-aware; Z-Image nutzt `effective_prompt`
+  - Phase B2: Storyboard-Keyframe-Kandidaten erhalten `visual_risk_review` mit `passed`, `needs_review` oder `rejected`; Auswahl bevorzugt `passed` vor `needs_review` vor `rejected`
+  - Dry-Run-Artefakte liegen unter `/workspace/agent_runs/phase-b1-dry-*` und `/workspace/agent_runs/phase-b2-dry-*`
+  - keine finale Bildqualitaet behauptet; naechster Schritt ist Phase C Take Visual Review / Postability Score
 
 ## Was real verifiziert wurde
 - Tests:

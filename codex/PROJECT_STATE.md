@@ -1,7 +1,7 @@
 # PROJECT_STATE.md
 
 ## Projektstatus
-Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E, 3A, 3B, 4A, 4B und 4C erweitern den Core jetzt um regelbasierte Scene-/Shot-Planung, Mehrfach-Takes, technischen Quality-Guard, validierte Take-Selektion, kreative Varianten pro Szene, leichte inhaltliche Auswahlheuristik, optionale Storyboard-/Keyframe-Vorsteuerung, produktive First-Frame-Keyframe-Konditionierung im bestehenden `ti2vid`-Pfad, eine minimale produktive Worker-/n8n-Bridge ueber FastAPI, einen polling-faehigen Async-Submit-Pfad, n8n-freundliche Polling-Hinweise und begrenzte Retries; Phase 5A erweitert den Planner jetzt um eine Director-/Brain-Schicht mit `director_output`, `style_lock`, staerkeren Szenenintents, verbessertem Prompt-Bau und ehrlichem lokalem LLM-Fallback; Phase 5B bindet diesen Director-Layer jetzt produktiv an ein echtes lokales Qwen3.6-35B-A3B-Serving ueber `llama.cpp` + GGUF an; der Restore-/Startup-Pfad nach Repo-Update und Pod-Neustart ist jetzt erneut real geprueft, minimal gehaertet und um eine robuste lokale Director-Env-/Serve-Konfiguration erweitert
+Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E, 3A, 3B, 4A, 4B und 4C erweitern den Core jetzt um regelbasierte Scene-/Shot-Planung, Mehrfach-Takes, technischen Quality-Guard, validierte Take-Selektion, kreative Varianten pro Szene, leichte inhaltliche Auswahlheuristik, optionale Storyboard-/Keyframe-Vorsteuerung, produktive First-Frame-Keyframe-Konditionierung im bestehenden `ti2vid`-Pfad, eine minimale produktive Worker-/n8n-Bridge ueber FastAPI, einen polling-faehigen Async-Submit-Pfad, n8n-freundliche Polling-Hinweise und begrenzte Retries; Phase 5A erweitert den Planner jetzt um eine Director-/Brain-Schicht mit `director_output`, `style_lock`, staerkeren Szenenintents, verbessertem Prompt-Bau und ehrlichem lokalem LLM-Fallback; Phase 5B bindet diesen Director-Layer jetzt produktiv an ein echtes lokales Qwen3.6-35B-A3B-Serving ueber `llama.cpp` + GGUF an; Phase A des aktuellen Output-Quality-Fokus fuehrt einen kleinen Scene World Contract und PromptBuilder v2 fuer haertere Szene-/Variation-Prompts ein; Phase B1 macht Storyboard-/Keyframe-Prompts jetzt scene-specific und contract-aware; Phase B2 fuehrt einen leichten Keyframe Visual Risk Review fuer Storyboard-Kandidaten ein; der Restore-/Startup-Pfad nach Repo-Update und Pod-Neustart ist jetzt erneut real geprueft, minimal gehaertet und um eine robuste lokale Director-Env-/Serve-Konfiguration erweitert
 
 - Kanonische Capability-Uebersicht: `/workspace/codex/CAPABILITY_MAP.md`
 
@@ -78,6 +78,25 @@ Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E, 3A, 3B, 4A, 4B und
   - `prompt_builder.py` erzeugt jetzt staerkere Opening-Shots, klarere visuelle Sprache, konsistentere Varianten und kompaktere Kamera-/Stilhinweise
   - `llm_adapter.py` bietet jetzt einen echten Adapter fuer lokale OpenAI-kompatible Director-Endpunkte; ohne konfigurierten oder erreichbaren Dienst faellt der Core ehrlich auf `rule_based_fallback` zurueck
   - `app/agent_core_api.py` ist im Workspace wieder real vorhanden und in `app.main` eingebunden; die dokumentierte Phase-4-Bridge ist damit wieder konsistent mit Code und Tests
+- Verifiziert implementierte Phase A des aktuellen Output-Quality-Fokus:
+  - `PromptBuilder` erzeugt jetzt pro Szene einen `scene_world_contract` als strukturierte Prompt-/Metadata-Schicht
+  - Scene-Prompts enthalten harte Sektionen fuer World/Setting, Subject/Action, Camera/Lighting, Style Lock, Allowed Visuals, Forbidden Visuals und Text Risk Policy
+  - bei aktivem Social-Tip-Guard wird ein Social Format Contract in den Prompt aufgenommen
+  - Variation-Prompts wiederholen die Forbidden-Visuals und markieren den Contract als erhalten, damit Detail-/Close-up-Varianten keine Text-, Papier- oder Screenpfade zurueckbringen
+  - bisher nur code- und unittest-seitig geprueft; kein neuer GPU-Render und kein visuelles Eval in Phase A
+- Verifiziert implementierte Phase B1 des aktuellen Output-Quality-Fokus:
+  - `build_storyboard_render_plan()` erzeugt pro Keyframe-Kandidat einen `effective_prompt` aus Scene World Contract, Scene Prompt, Candidate Prompt und Variation-Kontext
+  - `storyboard_step.params` persistiert `effective_prompt`, `prompt_source`, `candidate_prompt_text`, `scene_prompt_text`, `scene_world_contract` und `storyboard_prompt_metadata`
+  - `ZImageStoryboardAdapter` bevorzugt jetzt den scene-specific `effective_prompt` und faellt nur bei fehlender Kandidatenmetadaten auf komprimierte Candidate-/Global-Prompts zurueck
+  - Dry-Run-Artefakte ohne GPU/Video-Render liegen unter `/workspace/agent_runs/phase-b1-dry-morning-reset` und `/workspace/agent_runs/phase-b1-dry-focus-break`
+  - Vision-/Keyframe-Eval ist noch nicht umgesetzt und bleibt Phase B2
+- Verifiziert implementierte Phase B2 des aktuellen Output-Quality-Fokus:
+  - `evaluate_keyframe_visual_risk()` klassifiziert Storyboard-Kandidaten leichtgewichtig als `passed`, `needs_review` oder `rejected`
+  - die Review nutzt Scene World Contract, Candidate Prompt, Effective Prompt und optional bestehende technische Image Validation; kein OCR und keine Vision-LLM-Analyse werden behauptet
+  - Storyboard-Auswahl bevorzugt jetzt `passed` vor `needs_review` vor `rejected`, waehrend technische Fehler weiter hart scheitern
+  - `visual_risk_review` wird in Kandidaten-Metadaten und Storyboard-Reports persistiert
+  - Dry-Run-Artefakte ohne GPU/Video-Render liegen unter `/workspace/agent_runs/phase-b2-dry-morning-reset` und `/workspace/agent_runs/phase-b2-dry-focus-break`
+  - keine finale Bildqualitaet garantiert; naechster Schritt ist Phase C Take Visual Review / Postability Score
 - Verifiziert implementierte Phase 5B:
   - `llama.cpp` wurde im Pod real mit CUDA gebaut; produktives Binary: `/workspace/tools/llama.cpp/build/bin/llama-server`
   - im aktuellen Pod-Snapshot liegen unter `/workspace/tools/llama.cpp/build/bin` reale ELF-Artefakte fuer `llama-server`, `llama-cli`, `libggml-base.so.0.9.11`, `libggml-cpu.so.0.9.11`, `libggml-cuda.so.0.9.11`, `libggml.so.0.9.11`, `libllama-common.so.0.0.1`, `libllama.so.0.0.1` und `libmtmd.so.0.0.1`

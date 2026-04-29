@@ -597,7 +597,7 @@ class ProductionPlanner:
             "focus_break": [
                 {
                     "hook_focus": "person easing back from a tidy desk, shoulder roll by a bright window, calm daylight, uncluttered work corner, no readable surfaces",
-                    "visual_goal": "show an immediate focus reset through one clear body movement and a clean workspace with hidden interfaces",
+                    "visual_goal": "show an immediate focus reset through one clear body movement and a clean workspace with device faces turned away",
                     "shot_intent": "open on a readable stand-up or shoulder-roll gesture with a calm editorial side angle",
                     "keywords": ["desk", "window", "shoulders", "reset", "daylight", "focus"],
                 },
@@ -837,6 +837,13 @@ class ProductionPlanner:
     ) -> ProductionPlan:
         storyboard_step = next(step for step in plan.steps if step.name == "storyboard")
         selected_variation = self._variation_for_candidate(scene, candidate)
+        scene_world_contract = dict(scene.prompt_build_metadata.get("scene_world_contract") or {})
+        effective_prompt, storyboard_prompt_metadata = self.prompt_builder.build_storyboard_effective_prompt(
+            scene_prompt_text=scene.prompt_text,
+            candidate_prompt_text=candidate.prompt_text,
+            scene_world_contract=scene_world_contract,
+            variation=selected_variation,
+        )
         scene_storyboard_step = ProductionStep(
             name="storyboard",
             kind="storyboard",
@@ -860,6 +867,12 @@ class ProductionPlanner:
                 "steps": candidate.render_params.get("steps", 9),
                 "guidance_scale": candidate.render_params.get("guidance_scale", 0.0),
                 "selection_mode": "preferred_variation_then_first_valid",
+                "effective_prompt": effective_prompt,
+                "prompt_source": storyboard_prompt_metadata["prompt_source"],
+                "candidate_prompt_text": candidate.prompt_text,
+                "scene_prompt_text": scene.prompt_text,
+                "scene_world_contract": scene_world_contract,
+                "storyboard_prompt_metadata": storyboard_prompt_metadata,
             },
             notes=[f"Storyboard-specific render plan for {scene.scene_id}/{candidate.candidate_id}."],
         )
@@ -875,14 +888,14 @@ class ProductionPlanner:
             target_duration_sec=scene.target_duration_sec,
             estimated_voice_duration_sec=None,
             actual_voice_duration_sec=None,
-            prompt_text=candidate.prompt_text,
+            prompt_text=effective_prompt,
             director_output=plan.director_output,
             warnings=list(plan.warnings),
             rules_applied=list(plan.rules_applied),
             scenes=[
                 scene.model_copy(
                     update={
-                        "prompt_text": candidate.prompt_text,
+                        "prompt_text": effective_prompt,
                         "variations": [selected_variation] if selected_variation else list(scene.variations),
                         "keyframe_candidates": [candidate],
                         "selected_keyframe": None,
@@ -904,6 +917,9 @@ class ProductionPlanner:
                 "variation_index": candidate.variation_index,
                 "width": candidate.width,
                 "height": candidate.height,
+                "storyboard_effective_prompt": effective_prompt,
+                "storyboard_prompt_source": storyboard_prompt_metadata["prompt_source"],
+                "storyboard_prompt_metadata": storyboard_prompt_metadata,
             },
         )
 
@@ -1276,7 +1292,7 @@ class ProductionPlanner:
                 "intent": "surface one tactile detail without losing scene identity",
                 "camera_style": "intimate cinematic close-up",
                 "framing_hint": "tight detail framing with tactile surface emphasis",
-                "prompt_delta": "Prioritize material detail, interfaces, lighting accents and a tighter crop without losing scene coherence.",
+                "prompt_delta": "Prioritize material detail, clean surfaces, lighting accents and a tighter crop without screens, labels, paper, or readable text.",
                 "style_bias": "texture",
             },
             {

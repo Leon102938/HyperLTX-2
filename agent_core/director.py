@@ -577,7 +577,7 @@ class DirectorEngine:
                 intent="surface one tactile detail without losing scene identity",
                 camera_style="intimate cinematic close-up",
                 framing_hint="tight detail framing with tactile texture emphasis",
-                prompt_delta="favor tactile materials, interfaces, and precise highlights",
+                prompt_delta="favor tactile materials, clean unlabeled surfaces, and precise highlights without screens, paper, labels, or readable text",
                 style_bias="texture",
             ),
             VariationDirective(

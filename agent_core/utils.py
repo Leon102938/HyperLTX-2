@@ -147,6 +147,41 @@ TEXT_PRONE_REPLACEMENTS = (
     (re.compile(r"(?<!blank )\bpaper\b", re.IGNORECASE), "blank paper"),
 )
 
+KEYFRAME_VISUAL_RISK_POLICY_VERSION = "phaseB2_keyframe_visual_risk_v1"
+VISUAL_RISK_FORBIDDEN_TERMS = (
+    "readable text",
+    "handwriting",
+    "paper",
+    "notebook",
+    "document",
+    "page",
+    "screen",
+    "ui",
+    "interface",
+    "logo",
+    "label",
+    "poster",
+    "sign",
+    "typography",
+    "glyph",
+    "letter",
+    "number",
+)
+VISUAL_RISK_ACTION_PATTERNS = (
+    r"\bwriting\b.*\b(?:paper|notebook|document|page)\b",
+    r"\bhandwriting\b",
+    r"\btyping\b.*\b(?:screen|ui|interface)\b",
+    r"\breading\b.*\b(?:paper|notebook|document|page|screen)\b",
+)
+VISUAL_RISK_PROMPT_PATTERNS = (
+    r"\bvisible\s+(?:screen|ui|interface|text|logo|label|poster|sign)\b",
+    r"\b(?:screen|ui|interface)\s+facing\s+(?:camera|viewer)\b",
+    r"\bopen\s+(?:notebook|document|page)\b",
+    r"\b(?:paper|notebook|document|page)\s+(?:on|in|across)\s+(?:the\s+)?(?:desk|table|counter)\b",
+    r"\bwriting\s+on\s+(?:paper|a\s+notebook|the\s+notebook|a\s+document|the\s+page)\b",
+    r"\breadable\s+(?:text|label|logo|poster|sign|screen)\b",
+)
+
 
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
@@ -678,6 +713,191 @@ def compress_visual_prompt(prompt: str, *, max_clauses: int = 6) -> str:
         "blank unlabeled surfaces, no visible text, no typography, no captions, no logos, no watermarks, no letters, no numbers, no signage, no labels, no interface, no screen content, no handwriting, no printed pages, no readable page content, no open documents"
     )
     return ". ".join(selected) + "."
+
+
+def evaluate_keyframe_visual_risk(
+    *,
+    scene_world_contract: dict[str, Any] | None,
+    candidate_prompt_text: str | None = None,
+    effective_prompt: str | None = None,
+    scene_id: str | None = None,
+    candidate_id: str | None = None,
+    image_validation: Any | None = None,
+) -> dict[str, Any]:
+    contract = scene_world_contract or {}
+    issues: list[str] = []
+    warnings: list[str] = []
+    checked_contract_fields = [
+        "visible_subject",
+        "environment",
+        "action",
+        "allowed_props",
+        "forbidden_props",
+        "text_risk_policy",
+        "social_format_rules",
+    ]
+    checked_prompt_fields = ["candidate_prompt_text", "effective_prompt"]
+    risk_score = 0
+
+    missing_fields = [
+        field
+        for field in ("visible_subject", "environment", "action", "allowed_props", "forbidden_props", "text_risk_policy")
+        if not contract.get(field)
+    ]
+    if missing_fields:
+        warnings.append(f"missing contract fields: {', '.join(missing_fields)}")
+        risk_score += 20
+
+    for field in ("visible_subject", "environment", "action"):
+        risk_hits = _positive_visual_risk_hits(str(contract.get(field) or ""))
+        if risk_hits:
+            issue = f"{field} contains positive forbidden visual content: {', '.join(risk_hits)}"
+            issues.append(issue)
+            risk_score += 45 if field == "action" else 35
+
+    allowed_hits: list[str] = []
+    for value in contract.get("allowed_props") or []:
+        allowed_hits.extend(_positive_visual_risk_hits(str(value)))
+    if allowed_hits:
+        issues.append(f"allowed_props contains forbidden visual content: {', '.join(_unique_strings(allowed_hits))}")
+        risk_score += 45
+
+    action_text = str(contract.get("action") or "")
+    action_pattern_hits = _pattern_hits(action_text, VISUAL_RISK_ACTION_PATTERNS)
+    if action_pattern_hits:
+        issues.append(f"action requests text/screen/paper behavior: {', '.join(action_pattern_hits)}")
+        risk_score += 60
+
+    prompt_hits = _candidate_positive_prompt_risk_hits(candidate_prompt_text or "")
+    if prompt_hits:
+        issues.append(f"candidate prompt requests risky positive content: {', '.join(prompt_hits)}")
+        risk_score += 45
+
+    effective_warnings = _candidate_positive_prompt_risk_hits(effective_prompt or "")
+    if effective_warnings:
+        warnings.append(f"effective prompt contains risky positive content outside policy clauses: {', '.join(effective_warnings)}")
+        risk_score += 20
+
+    validation_payload = _model_or_dict(image_validation)
+    if validation_payload:
+        if validation_payload.get("passed") is False:
+            issues.append("technical image validation did not pass")
+            risk_score += 60
+        for issue in validation_payload.get("issues") or []:
+            issues.append(f"technical image issue: {issue}")
+        for warning in validation_payload.get("warnings") or []:
+            warnings.append(f"technical image warning: {warning}")
+    else:
+        warnings.append("no image validation available; review is prompt/contract only")
+
+    risk_score = min(100, risk_score)
+    if any(issue for issue in issues if "positive forbidden visual content" in issue or "requests" in issue):
+        status = "rejected"
+    elif validation_payload and validation_payload.get("passed") is False:
+        status = "rejected"
+    elif risk_score >= 60:
+        status = "rejected"
+    elif risk_score >= 25 or missing_fields:
+        status = "needs_review"
+    else:
+        status = "passed"
+
+    return {
+        "visual_risk_status": status,
+        "risk_score": risk_score,
+        "issues": _unique_strings(issues),
+        "warnings": _unique_strings(warnings),
+        "policy_version": KEYFRAME_VISUAL_RISK_POLICY_VERSION,
+        "source": "contract_prompt_heuristic_plus_technical_image_check",
+        "checked_contract_fields": checked_contract_fields,
+        "checked_prompt_fields": checked_prompt_fields,
+        "scene_id": scene_id,
+        "candidate_id": candidate_id,
+        "image_validation_used": bool(validation_payload),
+        "social_tip_visual_guard": bool(contract.get("social_tip_visual_guard")),
+    }
+
+
+def _positive_visual_risk_hits(value: str) -> list[str]:
+    lowered = value.lower()
+    if not lowered:
+        return []
+    lowered = re.sub(r"\bhidden\s+(?:logos?|labels?|device faces?|displays?|screens?|interfaces?)\b", " ", lowered)
+    lowered = re.sub(r"\bno\s+(?:readable\s+|visible\s+)?(?:text|paper|notebooks?|documents?|pages?|screens?|ui|interfaces?|logos?|labels?|posters?|signs?)\b", " ", lowered)
+    lowered = re.sub(r"\bwithout\s+(?:readable\s+|visible\s+)?(?:text|paper|notebooks?|documents?|pages?|screens?|ui|interfaces?|logos?|labels?|posters?|signs?)\b", " ", lowered)
+    return [term for term in VISUAL_RISK_FORBIDDEN_TERMS if re.search(rf"\b{re.escape(term)}s?\b", lowered)]
+
+
+def _candidate_positive_prompt_risk_hits(prompt: str) -> list[str]:
+    clauses = [part.strip() for part in re.split(r"(?<=[.!?])\s+", " ".join(prompt.split())) if part.strip()]
+    hits: list[str] = []
+    for clause in clauses:
+        lowered = clause.lower()
+        if any(
+            marker in lowered
+            for marker in (
+                "forbidden visuals",
+                "text risk policy",
+                "no readable",
+                "no handwriting",
+                "no paper",
+                "no notebook",
+                "no document",
+                "no screens",
+                "no screen",
+                "no ui",
+                "no labels",
+                "no logos",
+                "no posters",
+                "no signs",
+                "no typography",
+                "no glyphs",
+                "no letters",
+                "no numbers",
+                "without screens",
+                "without screen",
+                "without labels",
+                "without paper",
+                "without text props",
+                "do not introduce",
+                "avoid office",
+                "avoid readable",
+                "free of readable",
+                "clean unlabeled",
+            )
+        ):
+            continue
+        hits.extend(_pattern_hits(lowered, VISUAL_RISK_PROMPT_PATTERNS))
+    return _unique_strings(hits)
+
+
+def _pattern_hits(value: str, patterns: tuple[str, ...]) -> list[str]:
+    return [pattern for pattern in patterns if re.search(pattern, value, flags=re.IGNORECASE)]
+
+
+def _model_or_dict(value: Any | None) -> dict[str, Any]:
+    if value is None:
+        return {}
+    if isinstance(value, dict):
+        return dict(value)
+    if hasattr(value, "model_dump"):
+        return value.model_dump(mode="json")
+    return {}
+
+
+def _unique_strings(values: list[str]) -> list[str]:
+    result: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        normalized = " ".join(str(value).split()).strip()
+        if not normalized:
+            continue
+        key = normalized.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(normalized)
+    return result
 
 
 def _sanitize_text_prone_clause(clause: str) -> str:

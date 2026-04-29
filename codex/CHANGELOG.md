@@ -1,5 +1,57 @@
 # CHANGELOG.md
 
+## 2026-04-28 Phase B2 Keyframe Visual Risk Review
+- Phase B2 umgesetzt, ohne Runtime-, Backend-, API-, GUI-, init/start- oder llama.cpp-Umbau.
+- `agent_core/utils.py` fuehrt `evaluate_keyframe_visual_risk()` als leichten Contract-/Prompt-/Technik-Review fuer Storyboard-Keyframe-Kandidaten ein.
+- Review-Metadata pro Kandidat:
+  - `visual_risk_status`: `passed`, `needs_review` oder `rejected`
+  - `risk_score`
+  - `issues`
+  - `warnings`
+  - `policy_version`
+  - `source`
+  - `checked_contract_fields`
+  - `checked_prompt_fields`
+- False-Positive-Regel umgesetzt: Verbote in `forbidden_props`, `text_risk_policy` oder `no ...`-Promptteilen zaehlen nicht als positives Risiko; riskant sind positive Inhalte in Subject/Action/Allowed Props oder aktive Prompt-Anforderungen.
+- Storyboard-Auswahl bevorzugt jetzt technisch valide Kandidaten in der Reihenfolge `passed` vor `needs_review` vor `rejected`.
+- `storyboard_plan.json` und Kandidaten-Metadaten enthalten jetzt `visual_risk_review`.
+- Dry-Run-Verifikation ohne GPU/Video-Render:
+  - `/workspace/agent_runs/phase-b2-dry-morning-reset`
+  - `/workspace/agent_runs/phase-b2-dry-focus-break`
+- Keine finale Bildqualitaet behauptet; Phase C ist Take Visual Review / Postability Score, spaeter Phase D Final Quality Verdict und Phase E CLI Produktions-Cockpit.
+
+## 2026-04-28 Phase B1 Storyboard Contract-Aware Prompts
+- Phase B1 umgesetzt, ohne Runtime-, Backend-, API-, GUI- oder llama.cpp-Umbau.
+- `ProductionPlanner.build_storyboard_render_plan()` baut pro Keyframe-Kandidat jetzt einen scene-specific `effective_prompt` aus Scene World Contract, Scene Prompt, Candidate Prompt und Variation-Kontext.
+- `storyboard_step.params` speichert jetzt `effective_prompt`, `prompt_source`, `candidate_prompt_text`, `scene_prompt_text`, `scene_world_contract` und `storyboard_prompt_metadata`.
+- `ZImageStoryboardAdapter` nutzt bevorzugt diesen `effective_prompt`; Fallback auf Candidate-/Global-Prompt bleibt erhalten.
+- Storyboard-Reports koennen den effektiv genutzten Prompt und die Contract-Metadaten pro Kandidat nachvollziehen.
+- Dry-Run-Verifikation ohne GPU/Video-Render:
+  - `/workspace/agent_runs/phase-b1-dry-morning-reset`
+  - `/workspace/agent_runs/phase-b1-dry-focus-break`
+- Vision-/Keyframe-Eval wurde nicht gebaut; das bleibt Phase B2.
+
+## 2026-04-28 Phase A Scene World Contract
+- Phase A fuer den aktuellen Output-Quality-Fokus umgesetzt, ohne Backend-, Runtime-, API- oder llama.cpp-Umbau.
+- `agent_core/prompt_builder.py` fuehrt jetzt einen kleinen Scene World Contract pro Szene ein und speichert ihn in `prompt_build_metadata.scene_world_contract`.
+- Scene-Prompts werden jetzt als PromptBuilder v2 mit klaren Sektionen gebaut:
+  - `WORLD / SETTING`
+  - `SUBJECT / ACTION`
+  - `CAMERA / LIGHTING`
+  - `STYLE LOCK`
+  - `ALLOWED VISUALS`
+  - `FORBIDDEN VISUALS`
+  - `TEXT RISK POLICY`
+  - `SOCIAL FORMAT CONTRACT` bei aktivem Social-Tip-Guard
+- Variation-Prompts behalten den World Contract aktiv und wiederholen die Forbidden-Visuals, damit Close-up-/Detail-Varianten keine Papier-, Screen- oder Textobjekte zurueckbringen.
+- Social-Tip-Prompts sind haerter gegen lesbaren Text, Handschrift, Papier, Screens/UI, Labels, Logos, Poster, Signs, generierte In-Scene-Untertitel, Typografie/Glyphen/Buchstaben/Zahlen und Focus-Break-Desk-Drift.
+- `agent_core/planner.py` wurde nur klein angepasst: die generische `tactile_detail`-Variation fordert jetzt clean surfaces statt interfaces.
+- Tests:
+  - `python3 -m unittest tests/test_planner_rules.py` gruen
+  - `python3 -m unittest tests/test_assembler_mux.py` gruen
+  - `python3 -m unittest tests/test_output_quality_utils.py` gruen
+- Kein neuer GPU-Render und kein visuelles Output-Eval in Phase A; Storyboard scene-specific prompts und Keyframe Visual Eval bleiben Phase B.
+
 ## 2026-04-21 Fresh Startup Recheck
 - Vorher-Zustand real festgehalten:
   - `uvicorn app.main:app` lief auf `8000`

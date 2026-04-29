@@ -23,6 +23,12 @@ Eine kleine Director-/Brain-Schicht vor dem bestehenden Planner bauen, die Jobs 
 Den bereits vorbereiteten Director-Layer produktiv an ein echtes lokales Director-Modell anbinden, bevorzugt Qwen3.6-35B-A3B in praktikabler quantisierter Form als GGUF `Q4_K_M`, ohne Fake-Integration, ohne neuen Mega-Stack und mit sauberem Fallback auf den bisherigen regelbasierten Flow.
 
 ## Aktueller Operativer Fokus
+- Aktueller Output-Quality-Fokus Phase A ist umgesetzt: Scene World Contract + PromptBuilder v2 haerten Szene- und Variation-Prompts gegen Text-/Screen-/Papier-Artefakte, ohne Runtime-/Backend-Aenderung.
+- Phase B1 ist umgesetzt: Storyboard-/Keyframe-Kandidaten erhalten jetzt scene-specific, contract-aware `effective_prompt`-Metadaten; Z-Image nutzt diese bevorzugt statt nur globaler Plan-Prompts.
+- Phase B2 ist umgesetzt: Storyboard-Keyframe-Kandidaten erhalten jetzt einen leichten `visual_risk_review` mit Status `passed`, `needs_review` oder `rejected`; Auswahl bevorzugt `passed` vor `needs_review` vor `rejected`.
+- Phase B1/B2 sind per Unit-Tests und Dry-Run-Artefaktplaenen verifiziert; noch kein neuer langer GPU-Render und keine finale visuelle Qualitaetsbehauptung.
+- Naechster Output-Quality-Schritt: Phase C Take Visual Review / Postability Score.
+- Spaetere geplante Schritte: Phase D Final Quality Verdict, Phase E CLI Produktions-Cockpit.
 - Restore-/Startup-/Environment-Check fuer den lokalen Director-Pfad ist jetzt auch ueber einen frischen `bash /workspace/init.sh`-Lauf real verifiziert; `init.sh` brachte `llama-server` dabei ohne manuellen Director-Start selbst hoch.
 - Der vorhandene `llama.cpp`-Runtime-/Build-Stand unter `/workspace/tools/llama.cpp/build/bin` ist jetzt nicht nur ohne Rebuild verifiziert, sondern wird im aktuellen Workspace vor einem Rebuild zuerst ueber Execute-Bits und Linux-Symlink-Aliase repariert.
 - Naechster sinnvolle Ausbaupunkt bleibt unveraendert: weitere echte Multi-Scene-/Storyboard-Validierung des bestehenden Qwen-Director-Pfads, kein neuer Feature-Sprung.

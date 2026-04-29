@@ -162,7 +162,7 @@ class PlannerRulesTest(unittest.TestCase):
             use_music=True,
             orientation="portrait",
             resolution="draft",
-            metadata={"subtitle_mode": "burn"},
+            metadata={"subtitle_mode": "burn", "variations_per_scene": 4},
         )
 
         plan = self.planner.build_plan(job)
@@ -203,7 +203,7 @@ class PlannerRulesTest(unittest.TestCase):
             use_music=True,
             orientation="portrait",
             resolution="draft",
-            metadata={"subtitle_mode": "burn"},
+            metadata={"subtitle_mode": "burn", "variations_per_scene": 4},
         )
 
         plan = self.planner.build_plan(job)
@@ -223,6 +223,93 @@ class PlannerRulesTest(unittest.TestCase):
         self.assertNotIn("paper", flattened)
         self.assertNotIn("screen", flattened)
         self.assertNotIn("notebook", flattened)
+
+    def test_prompt_builder_v2_emits_structured_scene_world_contract(self) -> None:
+        job = JobInput(
+            idea="A concise product reveal with one person opening a small case.",
+            duration_sec=6,
+            use_voice=False,
+            orientation="landscape",
+            resolution="draft",
+        )
+
+        plan = self.planner.build_plan(job)
+        scene = plan.scenes[0]
+        prompt = scene.prompt_text
+        metadata = scene.prompt_build_metadata
+
+        self.assertEqual(metadata["builder_version"], "phaseA_scene_world_contract_v2")
+        self.assertIn("scene_world_contract", metadata)
+        self.assertIn("WORLD / SETTING:", prompt)
+        self.assertIn("SUBJECT / ACTION:", prompt)
+        self.assertIn("CAMERA / LIGHTING:", prompt)
+        self.assertIn("STYLE LOCK:", prompt)
+        self.assertIn("ALLOWED VISUALS:", prompt)
+        self.assertIn("FORBIDDEN VISUALS:", prompt)
+        self.assertIn("TEXT RISK POLICY:", prompt)
+        self.assertIn("readable text", prompt.lower())
+        self.assertIn("screens or ui facing camera", prompt.lower())
+
+    def test_social_tip_scene_and_variation_prompts_keep_hard_forbidden_cues(self) -> None:
+        job = JobInput(
+            idea="Vier kurze Focus-Break Moves fuer mehr Klarheit im Arbeitstag.",
+            script=(
+                "Wenn dein Kopf am Bildschirm dicht macht, steh kurz auf. "
+                "Trink erst einen Schluck Wasser, roll die Schultern und atme am Fenster tief durch. "
+                "Dann geh mit ruhigerem Blick zurueck an den Tisch."
+            ),
+            duration_sec=18,
+            use_voice=True,
+            use_storyboard=True,
+            use_music=True,
+            orientation="portrait",
+            resolution="draft",
+            metadata={"subtitle_mode": "burn", "variations_per_scene": 4},
+        )
+
+        plan = self.planner.build_plan(job)
+        scene = plan.scenes[0]
+        scene_prompt = scene.prompt_text.lower()
+        variation_prompt = scene.variations[0].prompt_variant_text.lower()
+
+        self.assertIn("social format contract:", scene_prompt)
+        for cue in [
+            "no readable text",
+            "no handwriting",
+            "no document surfaces",
+            "no screens or ui toward camera",
+            "no labels",
+            "typography",
+            "glyphs",
+            "letters",
+            "numbers",
+        ]:
+            self.assertIn(cue, scene_prompt)
+        forbidden_props = [
+            value.lower() for value in scene.prompt_build_metadata["scene_world_contract"]["forbidden_props"]
+        ]
+        for cue in ["paper", "notebook", "screens", "visible ui", "labels", "office desk paper drift"]:
+            self.assertIn(cue, forbidden_props)
+
+        self.assertIn("world contract remains active", variation_prompt)
+        self.assertIn("forbidden visuals still apply", variation_prompt)
+        self.assertIn("do not introduce new props", variation_prompt)
+        self.assertIn("paper", variation_prompt)
+        self.assertIn("screens", variation_prompt)
+        self.assertIn("readable text", variation_prompt)
+        self.assertTrue(scene.variations[0].prompt_build_metadata["contract_preserved"])
+        tactile_variations = [
+            variation
+            for scene in plan.scenes
+            for variation in scene.variations
+            if variation.shot_type == "detail_closeup"
+        ]
+        self.assertTrue(tactile_variations)
+        for variation in tactile_variations:
+            delta = (variation.prompt_delta or "").lower()
+            self.assertNotIn("interfaces", delta)
+            self.assertIn("without screens", delta)
+            self.assertIn("paper", delta)
 
 
 if __name__ == "__main__":

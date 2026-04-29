@@ -23,7 +23,7 @@ RenderMode = Literal["text_only", "storyboard_reference", "keyframe_conditioned"
 DirectorMode = Literal["llm_augmented", "rule_based_fallback"]
 TakeReviewStatus = Literal["passed", "failed", "rejected", "selected"]
 TakeValidationStatus = Literal["passed", "failed", "rejected"]
-KeyframeReviewStatus = Literal["passed", "failed", "rejected", "selected"]
+KeyframeReviewStatus = Literal["passed", "needs_review", "failed", "rejected", "selected"]
 ImageValidationStatus = Literal["passed", "failed", "rejected"]
 
 
