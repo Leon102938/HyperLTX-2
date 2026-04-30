@@ -8,6 +8,7 @@ from agent_core.utils import (
     build_scene_subtitle_entries,
     concat_video_segments,
     copy_media_file,
+    evaluate_final_quality_verdict,
     format_overlay_title_text,
     mux_voice_into_video,
     probe_media_duration,
@@ -251,6 +252,23 @@ class ResultAssembler:
                 actual_final_duration_sec = final_duration_sec
 
             final_output_path = str(final_path)
+            final_quality_verdict = evaluate_final_quality_verdict(
+                final_output_path=final_output_path,
+                expected_width=plan.width,
+                expected_height=plan.height,
+                expected_frame_rate=float(plan.metadata.get("frame_rate", 24) or 24),
+                expected_duration_sec=actual_final_duration_sec or video_duration_sec,
+                selected_scene_outputs=selected_scene_outputs,
+                selected_scene_storyboards=storyboard_result.metadata.get("selected_scene_storyboards", []) if storyboard_result else [],
+                assembly_metadata=assembly_metadata,
+                output_dir=workspace,
+                final_frame_provider=plan.metadata.get("final_quality_review_provider") or plan.metadata.get("vision_review_provider"),
+                final_frame_model_dir=plan.metadata.get("vision_review_model_dir"),
+                max_final_frames=int(plan.metadata.get("final_quality_max_frames", plan.metadata.get("vision_review_max_frames", 3)) or 3),
+                voice_metadata=voice_result.model_dump(mode="json") if voice_result else None,
+                music_metadata=music_result.model_dump(mode="json") if music_result else None,
+            )
+            assembly_metadata["final_quality_verdict"] = final_quality_verdict
             final_artifact = ArtifactRef(
                 key="final_output_mp4",
                 kind="video",
@@ -316,6 +334,7 @@ class ResultAssembler:
                 "fallback_selection_mode": video_result.metadata.get("fallback_selection_mode", "first_successful_take"),
                 "selected_scene_outputs": selected_scene_outputs,
                 "assembly": assembly_metadata,
+                "final_quality_verdict": assembly_metadata.get("final_quality_verdict"),
             },
         )
 
@@ -329,6 +348,16 @@ class ResultAssembler:
         music_result: ExecutionResult | None = None,
         storyboard_result: ExecutionResult | None = None,
     ) -> ResultSummary:
+        final_quality_verdict = evaluate_final_quality_verdict(
+            final_output_path=None,
+            expected_width=plan.width if plan else 0,
+            expected_height=plan.height if plan else 0,
+            expected_frame_rate=float(plan.metadata.get("frame_rate", 24) if plan else 24),
+            expected_duration_sec=plan.target_duration_sec if plan else 0.0,
+            selected_scene_outputs=[],
+            selected_scene_storyboards=storyboard_result.metadata.get("selected_scene_storyboards", []) if storyboard_result else [],
+            assembly_metadata={"mode": "failed_before_assembly", "errors": list(state.errors)},
+        )
         return ResultSummary(
             job_id=job.job_id or "",
             success=False,
@@ -346,7 +375,7 @@ class ResultAssembler:
                 "music": music_result.model_dump(mode="json") if music_result else None,
                 "storyboard": storyboard_result.model_dump(mode="json") if storyboard_result else None,
             },
-            metadata={"errors": list(state.errors)},
+            metadata={"errors": list(state.errors), "final_quality_verdict": final_quality_verdict},
         )
 
     @staticmethod

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import re
 import shutil
 import subprocess
@@ -148,6 +149,8 @@ TEXT_PRONE_REPLACEMENTS = (
 )
 
 KEYFRAME_VISUAL_RISK_POLICY_VERSION = "phaseB2_keyframe_visual_risk_v1"
+TAKE_VISUAL_REVIEW_POLICY_VERSION = "phaseC_take_visual_review_v1"
+FINAL_QUALITY_POLICY_VERSION = "phaseD_final_quality_verdict_v1"
 VISUAL_RISK_FORBIDDEN_TERMS = (
     "readable text",
     "handwriting",
@@ -474,6 +477,448 @@ def validate_video_take(
         "issues": issues,
         "warnings": warnings,
     }
+
+
+def extract_review_frames(
+    video_path: str | Path | None,
+    output_dir: str | Path,
+    *,
+    count: int = 5,
+) -> dict[str, Any]:
+    output_path = ensure_dir(output_dir)
+    warnings: list[str] = []
+    issues: list[str] = []
+    frames: list[dict[str, Any]] = []
+    if not video_path:
+        return {"frames": frames, "warnings": ["video path missing"], "issues": issues, "frame_count": 0}
+
+    source = Path(video_path)
+    if not source.exists():
+        return {"frames": frames, "warnings": [f"video file missing: {source}"], "issues": issues, "frame_count": 0}
+    if shutil.which("ffprobe") is None or shutil.which("ffmpeg") is None:
+        return {"frames": frames, "warnings": ["ffmpeg/ffprobe not available"], "issues": issues, "frame_count": 0}
+
+    probe = probe_video_technical_details(source)
+    duration = probe.get("duration_sec")
+    if not probe.get("ffprobe_ok") or duration is None or duration <= 0:
+        warnings.append("could not determine video duration for visual review frames")
+        return {"frames": frames, "warnings": warnings, "issues": issues, "frame_count": 0}
+
+    max_count = max(1, int(count or 1))
+    if duration < 1.0:
+        sample_count = min(max_count, 1)
+    elif duration < 2.5:
+        sample_count = min(max_count, 3)
+    else:
+        sample_count = min(max_count, 5)
+    ratios = [0.08] if sample_count == 1 else [0.08, 0.25, 0.5, 0.75, 0.92][:sample_count]
+    epsilon = min(0.08, max(0.01, duration * 0.05))
+
+    for index, ratio in enumerate(ratios, start=1):
+        timestamp = max(0.0, min(duration - epsilon, duration * ratio))
+        frame_path = output_path / f"frame_{index:03d}.jpg"
+        result = subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-v",
+                "error",
+                "-ss",
+                f"{timestamp:.3f}",
+                "-i",
+                str(source),
+                "-frames:v",
+                "1",
+                "-q:v",
+                "3",
+                str(frame_path),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        exists = frame_path.exists() and frame_path.stat().st_size > 0
+        if result.returncode != 0 or not exists:
+            warning = result.stderr.strip() or f"ffmpeg did not create review frame {index}"
+            warnings.append(warning)
+        frames.append(
+            {
+                "timestamp_sec": round(timestamp, 3),
+                "path": str(frame_path),
+                "exists": exists,
+                "file_size_bytes": frame_path.stat().st_size if frame_path.exists() else None,
+            }
+        )
+
+    return {
+        "frames": frames,
+        "warnings": _unique_strings(warnings),
+        "issues": _unique_strings(issues),
+        "frame_count": sum(1 for frame in frames if frame.get("exists")),
+        "source_video": str(source),
+        "duration_sec": round(float(duration), 3),
+    }
+
+
+def evaluate_take_visual_review(
+    *,
+    validation: Any | None,
+    scene_world_contract: dict[str, Any] | None,
+    review_frames: list[dict[str, Any]] | None = None,
+    frame_warnings: list[str] | None = None,
+    scene_id: str | None = None,
+    take_id: str | None = None,
+    prompt_text: str | None = None,
+    prompt_variant_text: str | None = None,
+    selected_keyframe_visual_risk: dict[str, Any] | None = None,
+    provider: str | None = None,
+    model_dir: str | None = None,
+) -> dict[str, Any]:
+    provider_name = _resolve_take_visual_review_provider(provider)
+    if provider_name == "disabled":
+        return _base_take_visual_review(
+            status="needs_review",
+            score=0.5,
+            issues=[],
+            warnings=["take visual review disabled"],
+            provider="disabled",
+            scene_world_contract=scene_world_contract,
+            review_frames=review_frames or [],
+            scene_id=scene_id,
+            take_id=take_id,
+        )
+
+    heuristic = _evaluate_take_visual_review_heuristic(
+        validation=validation,
+        scene_world_contract=scene_world_contract,
+        review_frames=review_frames or [],
+        frame_warnings=frame_warnings or [],
+        scene_id=scene_id,
+        take_id=take_id,
+        prompt_text=prompt_text,
+        prompt_variant_text=prompt_variant_text,
+        selected_keyframe_visual_risk=selected_keyframe_visual_risk,
+    )
+    if provider_name != "qwen3_vl":
+        return heuristic
+
+    qwen_result = _evaluate_take_visual_review_qwen3_vl(
+        heuristic=heuristic,
+        scene_world_contract=scene_world_contract or {},
+        review_frames=review_frames or [],
+        model_dir=model_dir,
+    )
+    return qwen_result
+
+
+def evaluate_final_quality_verdict(
+    *,
+    final_output_path: str | Path | None,
+    expected_width: int,
+    expected_height: int,
+    expected_frame_rate: float,
+    expected_duration_sec: float,
+    selected_scene_outputs: list[dict[str, Any]] | None = None,
+    selected_scene_storyboards: list[dict[str, Any]] | None = None,
+    assembly_metadata: dict[str, Any] | None = None,
+    output_dir: str | Path | None = None,
+    final_frame_provider: str | None = None,
+    final_frame_model_dir: str | None = None,
+    max_final_frames: int = 3,
+    voice_metadata: dict[str, Any] | None = None,
+    music_metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    issues: list[str] = []
+    warnings: list[str] = []
+    problem_scenes: list[dict[str, Any]] = []
+    sources = [
+        "final_mp4_technical_validation",
+        "selected_scene_outputs",
+        "take_visual_review",
+        "keyframe_visual_risk_review",
+        "assembly_metadata",
+        "subtitle_overlay_metadata",
+        "voice_music_metadata",
+    ]
+    assembly = dict(assembly_metadata or {})
+    selected_outputs = list(selected_scene_outputs or [])
+    selected_storyboards = list(selected_scene_storyboards or [])
+    score = 0.9
+    final_frame_extraction: dict[str, Any] = {"frames": [], "warnings": [], "issues": [], "frame_count": 0}
+    final_frame_review: dict[str, Any] | None = None
+
+    final_path = Path(final_output_path) if final_output_path else None
+    if not final_path or not final_path.exists():
+        issues.append("final.mp4 is missing")
+        score = 0.0
+        technical_validation = {
+            "passed": False,
+            "issues": ["final.mp4 is missing"],
+            "warnings": [],
+        }
+    else:
+        technical_validation = validate_video_take(
+            final_path,
+            expected_width=expected_width,
+            expected_height=expected_height,
+            expected_frame_rate=expected_frame_rate,
+            expected_duration_sec=expected_duration_sec,
+        )
+        if not technical_validation.get("passed"):
+            issues.extend(f"final technical issue: {issue}" for issue in technical_validation.get("issues") or [])
+            warnings.extend(f"final technical warning: {warning}" for warning in technical_validation.get("warnings") or [])
+            score -= 0.45
+
+        if output_dir:
+            final_frame_extraction = extract_review_frames(
+                final_path,
+                Path(output_dir) / "final_review_frames",
+                count=max_final_frames,
+            )
+            warnings.extend(f"final frame extraction: {warning}" for warning in final_frame_extraction.get("warnings") or [])
+            frame_provider = _resolve_take_visual_review_provider(final_frame_provider)
+            if frame_provider == "qwen3_vl":
+                sources.append("qwen3_vl_final_frame_review")
+            else:
+                sources.append("heuristic_final_frame_review")
+            final_frame_review = evaluate_take_visual_review(
+                validation=technical_validation,
+                scene_world_contract={
+                    "visible_subject": "final assembled social video frames",
+                    "environment": "assembled final video",
+                    "action": "final video playback",
+                    "allowed_props": ["clean visual frames"],
+                    "forbidden_props": [
+                        "readable text",
+                        "screens",
+                        "ui",
+                        "paper",
+                        "notebooks",
+                        "documents",
+                        "logos",
+                        "labels",
+                        "signs",
+                        "posters",
+                    ],
+                    "text_risk_policy": "No readable text, no glyphs, no screens, no UI, no paper, no labels, no logos.",
+                },
+                review_frames=final_frame_extraction.get("frames", []),
+                frame_warnings=final_frame_extraction.get("warnings", []),
+                scene_id="final",
+                take_id="final_mp4",
+                prompt_text="Final assembled video frame review. Return strict JSON.",
+                prompt_variant_text="Check final frames for postability and visible text risks.",
+                provider=frame_provider,
+                model_dir=final_frame_model_dir,
+            )
+            final_status = final_frame_review.get("take_visual_review_status")
+            if final_status == "rejected":
+                issues.append("final frame review rejected the assembled video")
+                score -= 0.35
+            elif final_status == "needs_review":
+                warnings.append("final frame review needs manual review")
+                score -= 0.12
+            if final_frame_review.get("provider") != "qwen3_vl":
+                warnings.append("final frame review is heuristic/metadata-only; no real VLM image inference used")
+                score -= 0.08
+
+    selected_statuses: list[str] = []
+    selected_scores: list[float] = []
+    for scene in selected_outputs:
+        scene_id = str(scene.get("scene_id") or "unknown_scene")
+        status = str(scene.get("take_visual_review_status") or (scene.get("take_visual_review") or {}).get("take_visual_review_status") or "needs_review")
+        selected_statuses.append(status)
+        try:
+            selected_scores.append(float(scene.get("postability_score", (scene.get("take_visual_review") or {}).get("postability_score", 0.5))))
+        except (TypeError, ValueError):
+            selected_scores.append(0.5)
+        if status == "rejected":
+            issues.append(f"{scene_id} selected take visual review rejected")
+            problem_scenes.append({"scene_id": scene_id, "reason": "selected take visual review rejected"})
+            score -= 0.35
+        elif status == "needs_review":
+            warnings.append(f"{scene_id} selected take needs visual review")
+            problem_scenes.append({"scene_id": scene_id, "reason": "selected take needs visual review"})
+            score -= 0.1
+        review = scene.get("take_visual_review") or {}
+        for issue in review.get("issues") or []:
+            issues.append(f"{scene_id} take issue: {issue}")
+        for warning in review.get("warnings") or []:
+            warnings.append(f"{scene_id} take warning: {warning}")
+
+    if selected_scores:
+        score = (score * 0.55) + (sum(selected_scores) / len(selected_scores) * 0.45)
+
+    for storyboard in selected_storyboards:
+        selected = storyboard.get("selected_keyframe") or {}
+        review = (selected.get("metadata") or {}).get("visual_risk_review") or storyboard.get("selected_visual_risk_review") or {}
+        status = str(review.get("visual_risk_status") or "")
+        scene_id = str(storyboard.get("scene_id") or selected.get("scene_id") or "unknown_scene")
+        if status == "rejected":
+            issues.append(f"{scene_id} selected keyframe visual risk rejected")
+            problem_scenes.append({"scene_id": scene_id, "reason": "selected keyframe visual risk rejected"})
+            score -= 0.22
+        elif status == "needs_review":
+            warnings.append(f"{scene_id} selected keyframe visual risk needs review")
+            score -= 0.08
+
+    if assembly.get("subtitle_burned"):
+        warnings.append("burned subtitles introduce visible text into final video")
+        score -= 0.08
+    if assembly.get("overlay_text"):
+        warnings.append("overlay text metadata is present; visible text risk requires review")
+        score -= 0.08
+    if assembly.get("subtitle_mode") == "sidecar" and assembly.get("subtitle_entry_count"):
+        sources.append("sidecar_subtitles")
+    if voice_metadata and voice_metadata.get("success") is False:
+        warnings.append("voice metadata reports failure")
+        score -= 0.05
+    if music_metadata and music_metadata.get("success") is False:
+        warnings.append("music metadata reports failure")
+        score -= 0.03
+
+    score = round(max(0.0, min(1.0, score)), 3)
+    if issues and any("final.mp4 is missing" in issue or "final technical issue" in issue for issue in issues):
+        status = "failed"
+    elif any("selected take visual review rejected" in issue for issue in issues):
+        status = "failed"
+    elif issues:
+        status = "failed" if score < 0.45 else "needs_review"
+    elif warnings or score < 0.82:
+        status = "needs_review"
+    else:
+        status = "passed"
+
+    if status == "passed":
+        recommended = "ready_to_publish_or_run_human_spot_check"
+    elif status == "needs_review":
+        recommended = "manual_visual_review_before_publish"
+    else:
+        recommended = "fix_or_rerender_problem_scenes"
+
+    return {
+        "final_quality_status": status,
+        "final_postability_score": score,
+        "main_issues": _unique_strings(issues),
+        "warnings": _unique_strings(warnings),
+        "problem_scenes": problem_scenes,
+        "recommended_next_action": recommended,
+        "quality_policy_version": FINAL_QUALITY_POLICY_VERSION,
+        "quality_sources": _unique_strings(sources),
+        "technical_validation": technical_validation,
+        "selected_take_visual_status_counts": _status_counts(selected_statuses, ("passed", "needs_review", "rejected")),
+        "selected_take_count": len(selected_outputs),
+        "average_selected_take_postability_score": round(sum(selected_scores) / len(selected_scores), 3) if selected_scores else None,
+        "final_frame_extraction": final_frame_extraction,
+        "final_frame_review": final_frame_review,
+    }
+
+
+def _evaluate_take_visual_review_heuristic(
+    *,
+    validation: Any | None,
+    scene_world_contract: dict[str, Any] | None,
+    review_frames: list[dict[str, Any]],
+    frame_warnings: list[str],
+    scene_id: str | None,
+    take_id: str | None,
+    prompt_text: str | None,
+    prompt_variant_text: str | None,
+    selected_keyframe_visual_risk: dict[str, Any] | None,
+) -> dict[str, Any]:
+    contract = scene_world_contract or {}
+    checked_contract_fields = [
+        "visible_subject",
+        "environment",
+        "action",
+        "allowed_props",
+        "forbidden_props",
+        "text_risk_policy",
+        "social_format_rules",
+    ]
+    issues: list[str] = []
+    warnings: list[str] = list(frame_warnings)
+    score = 0.86
+
+    validation_payload = _model_or_dict(validation)
+    if not validation_payload or validation_payload.get("passed") is not True:
+        for issue in validation_payload.get("issues") or ["technical video validation did not pass"]:
+            issues.append(f"technical validation issue: {issue}")
+        score = min(score, 0.12)
+
+    missing_fields = [
+        field
+        for field in ("visible_subject", "environment", "action", "allowed_props", "forbidden_props", "text_risk_policy")
+        if not contract.get(field)
+    ]
+    if missing_fields:
+        warnings.append(f"missing contract fields: {', '.join(missing_fields)}")
+        score -= 0.08
+
+    for field in ("visible_subject", "environment", "action"):
+        hits = _positive_visual_risk_hits(str(contract.get(field) or ""))
+        if hits:
+            issues.append(f"{field} contains positive forbidden visual content: {', '.join(hits)}")
+            score -= 0.25 if field == "action" else 0.18
+
+    allowed_hits: list[str] = []
+    for value in contract.get("allowed_props") or []:
+        allowed_hits.extend(_positive_visual_risk_hits(str(value)))
+    if allowed_hits:
+        issues.append(f"allowed_props contains forbidden visual content: {', '.join(_unique_strings(allowed_hits))}")
+        score -= 0.3
+
+    action_hits = _pattern_hits(str(contract.get("action") or ""), VISUAL_RISK_ACTION_PATTERNS)
+    if action_hits:
+        issues.append(f"action requests text/screen/paper behavior: {', '.join(action_hits)}")
+        score -= 0.35
+
+    prompt_hits = _candidate_positive_prompt_risk_hits(prompt_variant_text or "")
+    prompt_hits.extend(_candidate_positive_prompt_risk_hits(prompt_text or ""))
+    if prompt_hits:
+        warnings.append(f"take prompt contains risky positive content outside policy clauses: {', '.join(_unique_strings(prompt_hits))}")
+        score -= 0.12
+
+    keyframe_status = str((selected_keyframe_visual_risk or {}).get("visual_risk_status") or "")
+    if keyframe_status == "rejected":
+        issues.append("selected keyframe visual risk was rejected")
+        score -= 0.35
+    elif keyframe_status == "needs_review":
+        warnings.append("selected keyframe visual risk needed review")
+        score -= 0.1
+
+    existing_frames = [frame for frame in review_frames if frame.get("exists")]
+    if not existing_frames and validation_payload.get("passed") is True:
+        warnings.append("no review frames could be extracted")
+        score -= 0.2
+
+    score = round(max(0.0, min(1.0, score)), 3)
+    severe_issue = any(
+        "positive forbidden visual content" in issue
+        or "requests text/screen/paper behavior" in issue
+        or "technical validation issue" in issue
+        or "keyframe visual risk was rejected" in issue
+        for issue in issues
+    )
+    if severe_issue:
+        status = "rejected"
+    elif warnings or score < 0.78:
+        status = "needs_review"
+    else:
+        status = "passed"
+
+    return _base_take_visual_review(
+        status=status,
+        score=score,
+        issues=_unique_strings(issues),
+        warnings=_unique_strings(warnings),
+        provider="heuristic",
+        scene_world_contract=contract,
+        review_frames=review_frames,
+        scene_id=scene_id,
+        take_id=take_id,
+        checked_contract_fields=checked_contract_fields,
+    )
 
 
 def probe_image_technical_details(path: str | Path) -> dict[str, Any]:
@@ -828,6 +1273,195 @@ def _positive_visual_risk_hits(value: str) -> list[str]:
     return [term for term in VISUAL_RISK_FORBIDDEN_TERMS if re.search(rf"\b{re.escape(term)}s?\b", lowered)]
 
 
+def _resolve_take_visual_review_provider(provider: str | None = None) -> str:
+    enabled = str(os.environ.get("VISION_REVIEW_ENABLED", "1")).strip().lower()
+    if enabled in {"0", "false", "off", "no"}:
+        return "disabled"
+    value = str(provider or os.environ.get("VISION_REVIEW_PROVIDER", "heuristic")).strip().lower()
+    if value in {"", "none", "disabled", "off"}:
+        return "disabled"
+    if value == "qwen3_vl":
+        return "qwen3_vl"
+    return "heuristic"
+
+
+def _base_take_visual_review(
+    *,
+    status: str,
+    score: float,
+    issues: list[str],
+    warnings: list[str],
+    provider: str,
+    scene_world_contract: dict[str, Any] | None,
+    review_frames: list[dict[str, Any]],
+    scene_id: str | None,
+    take_id: str | None,
+    checked_contract_fields: list[str] | None = None,
+    summary: str | None = None,
+) -> dict[str, Any]:
+    checked_fields = checked_contract_fields or [
+        "visible_subject",
+        "environment",
+        "action",
+        "allowed_props",
+        "forbidden_props",
+        "text_risk_policy",
+        "social_format_rules",
+    ]
+    problem_frames = [
+        {
+            "path": frame.get("path"),
+            "timestamp_sec": frame.get("timestamp_sec"),
+            "reason": "frame extraction failed",
+        }
+        for frame in review_frames
+        if not frame.get("exists")
+    ]
+    contract = scene_world_contract or {}
+    return {
+        "take_visual_review_status": status if status in {"passed", "needs_review", "rejected"} else "needs_review",
+        "postability_score": round(max(0.0, min(1.0, float(score))), 3),
+        "issues": _unique_strings(issues),
+        "warnings": _unique_strings(warnings),
+        "problem_frames": problem_frames,
+        "provider": provider,
+        "policy_version": TAKE_VISUAL_REVIEW_POLICY_VERSION,
+        "checked_contract_fields": checked_fields,
+        "review_frames": review_frames,
+        "scene_id": scene_id,
+        "take_id": take_id,
+        "scene_contract_summary": {
+            "visible_subject": contract.get("visible_subject"),
+            "environment": contract.get("environment"),
+            "action": contract.get("action"),
+            "allowed_props": contract.get("allowed_props"),
+            "forbidden_props": contract.get("forbidden_props"),
+        },
+        "summary": summary or "heuristic take visual review",
+    }
+
+
+def _evaluate_take_visual_review_qwen3_vl(
+    *,
+    heuristic: dict[str, Any],
+    scene_world_contract: dict[str, Any],
+    review_frames: list[dict[str, Any]],
+    model_dir: str | None = None,
+) -> dict[str, Any]:
+    existing_frames = [frame for frame in review_frames if frame.get("exists")]
+    if not existing_frames:
+        result = dict(heuristic)
+        result["provider"] = "qwen3_vl"
+        if result.get("take_visual_review_status") != "rejected":
+            result["take_visual_review_status"] = "needs_review"
+        result["warnings"] = _unique_strings(list(result.get("warnings") or []) + ["qwen3_vl skipped because no review frames exist"])
+        return result
+
+    model_path = Path(model_dir or os.environ.get("VISION_REVIEW_MODEL_DIR", "/workspace/models/Qwen3-VL-4B-Instruct-FP8"))
+    if not (model_path / "config.json").exists():
+        result = dict(heuristic)
+        result["provider"] = "qwen3_vl"
+        if result.get("take_visual_review_status") != "rejected":
+            result["take_visual_review_status"] = "needs_review"
+        result["warnings"] = _unique_strings(list(result.get("warnings") or []) + [f"qwen3_vl model dir not ready: {model_path}"])
+        return result
+
+    try:
+        # Keep this path lazy and optional; tests and normal runs stay heuristic unless explicitly requested.
+        from PIL import Image as PILImage
+        from transformers import AutoModelForImageTextToText, AutoProcessor
+    except Exception as exc:
+        result = dict(heuristic)
+        result["provider"] = "qwen3_vl"
+        if result.get("take_visual_review_status") != "rejected":
+            result["take_visual_review_status"] = "needs_review"
+        result["warnings"] = _unique_strings(list(result.get("warnings") or []) + [f"qwen3_vl dependencies unavailable: {exc}"])
+        return result
+
+    max_frames = max(1, int(os.environ.get("VISION_REVIEW_MAX_FRAMES", "3") or "3"))
+    selected_frames = existing_frames[:max_frames]
+    prompt = (
+        "Review these video frames against the scene contract. Detect visible text, glyphs, screens, UI, "
+        "paper, notebooks, documents, labels, logos, signs, posters, typography, letters, or numbers. "
+        "Return strict JSON with status, postability_score, issues, warnings, problem_frames, summary. "
+        "The status value must be exactly one of: passed, needs_review, rejected. "
+        f"Scene contract: {json.dumps(scene_world_contract, ensure_ascii=True)[:2500]}"
+    )
+    try:
+        processor = AutoProcessor.from_pretrained(str(model_path), trust_remote_code=True, local_files_only=True)
+        device_preference = os.environ.get("VISION_REVIEW_DEVICE", "auto").strip().lower()
+        model_kwargs: dict[str, Any] = {"trust_remote_code": True, "local_files_only": True}
+        if device_preference == "cpu":
+            model_kwargs["device_map"] = "cpu"
+        elif device_preference in {"cuda", "auto"}:
+            model_kwargs["device_map"] = "auto"
+        model = AutoModelForImageTextToText.from_pretrained(str(model_path), **model_kwargs)
+        images = [PILImage.open(str(frame["path"])).convert("RGB") for frame in selected_frames]
+        messages = [
+            {
+                "role": "user",
+                "content": [{"type": "image", "image": image} for image in images] + [{"type": "text", "text": prompt}],
+            }
+        ]
+        text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        inputs = processor(text=[text], images=images, return_tensors="pt")
+        if hasattr(model, "device"):
+            inputs = inputs.to(model.device)
+        output_ids = model.generate(**inputs, max_new_tokens=180, do_sample=False)
+        generated = processor.batch_decode(output_ids[:, inputs["input_ids"].shape[-1]:], skip_special_tokens=True)[0]
+        payload = _extract_json_object(generated)
+        status = _normalize_review_status(payload.get("status") or payload.get("take_visual_review_status"))
+        score = float(payload.get("postability_score", heuristic.get("postability_score", 0.5)))
+        result = dict(heuristic)
+        result.update(
+            {
+                "take_visual_review_status": status,
+                "postability_score": round(max(0.0, min(1.0, score)), 3),
+                "issues": _unique_strings(list(payload.get("issues") or [])),
+                "warnings": _unique_strings(list(payload.get("warnings") or [])),
+                "problem_frames": list(payload.get("problem_frames") or result.get("problem_frames") or []),
+                "provider": "qwen3_vl",
+                "summary": str(payload.get("summary") or "qwen3_vl take visual review"),
+            }
+        )
+        return result
+    except Exception as exc:
+        result = dict(heuristic)
+        result["provider"] = "qwen3_vl"
+        if result.get("take_visual_review_status") != "rejected":
+            result["take_visual_review_status"] = "needs_review"
+        result["warnings"] = _unique_strings(list(result.get("warnings") or []) + [f"qwen3_vl inference failed: {exc}"])
+        return result
+
+
+def _extract_json_object(text: str) -> dict[str, Any]:
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        stripped = re.sub(r"^```(?:json)?\s*", "", stripped)
+        stripped = re.sub(r"\s*```$", "", stripped)
+    try:
+        payload = json.loads(stripped)
+        return payload if isinstance(payload, dict) else {}
+    except json.JSONDecodeError:
+        start = stripped.find("{")
+        end = stripped.rfind("}")
+        if start >= 0 and end > start:
+            payload = json.loads(stripped[start : end + 1])
+            return payload if isinstance(payload, dict) else {}
+        raise
+
+
+def _normalize_review_status(value: Any) -> str:
+    normalized = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
+    if normalized in {"passed", "pass", "ok", "clean", "safe", "approved"}:
+        return "passed"
+    if normalized in {"rejected", "reject", "failed", "fail", "unsafe"}:
+        return "rejected"
+    if normalized in {"needs_review", "review", "needs_manual_review", "manual_review", "warning"}:
+        return "needs_review"
+    return "needs_review"
+
+
 def _candidate_positive_prompt_risk_hits(prompt: str) -> list[str]:
     clauses = [part.strip() for part in re.split(r"(?<=[.!?])\s+", " ".join(prompt.split())) if part.strip()]
     hits: list[str] = []
@@ -898,6 +1532,15 @@ def _unique_strings(values: list[str]) -> list[str]:
         seen.add(key)
         result.append(normalized)
     return result
+
+
+def _status_counts(values: list[str], known_statuses: tuple[str, ...]) -> dict[str, int]:
+    counts = {status: 0 for status in known_statuses}
+    counts["unknown"] = 0
+    for value in values:
+        status = str(value or "unknown")
+        counts[status if status in counts else "unknown"] += 1
+    return counts
 
 
 def _sanitize_text_prone_clause(clause: str) -> str:

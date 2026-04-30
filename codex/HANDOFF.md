@@ -103,12 +103,15 @@
     - neuer echter enger Produktivcheck danach: `startup-recheck-20260421`
     - dieser Lauf lief real mit `director_mode=llm_augmented`, `director_llm_active=true` und erzeugte erfolgreich `/workspace/agent_runs/startup-recheck-20260421/final.mp4`
     - wichtiger Abschluss fuer diesen Punkt: der minimale `init.sh`-Autostart-Fix ist damit nicht mehr nur wahrscheinlich, sondern ueber einen frischen `init.sh`-Startpfad real verifiziert
-- Output-Quality-Fokus Phase A/B1/B2 ist umgesetzt:
+- Output-Quality-Fokus Phase A/B1/B2/C/D ist umgesetzt:
   - Phase A: Scene World Contract + PromptBuilder v2; Scene-/Variation-Prompts enthalten harte Text-/Screen-/Paper-Verbote
   - Phase B1: Storyboard-/Keyframe-Prompts sind scene-specific und contract-aware; Z-Image nutzt `effective_prompt`
   - Phase B2: Storyboard-Keyframe-Kandidaten erhalten `visual_risk_review` mit `passed`, `needs_review` oder `rejected`; Auswahl bevorzugt `passed` vor `needs_review` vor `rejected`
+  - Phase C: Video-Takes erhalten `take_visual_review_status`, `postability_score`, Issues, Warnings, Problem-Frames, Provider und Review-Frame-Metadata; Take-Auswahl priorisiert `passed` vor `needs_review` vor `rejected`
+  - Qwen3-VL Bild-Smoke: lokales Testbild unter `/workspace/status/qwen3_vl_smoke/clean_test_image.jpg`, Ergebnis `provider=qwen3_vl`, `take_visual_review_status=passed`, `postability_score=1.0`
+  - Phase D: `ResultSummary.metadata.final_quality_verdict` bewertet `final.mp4` ueber technische Validation, Assembly-, Take-, Keyframe-, Subtitle-/Overlay-, Voice-/Music- und Final-Frame-Quellen
   - Dry-Run-Artefakte liegen unter `/workspace/agent_runs/phase-b1-dry-*` und `/workspace/agent_runs/phase-b2-dry-*`
-  - keine finale Bildqualitaet behauptet; naechster Schritt ist Phase C Take Visual Review / Postability Score
+  - keine Phase E gebaut; naechster Schritt ist Phase E CLI Produktions-Cockpit, danach echte Video-Qualitaetstests
 
 ## Was real verifiziert wurde
 - Tests:

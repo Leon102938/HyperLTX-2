@@ -1,11 +1,50 @@
 # PROJECT_STATE.md
 
 ## Projektstatus
-Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E, 3A, 3B, 4A, 4B und 4C erweitern den Core jetzt um regelbasierte Scene-/Shot-Planung, Mehrfach-Takes, technischen Quality-Guard, validierte Take-Selektion, kreative Varianten pro Szene, leichte inhaltliche Auswahlheuristik, optionale Storyboard-/Keyframe-Vorsteuerung, produktive First-Frame-Keyframe-Konditionierung im bestehenden `ti2vid`-Pfad, eine minimale produktive Worker-/n8n-Bridge ueber FastAPI, einen polling-faehigen Async-Submit-Pfad, n8n-freundliche Polling-Hinweise und begrenzte Retries; Phase 5A erweitert den Planner jetzt um eine Director-/Brain-Schicht mit `director_output`, `style_lock`, staerkeren Szenenintents, verbessertem Prompt-Bau und ehrlichem lokalem LLM-Fallback; Phase 5B bindet diesen Director-Layer jetzt produktiv an ein echtes lokales Qwen3.6-35B-A3B-Serving ueber `llama.cpp` + GGUF an; Phase A des aktuellen Output-Quality-Fokus fuehrt einen kleinen Scene World Contract und PromptBuilder v2 fuer haertere Szene-/Variation-Prompts ein; Phase B1 macht Storyboard-/Keyframe-Prompts jetzt scene-specific und contract-aware; Phase B2 fuehrt einen leichten Keyframe Visual Risk Review fuer Storyboard-Kandidaten ein; der Restore-/Startup-Pfad nach Repo-Update und Pod-Neustart ist jetzt erneut real geprueft, minimal gehaertet und um eine robuste lokale Director-Env-/Serve-Konfiguration erweitert
+Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E, 3A, 3B, 4A, 4B und 4C erweitern den Core jetzt um regelbasierte Scene-/Shot-Planung, Mehrfach-Takes, technischen Quality-Guard, validierte Take-Selektion, kreative Varianten pro Szene, leichte inhaltliche Auswahlheuristik, optionale Storyboard-/Keyframe-Vorsteuerung, produktive First-Frame-Keyframe-Konditionierung im bestehenden `ti2vid`-Pfad, eine minimale produktive Worker-/n8n-Bridge ueber FastAPI, einen polling-faehigen Async-Submit-Pfad, n8n-freundliche Polling-Hinweise und begrenzte Retries; Phase 5A erweitert den Planner jetzt um eine Director-/Brain-Schicht mit `director_output`, `style_lock`, staerkeren Szenenintents, verbessertem Prompt-Bau und ehrlichem lokalem LLM-Fallback; Phase 5B bindet diesen Director-Layer jetzt produktiv an ein echtes lokales Qwen3.6-35B-A3B-Serving ueber `llama.cpp` + GGUF an; Phase A des aktuellen Output-Quality-Fokus fuehrt einen kleinen Scene World Contract und PromptBuilder v2 fuer haertere Szene-/Variation-Prompts ein; Phase B1 macht Storyboard-/Keyframe-Prompts jetzt scene-specific und contract-aware; Phase B2 fuehrt einen leichten Keyframe Visual Risk Review fuer Storyboard-Kandidaten ein; Phase C fuehrt Take Visual Review, Review-Frame-Extraction und Postability Score mit optionalem Qwen3-VL Provider ein; Phase D fuehrt ein Final Quality Verdict fuer `final.mp4` ein; der Restore-/Startup-Pfad nach Repo-Update und Pod-Neustart ist jetzt erneut real geprueft, minimal gehaertet und um eine robuste lokale Director-Env-/Serve-Konfiguration erweitert
 
 - Kanonische Capability-Uebersicht: `/workspace/codex/CAPABILITY_MAP.md`
 
 ## Verifizierte Fakten
+- 2026-04-29 wurde ein echter Qwen3-VL-Bild-Smoke ausgefuehrt: lokales Testbild unter `/workspace/status/qwen3_vl_smoke/clean_test_image.jpg`, Ergebnis `provider=qwen3_vl`, `take_visual_review_status=passed`, `postability_score=1.0`, Laufzeit ca. `10.983s`.
+- 2026-04-29 wurde Phase D umgesetzt: `ResultSummary.metadata.final_quality_verdict` bewertet `final.mp4` technisch und kombiniert Assembly-, Take-, Keyframe-, Subtitle-/Overlay-, Voice-/Music- und Final-Frame-Quellen.
+- Final Quality Verdict schreibt `final_quality_status`, `final_postability_score`, `main_issues`, `warnings`, `problem_scenes`, `recommended_next_action`, `quality_policy_version` und `quality_sources`.
+- Failure-Resultate bekommen ebenfalls einen expliziten failed Verdict; erfolgreiche Assemblies spiegeln den Verdict auch in `metadata.assembly.final_quality_verdict` und in der Final-MP4-Artefakt-Metadata.
+- Kein Phase-E-/CLI-Cockpit, kein API-/GUI-, Init-/Startup-, Director-, llama.cpp-, Qwen3.6- oder Medienbackend-Umbau wurde fuer Phase D gemacht.
+- 2026-04-29 wurde Phase C umgesetzt: Video-Takes erhalten nach technischer Validation zusaetzlich `take_visual_review_status`, `postability_score`, Issues, Warnings, Problem-Frames, Provider, Policy-Version, Contract-Felder und Review-Frame-Metadata.
+- Review-Frames werden pro technisch validem Take per `ffmpeg`/`ffprobe` aus dem MP4 extrahiert und unter dem jeweiligen Take-Workspace in `review_frames/` abgelegt; fehlende Frame-Extraction erzeugt `needs_review`/Warnungen statt stillem Durchwinken.
+- Der heuristische Take-Review nutzt Scene World Contract, positive riskante Contract-/Prompt-Inhalte und vorhandenen Keyframe-`visual_risk_review`; Forbidden-/No-/Text-Risk-Policy-Worte zaehlen weiterhin nicht als positives Risiko.
+- Take-Auswahl priorisiert jetzt technisch valide Takes nach `passed` vor `needs_review` vor `rejected`, danach `postability_score`, technische Dauer-/Retry-Werte und kreative Heuristik.
+- Optionaler `qwen3_vl`-Provider ist lazy ueber `VISION_REVIEW_PROVIDER=qwen3_vl` vorbereitet und nutzt den lokalen Ordner `/workspace/models/Qwen3-VL-4B-Instruct-FP8`; Default bleibt `heuristic`, damit keine GPU-/VLM-Pflicht fuer normale Tests entsteht.
+- Phase D Final Quality Verdict ist umgesetzt; Phase E CLI Produktions-Cockpit wurde noch nicht gestartet.
+- 2026-04-29 wurde das Vision-Review-Modell Qwen3-VL-4B-Instruct-FP8 lokal vorbereitet; danach wurde Phase C als heuristischer Take Visual Review mit optionalem Qwen3-VL Provider umgesetzt.
+- Qwen3-VL-Modellstand:
+  - Repo: `Qwen/Qwen3-VL-4B-Instruct-FP8`
+  - lokaler Zielordner: `/workspace/models/Qwen3-VL-4B-Instruct-FP8`
+  - Ordnergroesse: ca. `5.7G`
+  - Shards laut `model.safetensors.index.json`: `model-00001-of-00002.safetensors` (`5366863440` Bytes) und `model-00002-of-00002.safetensors` (`654372016` Bytes)
+  - keine `.incomplete`-Dateien im Zielordner
+- Qwen3-VL-Load-Smoke:
+  - Root-`transformers` wurde fuer Qwen3-VL-Unterstuetzung auf `4.57.3` angehoben; `qwen-vl-utils==0.0.14` ist installiert
+  - `AutoConfig` erkennt `Qwen3VLConfig` / `model_type=qwen3_vl`
+  - `AutoProcessor` laedt `Qwen3VLProcessor`
+  - `AutoModelForImageTextToText` laedt das FP8-Modell als `Qwen3VLForConditionalGeneration` auf CPU
+- Es wurde kein `agent_core`-, Pipeline-, Init-/Startup-, Director-, llama.cpp- oder Backend-Code fuer Qwen3-VL gebaut.
+- 2026-04-29 wurde der Init-/Download-/Startup-Pfad separat bearbeitet; danach wurde Qwen3-VL als Modell vorbereitet und Phase C im `agent_core` umgesetzt. Init-/Startup-, Director- und Runtime-Pfade wurden fuer Phase C nicht geaendert.
+- Reale Init-Freeze-Ursache am 2026-04-29: ein `python3`-HF/Xet-Downloadprozess fuer `Tongyi-MAI/Z-Image-Turbo` hielt `/workspace/.cache/hf/hub/.locks/models--Tongyi-MAI--Z-Image-Turbo/...lock`; der zugehoerige `.incomplete`-Blob wuchs nicht mehr. Ein weiterer Init-Lauf wartete dahinter auf dieselbe Download-/Lock-Situation.
+- `init.sh` ist jetzt gegen diesen Fall gehaertet: Non-Interactive-Env, `flock` gegen parallele Init-Laeufe, Download-Guard mit Heartbeat, Gesamt-Timeout, Stall-Timeout, Retry, Resume und klaren Statuslogs.
+- Der schnelle Primaerpfad bleibt HuggingFace-basiert mit `hf_transfer`, wenn installiert; Xet ist im Init-Default deaktiviert, weil genau dieser Pfad im Pod haengen blieb.
+- Z-Image-Turbo wird nicht mehr nur wegen vorhandener Cache-Symlinks als fertig akzeptiert: sharded `*.index.json` werden gegen ihre referenzierten Shards geprueft. Im aktuellen Cache fehlt real noch `transformer/diffusion_pytorch_model-00002-of-00003.safetensors`; deshalb wurde `zimage_ready` als stale Diagnose-Flag entfernt.
+- `INIT_CHECK_ONLY=1 bash /workspace/init.sh` laeuft schnell und blockiert nicht. `INIT_SKIP_DOWNLOADS=1 bash /workspace/init.sh` laeuft ohne grosse Re-Downloads und markiert keine falschen Download-Ready-Flags.
+- FastAPI und Jupyter laufen weiter; Director-Port `8011` ist im aktuellen Snapshot down, weil das Director-GGUF unter `/workspace/models/director/...` real fehlt und wegen des Download-Skip-Smokes nicht nachgeladen wurde.
+- Folgeabschluss 2026-04-29: der Director ist jetzt wieder real gruen.
+  - GGUF wurde exakt nach `config/director_llm.env` nachgeladen: `/workspace/models/director/qwen3.6-35b-a3b/gguf/Qwen_Qwen3.6-35B-A3B-Q4_K_M.gguf`
+  - Dateigroesse: `21391448384` Bytes
+  - `scripts/ensure_llama_cpp.sh` reparierte nur die vorhandene Runtime; kein Rebuild
+  - `scripts/serve_director_llm.sh` startete den Daemon erfolgreich auf `127.0.0.1:8011`
+  - `/v1/models` meldet das erwartete GGUF-Modell
+  - `python3 /workspace/scripts/check_director_llm.py` meldet `chat_ok=true`
+  - `INIT_DIRECTOR_ONLY=1 bash /workspace/init.sh` prueft den echten Director-Zweig mit Downloads enabled und ohne falsches `init_done`
 - Git-Root ist `/workspace`.
 - `origin` zeigt auf `https://github.com/Leon102938/HyperLTX-2`.
 - Die vorhandene Laufumgebung ist bereits ein RunPod-faehiges Medien-Template mit FastAPI, Jupyter, Modellen, Jobs- und Statusordnern.
@@ -96,7 +135,7 @@ Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E, 3A, 3B, 4A, 4B und
   - Storyboard-Auswahl bevorzugt jetzt `passed` vor `needs_review` vor `rejected`, waehrend technische Fehler weiter hart scheitern
   - `visual_risk_review` wird in Kandidaten-Metadaten und Storyboard-Reports persistiert
   - Dry-Run-Artefakte ohne GPU/Video-Render liegen unter `/workspace/agent_runs/phase-b2-dry-morning-reset` und `/workspace/agent_runs/phase-b2-dry-focus-break`
-  - keine finale Bildqualitaet garantiert; naechster Schritt ist Phase C Take Visual Review / Postability Score
+  - keine finale Bildqualitaet garantiert; Phase C Take Visual Review / Postability Score und Phase D Final Quality Verdict sind danach umgesetzt worden, naechster Schritt ist Phase E CLI Produktions-Cockpit
 - Verifiziert implementierte Phase 5B:
   - `llama.cpp` wurde im Pod real mit CUDA gebaut; produktives Binary: `/workspace/tools/llama.cpp/build/bin/llama-server`
   - im aktuellen Pod-Snapshot liegen unter `/workspace/tools/llama.cpp/build/bin` reale ELF-Artefakte fuer `llama-server`, `llama-cli`, `libggml-base.so.0.9.11`, `libggml-cpu.so.0.9.11`, `libggml-cuda.so.0.9.11`, `libggml.so.0.9.11`, `libllama-common.so.0.0.1`, `libllama.so.0.0.1` und `libmtmd.so.0.0.1`

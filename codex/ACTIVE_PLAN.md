@@ -23,12 +23,20 @@ Eine kleine Director-/Brain-Schicht vor dem bestehenden Planner bauen, die Jobs 
 Den bereits vorbereiteten Director-Layer produktiv an ein echtes lokales Director-Modell anbinden, bevorzugt Qwen3.6-35B-A3B in praktikabler quantisierter Form als GGUF `Q4_K_M`, ohne Fake-Integration, ohne neuen Mega-Stack und mit sauberem Fallback auf den bisherigen regelbasierten Flow.
 
 ## Aktueller Operativer Fokus
+- Qwen3-VL-Modellsetup ist abgeschlossen: `Qwen/Qwen3-VL-4B-Instruct-FP8` liegt unter `/workspace/models/Qwen3-VL-4B-Instruct-FP8`, Dateien und CPU-Load-Smoke sind verifiziert.
+- Qwen3-VL echter Bild-Smoke ist jetzt ebenfalls verifiziert: kleines lokales Testbild, `provider=qwen3_vl`, `take_visual_review_status=passed`, `postability_score=1.0`.
+- Phase C ist jetzt umgesetzt: Take Visual Review / Postability Score laeuft nach technischer Take-Validation, extrahiert Review-Frames, bewertet heuristisch gegen Scene World Contract und priorisiert Take-Auswahl visuell.
+- Optionaler Qwen3-VL Provider ist lazy vorbereitet; Default bleibt `heuristic`, kein Init-/Startup-Hook und keine VLM-Pflicht fuer normale Tests.
+- Phase D ist jetzt umgesetzt: Final Quality Verdict landet in `ResultSummary.metadata.final_quality_verdict` und kombiniert technische Final-MP4-Validation, Assembly-, Take-, Keyframe-, Subtitle-/Overlay-, Voice-/Music- und Final-Frame-Quellen.
+- Einschub 2026-04-29: Init-/Download-/Startup-Pfad wurde gezielt gehaertet, weil der Pod real im Z-Image-Turbo-Download hing. Dieser Einschub hat keinen Phase-C-Bau gestartet und keine Pipeline-/agent_core-/Runtime-Architektur geaendert.
+- Der naechste Feature-Schritt ist nach Phase D jetzt Phase E; aktueller technischer Stand aus dem Init-Einschub bleibt: Init blockiert nicht mehr still, parallele Init-Laeufe werden verhindert, unvollstaendige HF-Snapshots werden nicht mehr als fertig akzeptiert.
+- Folgeabschluss 2026-04-29: Director-Download-/Startup-Pfad ist jetzt real gruen. Das konfigurierte Qwen3.6-35B-A3B-GGUF liegt lokal, `llama-server` laeuft auf `127.0.0.1:8011`, `/v1/models` und `scripts/check_director_llm.py` sind gruen. Kein Phase-C- oder Qwen3-VL-Start.
 - Aktueller Output-Quality-Fokus Phase A ist umgesetzt: Scene World Contract + PromptBuilder v2 haerten Szene- und Variation-Prompts gegen Text-/Screen-/Papier-Artefakte, ohne Runtime-/Backend-Aenderung.
 - Phase B1 ist umgesetzt: Storyboard-/Keyframe-Kandidaten erhalten jetzt scene-specific, contract-aware `effective_prompt`-Metadaten; Z-Image nutzt diese bevorzugt statt nur globaler Plan-Prompts.
 - Phase B2 ist umgesetzt: Storyboard-Keyframe-Kandidaten erhalten jetzt einen leichten `visual_risk_review` mit Status `passed`, `needs_review` oder `rejected`; Auswahl bevorzugt `passed` vor `needs_review` vor `rejected`.
 - Phase B1/B2 sind per Unit-Tests und Dry-Run-Artefaktplaenen verifiziert; noch kein neuer langer GPU-Render und keine finale visuelle Qualitaetsbehauptung.
-- Naechster Output-Quality-Schritt: Phase C Take Visual Review / Postability Score.
-- Spaetere geplante Schritte: Phase D Final Quality Verdict, Phase E CLI Produktions-Cockpit.
+- Naechster Output-Quality-/Produktionsschritt: Phase E CLI Produktions-Cockpit.
+- Danach: echte Video-Qualitaetstests und Qualitaetsfeinschliff.
 - Restore-/Startup-/Environment-Check fuer den lokalen Director-Pfad ist jetzt auch ueber einen frischen `bash /workspace/init.sh`-Lauf real verifiziert; `init.sh` brachte `llama-server` dabei ohne manuellen Director-Start selbst hoch.
 - Der vorhandene `llama.cpp`-Runtime-/Build-Stand unter `/workspace/tools/llama.cpp/build/bin` ist jetzt nicht nur ohne Rebuild verifiziert, sondern wird im aktuellen Workspace vor einem Rebuild zuerst ueber Execute-Bits und Linux-Symlink-Aliase repariert.
 - Naechster sinnvolle Ausbaupunkt bleibt unveraendert: weitere echte Multi-Scene-/Storyboard-Validierung des bestehenden Qwen-Director-Pfads, kein neuer Feature-Sprung.

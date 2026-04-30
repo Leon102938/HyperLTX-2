@@ -1,5 +1,121 @@
 # CHANGELOG.md
 
+## 2026-04-29 Phase D Final Quality Verdict
+- Qwen3-VL echter Bild-Smoke vor Phase D erfolgreich:
+  - Testbild: `/workspace/status/qwen3_vl_smoke/clean_test_image.jpg`
+  - Ergebnis: `provider=qwen3_vl`, `take_visual_review_status=passed`, `postability_score=1.0`
+  - Laufzeit des zweiten sauberen Smokes: ca. `10.983s`
+  - Ergebnis-JSON: `/workspace/status/qwen3_vl_smoke/qwen3_vl_smoke_result.json`
+- Phase D umgesetzt, ohne Phase E, API-, GUI-, Init-/Startup-, Runtime-, Director-/Qwen3.6- oder Medienbackend-Umbau.
+- `agent_core/utils.py` fuehrt jetzt `evaluate_final_quality_verdict()` ein.
+- Final Quality Verdict kombiniert:
+  - technische `final.mp4`-Validation
+  - Assembly-Metadata
+  - `selected_scene_outputs`
+  - Phase-C-`take_visual_review`
+  - Phase-B2-Keyframe-`visual_risk_review`, falls vorhanden
+  - Subtitle-/Overlay-Metadata
+  - Voice-/Music-Metadata
+  - wenige extrahierte Final-Frames, optional mit Qwen3-VL, sonst heuristisch/metadata-basiert
+- `ResultAssembler` schreibt `metadata.final_quality_verdict` und spiegelt den Verdict in `metadata.assembly.final_quality_verdict` sowie in die Final-MP4-Artefakt-Metadata.
+- Failure-Resultate erhalten ebenfalls einen expliziten `final_quality_verdict` mit `final_quality_status=failed`.
+- Neue Verdict-Felder:
+  - `final_quality_status`
+  - `final_postability_score`
+  - `main_issues`
+  - `warnings`
+  - `problem_scenes`
+  - `recommended_next_action`
+  - `quality_policy_version`
+  - `quality_sources`
+- Neuer Test: `tests/test_final_quality_verdict.py` fuer passed/needs_review/failed/Metadata und GPU-freie Provider-/Frame-Review-Abdeckung.
+- Kein vorhandener kleiner `agent_runs/**/final.mp4` lag fuer einen zusaetzlichen Light-Smoke vor; es wurde bewusst kein neuer GPU-Render gestartet.
+
+## 2026-04-29 Phase C Take Visual Review / Postability Score
+- Phase C umgesetzt, ohne Init-/Startup-, Runtime-, Director-, Backend-, API-, GUI- oder Phase-D/E-Umbau.
+- `agent_core/utils.py` fuehrt jetzt `extract_review_frames()` ein:
+  - nutzt `ffprobe` fuer Duration
+  - extrahiert per `ffmpeg` 1 bis 5 Review-JPGs pro technisch validem MP4-Take
+  - speichert pro Frame `timestamp_sec`, `path`, `exists` und `file_size_bytes`
+  - fehlt `ffmpeg`/`ffprobe` oder ist das Video defekt, wird gewarnt statt der Core hart gecrasht
+- `evaluate_take_visual_review()` bewertet pro Take:
+  - technische Video-Validation
+  - Scene World Contract
+  - positive riskante Inhalte in Subject/Action/Allowed Props
+  - positive Prompt-Risiken ausserhalb von Forbidden-/No-/Text-Risk-Policy-Clauses
+  - optional vorhandenen `visual_risk_review` des selektierten Keyframes
+  - Review-Frame-Extraktion
+- Neue Take-Metadata:
+  - `take_visual_review`
+  - `take_visual_review_status`
+  - `postability_score`
+  - `visual_review_provider`
+  - `review_frames`
+  - `scene_contract_summary`
+- Take-Auswahl priorisiert jetzt technisch valide Takes nach `passed` vor `needs_review` vor `rejected`, danach nach hohem `postability_score`, technischem Score und kreativer Heuristik.
+- Optionaler Provider `VISION_REVIEW_PROVIDER=qwen3_vl` ist lazy eingebaut und nutzt den lokalen Modellordner `/workspace/models/Qwen3-VL-4B-Instruct-FP8`; Default bleibt heuristisch, damit Unit Tests und normale Runs ohne GPU-/VLM-Zwang laufen.
+- Qwen3-VL-Inferenz wurde nicht als Pflicht-Smoke gefahren; bei fehlenden Frames, fehlendem Modell, Dependency- oder Inferenzfehlern bleibt das Ergebnis ehrlich `needs_review` bzw. bereits technische `rejected`-Bewertungen werden nicht weichgespült.
+- Neue Tests: `tests/test_take_visual_review.py` fuer Frame Extraction, Heuristik, False-Positive-Schutz, Auswahlprioritaet und Persistenz der Metadata.
+- Verifikation:
+  - `python3 -m unittest tests/test_output_quality_utils.py`
+  - `python3 -m unittest tests/test_storyboard_pipeline.py`
+  - `python3 -m unittest tests/test_scene_planner.py`
+  - `python3 -m unittest tests/test_planner_rules.py`
+  - `python3 -m unittest tests/test_assembler_mux.py`
+  - `python3 -m unittest tests/test_take_visual_review.py`
+
+## 2026-04-29 Qwen3-VL Model Setup Verify
+- Nur Qwen3-VL-Modell-Setup und Verify umgesetzt; keine Phase C, kein VisionReviewAdapter, kein agent_core-, Pipeline-, Init-/Startup- oder Director-Umbau.
+- Gewaehltes Vision-Review-Modell fuer spaetere Phase C/D lokal abgelegt:
+  - Repo: `Qwen/Qwen3-VL-4B-Instruct-FP8`
+  - Zielordner: `/workspace/models/Qwen3-VL-4B-Instruct-FP8`
+- Download lief per `huggingface_hub.snapshot_download` direkt in den Zielordner, mit `HF_HUB_ENABLE_HF_TRANSFER=1`, `HF_HUB_DISABLE_XET=1`, Non-Interactive-Env und Resume/Skip-Verhalten.
+- Dateiverifikation gruen:
+  - `config.json`
+  - `tokenizer.json`
+  - `tokenizer_config.json`
+  - `preprocessor_config.json`
+  - `video_preprocessor_config.json`
+  - `model.safetensors.index.json`
+  - `model-00001-of-00002.safetensors`
+  - `model-00002-of-00002.safetensors`
+  - keine `.incomplete`-Dateien im Zielordner
+- Modellordnergroesse: ca. `5.7G`; Shard-Groessen: `5366863440` und `654372016` Bytes.
+- Root-Dependencies minimal fuer Load-Smoke angepasst: `transformers==4.57.3`, `tokenizers==0.22.2`, `qwen-vl-utils==0.0.14`.
+- Load-Smoke gruen:
+  - `AutoConfig.from_pretrained(...)` erkennt `Qwen3VLConfig`, `model_type=qwen3_vl`
+  - `AutoProcessor.from_pretrained(...)` laedt `Qwen3VLProcessor`
+  - `AutoModelForImageTextToText.from_pretrained(..., device_map="cpu")` laedt `Qwen3VLForConditionalGeneration`
+- Keine Vision-Review-Logik gebaut; naechster Schritt bleibt Phase C Take Visual Review / Postability Score mit optionalem Qwen3-VL Provider.
+
+## 2026-04-29 Init Download Freeze Hardening
+- Nur Init-/Download-/Startup-Pfad bearbeitet; kein Phase-C-Bau, kein Qwen3-VL, kein Adapter- oder agent_core-Refactor.
+- Reale Freeze-Ursache im laufenden Pod gefunden: ein alter `init.sh`-Prozess hing in `huggingface_hub`/Xet beim Z-Image-Turbo-Snapshot, hielt eine HF-Lockdatei auf einem `.incomplete`-Blob und schrieb seit Minuten keine Bytes mehr; ein zweiter Init-Lauf wartete dahinter und sah wie ein weiterer Freeze aus.
+- `init.sh` setzt jetzt Non-Interactive-Guards fuer Git/HF/Pip (`GIT_TERMINAL_PROMPT=0`, `GCM_INTERACTIVE=never`, `HF_HUB_DISABLE_TELEMETRY=1`, `PYTHONUNBUFFERED=1`, `PIP_NO_INPUT=1`).
+- `init.sh` nutzt jetzt ein `flock`-basiertes Init-Lock, damit parallele Init-/Download-Laeufe nicht mehr dieselben HF-Locks blockieren.
+- HF-Downloads laufen jetzt ueber einen Guard mit Start-/Ende-/Fehler-Logging, Fortschritts-Heartbeat, Gesamt-Timeout, Stall-Timeout, Retry und Resume ueber `huggingface_hub`.
+- Primaerpfad bleibt schnell: `hf_transfer` wird genutzt, wenn installiert; Xet ist standardmaessig deaktiviert, weil genau der Xet-Pfad im Pod eingefroren war.
+- Lokale Snapshot-Skip-Pruefung ist jetzt gegen sharded `*.index.json` gehaertet; fehlende Shards wie `diffusion_pytorch_model-00002-of-00003.safetensors` zaehlen nicht mehr als fertig.
+- `INIT_CHECK_ONLY=1` prueft Konfiguration/Pfade ohne Downloads oder Service-Starts; `INIT_SKIP_DOWNLOADS=1` markiert keine falschen `zimage_ready`-/`init_done`-Flags.
+- Director-Modell-Download und Director-Autostart sind im Init-Pfad jetzt ebenfalls durch Guard bzw. Timeout begrenzt; der bestehende `serve_director_llm.sh`-Execute-Bit-Fix bleibt erhalten.
+- `scripts/ensure_llama_cpp.sh` bekam nur Non-Interactive-Git/Pip-Env-Guards; keine llama.cpp-Runtime- oder Build-Logik wurde umgebaut.
+
+## 2026-04-29 Director Init Completion
+- Vorheriger Abschluss war unvollstaendig, weil der Director nach dem Skip-Smoke down war und das konfigurierte GGUF-Modell lokal fehlte.
+- Erwarteter Director-Pfad aus `config/director_llm.env` bestaetigt:
+  - Repo: `bartowski/Qwen_Qwen3.6-35B-A3B-GGUF`
+  - Datei: `Qwen_Qwen3.6-35B-A3B-Q4_K_M.gguf`
+  - Ziel: `/workspace/models/director/qwen3.6-35b-a3b/gguf/Qwen_Qwen3.6-35B-A3B-Q4_K_M.gguf`
+- GGUF ueber den vorgesehenen `scripts/download_director_model.py`-Pfad mit `HF_HUB_DISABLE_XET=1`, `HF_HUB_ENABLE_HF_TRANSFER=1`, Non-Interactive-Env und Timeout nachgeladen.
+- Finale Datei liegt real am erwarteten Pfad mit `21391448384` Bytes.
+- `scripts/ensure_llama_cpp.sh` fuehrte keinen Rebuild aus; vorhandene Runtime wurde nur repariert und `ldd` loest danach alle lokalen Libraries.
+- Director wurde ueber den vorgesehenen `scripts/serve_director_llm.sh`-Pfad als Daemon gestartet.
+- Verifikation danach gruen:
+  - `curl http://127.0.0.1:8011/v1/models`
+  - `python3 /workspace/scripts/check_director_llm.py`
+  - laufender `llama-server` mit dem erwarteten GGUF
+- `init.sh` hat zusaetzlich einen kleinen `INIT_DIRECTOR_ONLY=1`-Pfad fuer echte Director-Download-/Startup-Verifikation ohne `INIT_SKIP_DOWNLOADS`/`INIT_CHECK_ONLY`; normaler Init bleibt unveraendert.
+
 ## 2026-04-28 Phase B2 Keyframe Visual Risk Review
 - Phase B2 umgesetzt, ohne Runtime-, Backend-, API-, GUI-, init/start- oder llama.cpp-Umbau.
 - `agent_core/utils.py` fuehrt `evaluate_keyframe_visual_risk()` als leichten Contract-/Prompt-/Technik-Review fuer Storyboard-Keyframe-Kandidaten ein.

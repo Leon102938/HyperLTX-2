@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+export GIT_TERMINAL_PROMPT="${GIT_TERMINAL_PROMPT:-0}"
+export GCM_INTERACTIVE="${GCM_INTERACTIVE:-never}"
+export PIP_NO_INPUT="${PIP_NO_INPUT:-1}"
+export PIP_DEFAULT_TIMEOUT="${PIP_DEFAULT_TIMEOUT:-120}"
+
 ROOT_DIR="${ROOT_DIR:-/workspace}"
 LLAMA_CPP_DIR="${LLAMA_CPP_DIR:-$ROOT_DIR/tools/llama.cpp}"
 LLAMA_SERVER_BIN="${LLAMA_SERVER_BIN:-$LLAMA_CPP_DIR/build/bin/llama-server}"

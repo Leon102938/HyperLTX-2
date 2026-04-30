@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import traceback
 from pathlib import Path
 from typing import Any
@@ -28,6 +29,8 @@ from agent_core.state_store import StateStore
 from agent_core.utils import (
     build_job_id,
     evaluate_keyframe_visual_risk,
+    evaluate_take_visual_review,
+    extract_review_frames,
     mirror_media_file,
     read_json,
     stable_seed,
@@ -490,6 +493,36 @@ class VideoAgent:
                 validation = self._validate_take_output(plan, scene, take, mirrored_output_path or take_result.output_path)
                 attempt_number = int(take.render_params.get("retry_index", 0) or 0) + 1
                 review_status = self._resolve_review_status(take_result, validation)
+                review_frame_payload = {"frames": [], "warnings": [], "issues": [], "frame_count": 0}
+                if take_result.success and validation and validation.passed and (mirrored_output_path or take_result.output_path):
+                    review_frame_payload = extract_review_frames(
+                        mirrored_output_path or take_result.output_path,
+                        take_workspace / "review_frames",
+                        count=int(plan.metadata.get("vision_review_max_frames") or os.environ.get("VISION_REVIEW_MAX_FRAMES", 5) or 5),
+                    )
+                selected_keyframe_visual_risk = (
+                    scene.selected_keyframe.metadata.get("visual_risk_review")
+                    if scene.selected_keyframe and scene.selected_keyframe.metadata
+                    else None
+                )
+                scene_world_contract = (
+                    take.prompt_build_metadata.get("scene_world_contract")
+                    or scene.prompt_build_metadata.get("scene_world_contract")
+                    or {}
+                )
+                take_visual_review = evaluate_take_visual_review(
+                    validation=validation,
+                    scene_world_contract=scene_world_contract,
+                    review_frames=review_frame_payload.get("frames", []),
+                    frame_warnings=review_frame_payload.get("warnings", []),
+                    scene_id=scene.scene_id,
+                    take_id=take.take_id,
+                    prompt_text=take.prompt_text,
+                    prompt_variant_text=take.prompt_variant_text,
+                    selected_keyframe_visual_risk=selected_keyframe_visual_risk,
+                    provider=plan.metadata.get("vision_review_provider"),
+                    model_dir=plan.metadata.get("vision_review_model_dir"),
+                )
                 take_record = TakeResultRecord(
                     take_id=take.take_id,
                     scene_id=scene.scene_id,
@@ -528,6 +561,13 @@ class VideoAgent:
                         "selected_keyframe_usage": selected_keyframe_usage,
                         "backend_metadata": take_result.metadata,
                         "quality_guard": validation.model_dump(mode="json") if validation else None,
+                        "review_frame_extraction": review_frame_payload,
+                        "take_visual_review": take_visual_review,
+                        "take_visual_review_status": take_visual_review.get("take_visual_review_status"),
+                        "postability_score": take_visual_review.get("postability_score"),
+                        "visual_review_provider": take_visual_review.get("provider"),
+                        "review_frames": take_visual_review.get("review_frames", []),
+                        "scene_contract_summary": take_visual_review.get("scene_contract_summary"),
                     },
                     error=take_result.error,
                 )
@@ -654,7 +694,13 @@ class VideoAgent:
                 "valid_take_count": sum(1 for record in take_records if record.validation and record.validation.passed),
                 "rejected_take_count": sum(1 for record in take_records if record.review_status == "rejected"),
                 "failed_take_count": sum(1 for record in take_records if record.review_status == "failed"),
+                "visual_review_status_counts": self._take_visual_review_counts(take_records),
+                "take_visual_review_status": selected_take.metadata.get("take_visual_review_status"),
+                "postability_score": selected_take.metadata.get("postability_score"),
+                "visual_review_provider": selected_take.metadata.get("visual_review_provider"),
                 "technical_selection_status": selection_details.get("technical_selection_status"),
+                "visual_selection_status": selection_details.get("visual_selection_status"),
+                "visual_selection_rank": selection_details.get("visual_selection_rank"),
                 "creative_selection_status": selection_details.get("creative_selection_status"),
                 "technical_score": selection_details.get("technical_score"),
                 "creative_score": selection_details.get("creative_score"),
@@ -685,6 +731,12 @@ class VideoAgent:
                     "fallback_reason": selected_take.fallback_reason,
                     "selected_keyframe_usage": selected_take.metadata.get("selected_keyframe_usage"),
                     "review_status": selected_take.review_status,
+                    "take_visual_review": selected_take.metadata.get("take_visual_review"),
+                    "take_visual_review_status": selected_take.metadata.get("take_visual_review_status"),
+                    "postability_score": selected_take.metadata.get("postability_score"),
+                    "visual_review_provider": selected_take.metadata.get("visual_review_provider"),
+                    "review_frames": selected_take.metadata.get("review_frames", []),
+                    "visual_selection_rank": selection_details.get("visual_selection_rank"),
                     "technical_score": selection_details.get("technical_score"),
                     "creative_score": selection_details.get("creative_score"),
                     "selected_by_rule": selection_details.get("selected_by_rule"),
@@ -1096,6 +1148,14 @@ class VideoAgent:
             counts[status if status in counts else "unknown"] += 1
         return counts
 
+    @staticmethod
+    def _take_visual_review_counts(take_records: list[TakeResultRecord]) -> dict[str, int]:
+        counts = {"passed": 0, "needs_review": 0, "rejected": 0, "unknown": 0}
+        for record in take_records:
+            status = str(record.metadata.get("take_visual_review_status") or "unknown")
+            counts[status if status in counts else "unknown"] += 1
+        return counts
+
     def _select_take_record(
         self,
         scene: ScenePlan,
@@ -1118,7 +1178,8 @@ class VideoAgent:
             "creative_selection_status": "pending",
             "candidate_take_ids": [record.take_id for record in valid_candidates],
             "candidate_variation_ids": sorted({record.variation_id for record in valid_candidates if record.variation_id}),
-            "selection_reason": "prefer technically valid takes with the smallest duration delta and low retry cost",
+            "visual_review_counts": self._take_visual_review_counts(take_records),
+            "selection_reason": "prefer technically valid visually passed takes, then duration and creative fit",
         }
         if not valid_candidates:
             selection_details["technical_selection_status"] = "no_valid_candidates"
@@ -1126,14 +1187,14 @@ class VideoAgent:
             selection_details["selection_reason"] = "no technically valid takes available"
             return None, selection_details
 
-        def score(record: TakeResultRecord) -> tuple[float, int]:
+        def score(record: TakeResultRecord) -> tuple[float, float, int]:
             duration_delta = (
                 abs(record.validation.duration_delta_sec)
                 if record.validation and record.validation.duration_delta_sec is not None
                 else float("inf")
             )
             retry_penalty = 1 if record.is_retry else 0
-            return (duration_delta, retry_penalty)
+            return (-self._take_postability_score(record), duration_delta, retry_penalty)
 
         scene_position = self._scene_position_label(scene.index, total_scene_count)
         scored_candidates: list[dict[str, Any]] = []
@@ -1148,6 +1209,8 @@ class VideoAgent:
             record.metadata["selection_scores"] = {
                 "technical_score": technical_score,
                 "creative_score": creative["creative_score"],
+                "postability_score": self._take_postability_score(record),
+                "visual_selection_rank": self._take_visual_rank(record),
                 "selected_by_rule": creative["selected_by_rule"],
                 "rule_hits": creative["rule_hits"],
                 "scene_position": scene_position,
@@ -1159,19 +1222,31 @@ class VideoAgent:
                     "shot_type": record.shot_type,
                     "technical_score": technical_score,
                     "creative_score": creative["creative_score"],
+                    "take_visual_review_status": self._take_visual_status(record),
+                    "postability_score": self._take_postability_score(record),
+                    "visual_selection_rank": self._take_visual_rank(record),
                     "selected_by_rule": creative["selected_by_rule"],
                     "rule_hits": creative["rule_hits"],
                 }
             )
 
-        best_score = min(score(record) for record in valid_candidates)
-        best_candidates = [record for record in valid_candidates if score(record) == best_score]
+        best_visual_rank = min(self._take_visual_rank(record) for record in valid_candidates)
+        visual_best_candidates = [record for record in valid_candidates if self._take_visual_rank(record) == best_visual_rank]
+        selection_details["visual_selection_status"] = self._take_visual_status(visual_best_candidates[0])
+        selection_details["visual_selection_rank"] = best_visual_rank
+        selection_details["visual_candidates"] = [
+            candidate for candidate in scored_candidates if candidate["visual_selection_rank"] == best_visual_rank
+        ]
+
+        best_score = min(score(record) for record in visual_best_candidates)
+        best_candidates = [record for record in visual_best_candidates if score(record) == best_score]
         selection_details["technical_selection_status"] = (
             "single_best_technical_candidate" if len(best_candidates) == 1 else "technical_tie_creative_evaluation"
         )
         selection_details["best_score"] = {
-            "duration_delta_sec": best_score[0],
-            "retry_penalty": best_score[1],
+            "postability_score": -best_score[0],
+            "duration_delta_sec": best_score[1],
+            "retry_penalty": best_score[2],
         }
         best_candidate_ids = {record.take_id for record in best_candidates}
         technical_pool = [candidate for candidate in scored_candidates if candidate["take_id"] in best_candidate_ids]
@@ -1196,19 +1271,40 @@ class VideoAgent:
         selection_details["rule_hits"] = (selected_take.metadata.get("selection_scores") or {}).get("rule_hits", [])
         selection_details["selected_take_id"] = selected_take.take_id
         selection_details["selected_variation_id"] = selected_take.variation_id
-        if len(best_candidates) > 1 and len(creative_best_candidates) == 1:
+        if best_visual_rank == 2 and any(self._take_visual_rank(record) < 2 for record in valid_candidates):
+            selection_details["selection_reason"] = "visual review rejected candidates were not selected when safer takes existed"
+        elif best_visual_rank == 2:
+            selection_details["fallback_used"] = True
+            selection_details["selection_reason"] = "only technically valid candidates were visually rejected; selected last-resort fallback"
+        elif len(best_candidates) > 1 and len(creative_best_candidates) == 1:
             selection_details["selection_reason"] = (
-                "multiple technically equal valid takes were resolved by rule-based creative selection"
+                "multiple visually acceptable and technically equal takes were resolved by rule-based creative selection"
             )
         elif len(creative_best_candidates) > 1:
             selection_details["fallback_used"] = True
             selection_details["selected_by_rule"] = "first_successful_take"
             selection_details["selection_reason"] = (
-                "creative and technical scores tied; fell back to first successful valid take"
+                "visual, creative and technical scores tied; fell back to first successful valid take"
             )
         else:
-            selection_details["selection_reason"] = "best technically valid take also satisfied creative preference rules"
+            selection_details["selection_reason"] = "best visually acceptable take also satisfied technical and creative preference rules"
         return selected_take, selection_details
+
+    @staticmethod
+    def _take_visual_status(record: TakeResultRecord) -> str:
+        status = str(record.metadata.get("take_visual_review_status") or "needs_review")
+        return status if status in {"passed", "needs_review", "rejected"} else "needs_review"
+
+    @staticmethod
+    def _take_visual_rank(record: TakeResultRecord) -> int:
+        return {"passed": 0, "needs_review": 1, "rejected": 2}.get(VideoAgent._take_visual_status(record), 1)
+
+    @staticmethod
+    def _take_postability_score(record: TakeResultRecord) -> float:
+        try:
+            return float(record.metadata.get("postability_score", 0.5))
+        except (TypeError, ValueError):
+            return 0.5
 
     @staticmethod
     def _scene_position_label(scene_index: int, total_scene_count: int) -> str:

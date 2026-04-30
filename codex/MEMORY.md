@@ -1,6 +1,31 @@
 # MEMORY.md
 
 ## Dauerhafte Erkenntnisse
+- Phase D ist umgesetzt: `ResultSummary.metadata.final_quality_verdict` ist der kanonische Abschlussvertrag fuer finale Output-Qualitaet.
+- Final Quality Verdict kombiniert technische `final.mp4`-Validation, Assembly-Metadata, selected scene outputs, Phase-C-`take_visual_review`, Phase-B2-Keyframe-Risiken, Subtitle-/Overlay-Metadata, Voice-/Music-Metadata und wenige Final-Frames.
+- Wenn kein echter VLM-Check fuer Final-Frames laeuft, bleibt der Verdict bewusst eher `needs_review` als dass visuelle Qualitaet schoengeredet wird.
+- Qwen3-VL echter Bild-Smoke am 2026-04-29 war gruen: `provider=qwen3_vl`, `take_visual_review_status=passed`, `postability_score=1.0`, Ergebnis unter `/workspace/status/qwen3_vl_smoke/qwen3_vl_smoke_result.json`, Laufzeit ca. `10.983s`.
+- Phase D hat keine Runtime-/Init-/Startup-/Director-/llama.cpp-/Qwen3.6- oder Medienbackend-Aenderungen gemacht.
+- Naechster Projekt-Schritt ist Phase E CLI Produktions-Cockpit; danach echte Video-Qualitaetstests und Feinschliff.
+- Phase C ist umgesetzt: Nach technischer Video-Take-Validation erzeugt der Core jetzt pro Take `take_visual_review_status`, `postability_score`, Issues, Warnings, Problem-Frames, Provider, Policy-Version, Contract-Feldliste und Review-Frame-Metadata.
+- Review-Frames werden nur aus MP4-Frames extrahiert, nicht als komplettes Video an ein VLM gegeben; `extract_review_frames()` nutzt `ffprobe`/`ffmpeg` und speichert Frames im jeweiligen Take-Workspace unter `review_frames/`.
+- Die Take-Review-Heuristik uebernimmt die wichtige Phase-B2-False-Positive-Regel: Forbidden-/No-/Text-Risk-Policy-Worte sind keine positiven Risiken; riskant sind positive Inhalte in Subject/Action/Allowed Props oder aktive Prompt-Anforderungen.
+- Take-Selektion priorisiert jetzt technisch valide Takes nach `passed` vor `needs_review` vor `rejected`, danach nach `postability_score`, technischem Score und kreativer Heuristik. Technisch invalide Takes bleiben von der normalen Auswahl ausgeschlossen.
+- Optionaler Qwen3-VL Provider ist lazy vorbereitet ueber `VISION_REVIEW_PROVIDER=qwen3_vl`, `VISION_REVIEW_MODEL_DIR=/workspace/models/Qwen3-VL-4B-Instruct-FP8`, `VISION_REVIEW_DEVICE` und `VISION_REVIEW_MAX_FRAMES`; Default bleibt heuristisch.
+- Qwen3-VL-Inferenz ist kein Pflichtpfad fuer Phase-C-Tests. Bei Provider-/Dependency-/Inferenzproblemen muss der Review ehrlich `needs_review` melden und darf technische Rejections nicht weichzeichnen.
+- Phase D Final Quality Verdict ist umgesetzt; Phase E CLI Produktions-Cockpit bleibt spaeter.
+- Qwen3-VL-Modellentscheidung fuer spaetere Vision-Review-Phasen: `Qwen/Qwen3-VL-4B-Instruct-FP8`, lokal unter `/workspace/models/Qwen3-VL-4B-Instruct-FP8`.
+- Qwen3-VL wurde zuerst nur als Modell-/Provider-Basis geladen; der spaetere Phase-C-Code nutzt es optional, aber der Standardpfad bleibt heuristisch.
+- Verifizierter Qwen3-VL-Dateistand: ca. `5.7G`, `config.json`, Tokenizer-/Processor-Dateien, `model.safetensors.index.json`, zwei Safetensors-Shards, keine `.incomplete`-Dateien.
+- Verifizierter Qwen3-VL-Load-Smoke im Root-Python: `transformers==4.57.3` plus `qwen-vl-utils==0.0.14`; `AutoConfig`, `AutoProcessor` und `AutoModelForImageTextToText` laden das lokale FP8-Modell grundsaetzlich.
+- 2026-04-29 Init-/Download-Freeze: der reale Hänger lag im Z-Image-Turbo-HF-Snapshot; ein alter `python3`-Downloadprozess hielt eine HF-Lockdatei auf einem `.incomplete`-Blob, waehrend die Datei nicht weiter wuchs. Parallele Init-Laeufe warten dann hinter derselben Lockdatei und wirken wie ein weiterer Freeze.
+- `init.sh` muss parallele Downloader verhindern. Der aktuelle Pfad nutzt deshalb ein `flock`-Lock unter `/workspace/status/init.lock` und beendet einen zweiten Init-Lauf sofort mit Logmeldung statt still auf HF-Locks zu warten.
+- HF-Downloads im Init-Pfad muessen sichtbare Heartbeats, Gesamt-Timeout, Stall-Timeout und Retries haben. Ein reiner langer `timeout 3600` reicht nicht, weil ein Netzwerk-/Xet-Stall sonst lange wie ein eingefrorener Init wirkt.
+- Fuer den aktuellen Pod ist der stabile schnelle Primaerpfad: `huggingface_hub` mit `hf_transfer`, falls installiert, aber `HF_HUB_DISABLE_XET=1` als Default. Der Xet-Pfad war der konkret eingefrorene Pfad.
+- HuggingFace `local_files_only=True` allein ist kein ausreichender Vollstaendigkeitsbeweis fuer sharded Modelle. Der Init-Skip-Check validiert jetzt zusaetzlich `*.index.json` gegen alle referenzierten Shards.
+- Diagnose-Modi duerfen keine falschen Ready-Flags setzen: `INIT_CHECK_ONLY=1` verlaesst den Init frueh, `INIT_SKIP_DOWNLOADS=1` markiert kein `zimage_ready` und kein `init_done`.
+- Director-Folgeabschluss 2026-04-29: Wenn der Director-Port nach einem Skip-Smoke down ist, reicht das nicht als Init-Fix-Beleg. Der echte Abschluss braucht das konfigurierte GGUF unter `/workspace/models/director/qwen3.6-35b-a3b/gguf/Qwen_Qwen3.6-35B-A3B-Q4_K_M.gguf`, `serve_director_llm.sh` als Startpfad, gruenes `/v1/models` und gruenes `scripts/check_director_llm.py`.
+- `INIT_DIRECTOR_ONLY=1 bash /workspace/init.sh` ist der kleine echte Director-Verifikationspfad mit Downloads enabled, wenn ein kompletter Init wegen Z-Image/LTX/Gemma zu gross waere. Dieser Modus darf kein globales `init_done` setzen.
 - Kanonischer Projekt-Memory-Pfad ist `/workspace/codex`.
 - Die kanonische Capability-/System-Uebersicht liegt in `/workspace/codex/CAPABILITY_MAP.md`.
 - Legacy-Notizen existieren in `/workspace/Codex`; nicht automatisch als Wahrheit bevorzugen.
@@ -65,7 +90,7 @@
 - Die Keyframe Visual Risk Review ist heuristisch: Contract-/Prompt-Felder plus bestehende technische Image Validation, aber kein OCR-Zwang und keine Vision-LLM-Behauptung.
 - Wichtig fuer False Positives: Forbidden-Worte in `forbidden_props`, `text_risk_policy`, `FORBIDDEN VISUALS` oder `no ...`-Clauses duerfen nicht allein zur Rejection fuehren; nur positive sichtbare Inhalte in Subject/Action/Allowed Props oder aktive Prompt-Anforderungen sind riskant.
 - Storyboard-Auswahl soll technisch valide Kandidaten nach Visual Risk priorisieren: `passed` vor `needs_review` vor `rejected`.
-- Phase B2 bleibt ein Vorfilter vor Video, kein finaler Qualitaetsnachweis. Naechster Schritt ist Phase C Take Visual Review / Postability Score; spaeter Phase D Final Quality Verdict und Phase E CLI Produktions-Cockpit.
+- Phase B2 bleibt ein Vorfilter vor Video. Phase C Take Visual Review / Postability Score und Phase D Final Quality Verdict sind jetzt umgesetzt; naechster Schritt ist Phase E CLI Produktions-Cockpit.
 - Der neue `llm_adapter` erwartet einen echten lokalen OpenAI-kompatiblen Director-Endpunkt; ohne konfigurierten und erreichbaren Dienst faellt der Planner ehrlich auf `rule_based_fallback` zurueck.
 - Phase 5B nutzt fuer den echten lokalen Director-LLM-Pfad bewusst `llama.cpp` + GGUF statt einen grossen neuen Serving-Stack.
 - Wegen nur rund `33G` freiem Speicher im Pod ist ein GGUF-Pfad fuer das Director-Modell deutlich praktikabler als ein voller Safetensor-/Transformers-Download.
