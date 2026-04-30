@@ -262,6 +262,7 @@ class ResultAssembler:
                 selected_scene_storyboards=storyboard_result.metadata.get("selected_scene_storyboards", []) if storyboard_result else [],
                 assembly_metadata=assembly_metadata,
                 output_dir=workspace,
+                final_frame_enabled=plan.metadata.get("vision_review_enabled"),
                 final_frame_provider=plan.metadata.get("final_quality_review_provider") or plan.metadata.get("vision_review_provider"),
                 final_frame_model_dir=plan.metadata.get("vision_review_model_dir"),
                 max_final_frames=int(plan.metadata.get("final_quality_max_frames", plan.metadata.get("vision_review_max_frames", 3)) or 3),

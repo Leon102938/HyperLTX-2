@@ -1,102 +1,104 @@
 # SESSION_SUMMARY.md
 
 ## Datum UTC
-- 2026-04-29T10:59:36Z bis 2026-04-29T11:06:06Z
+2026-04-30T11:44:53Z
 
-## Letzter sicherer Projektstand
-- Phase A, B1, B2, C und D des aktuellen Output-Quality-Fokus sind umgesetzt.
-- Qwen3-VL-4B-Instruct-FP8 liegt lokal bereit und wurde mit einem echten kleinen Bild-Smoke geprueft.
-- Runtime/init/startup/Director wurden in Phase C/D nicht umgebaut.
+## Letzter Sicherer Stand
+Der Pod-Stand ist technisch reproduzierbar gesichert. `init.sh` ist klein/stabilisiert, LTX/Gemma laeuft in der globalen Runtime, Qwen3-VL laeuft isoliert in einer eigenen Review-Venv per Subprocess, und Phase E CLI Produktions-Cockpit ist umgesetzt.
 
-## Phase A Ergebnis
-- Scene World Contract + PromptBuilder v2.
-- `scene_world_contract` landet in Plan-/Scene-/Take-Artefakten.
-- Prompts enthalten harte Social-/Text-/Screen-/Paper-Verbote.
+## Wichtige Fixes Heute
+- `init.sh` auf kleine uebersichtliche Basis zurueckgefuehrt.
+- `hf_transfer` im Init nicht mehr Default: `HF_HUB_ENABLE_HF_TRANSFER=0`, Xet aus: `HF_HUB_DISABLE_XET=1`.
+- Minimaler Init-Lock gegen parallele Init-Laeufe.
+- Qwen3-VL optional im Init integriert, Download/Verify ueber `scripts/download_qwen3_vl_model.py`.
+- Gemma/LTX Readiness gefixt: Gemma gilt erst mit Tokenizer, Preprocessor, Index und allen Shards als vollstaendig.
+- Phase E CLI Produktions-Cockpit umgesetzt: strukturierte Live-Ausgabe, Success/Failure Summary, Backend-log Tail, `--inspect-run`.
+- CLI Vision Flags umgesetzt und in Job-/Plan-Metadata verdrahtet.
+- Qwen3-VL Provider-Wiring funktioniert.
+- Dependency-Konflikt geloest: globale Main Runtime fuer LTX auf `transformers 4.52.4`, Qwen3-VL in `/workspace/venvs/qwen3-vl-review` mit `transformers 5.7.0` per Subprocess.
 
-## Phase B1 Ergebnis
-- Storyboard-/Keyframe-Prompts sind scene-specific und contract-aware.
-- ZImageStoryboardAdapter nutzt `effective_prompt` bevorzugt.
+## Init / Download / Model Readiness Status
+- `bash -n /workspace/init.sh`: ok.
+- Main Runtime global Transformers: `4.52.4` aus `/usr/local/lib/python3.12/dist-packages`.
+- Qwen3-VL Review Venv Transformers: `5.7.0` aus `/workspace/venvs/qwen3-vl-review/lib/python3.12/site-packages`.
+- FastAPI `/health`: ok.
+- Director `8011/v1/models`: ok.
+- LTX/Gemma smoke: `module_ops_from_gemma_root` ok, `TI2VidTwoStagesPipeline` import ok.
 
-## Phase B2 Ergebnis
-- Keyframe Visual Risk Review ist umgesetzt.
-- Keyframes bekommen `visual_risk_status`: `passed`, `needs_review`, `rejected`.
-- Auswahl bevorzugt `passed` vor `needs_review` vor `rejected`.
+## Phase E Status
+Phase E CLI Produktions-Cockpit ist umgesetzt. `scripts/agent_core_cli.py --inspect-run quality-morning-reset-003` zeigt den letzten Run inklusive Director, Backend-Status, Quality Verdict und Artefaktpfaden.
 
-## Phase C Ergebnis
-- Take Visual Review / Postability Score ist umgesetzt.
-- Review-Frames werden aus MP4-Takes extrahiert.
-- Takes bekommen `take_visual_review_status`, `postability_score`, Issues, Warnings, Problem-Frames, Provider und Policy-Version.
-- Take-Auswahl priorisiert technisch valide Takes nach `passed > needs_review > rejected`.
+## Qwen3-VL Isolation Status
+- Venv: `/workspace/venvs/qwen3-vl-review`.
+- Venv wird NICHT archiviert.
+- Reproduzierbar per: `bash /workspace/scripts/ensure_qwen3_vl_review_runtime.sh`.
+- Subprocess: `/workspace/scripts/qwen3_vl_review_subprocess.py`.
+- Smoke: `provider=qwen3_vl`, `real_vlm_inference_used=True`, `passed`, `postability_score=1.0`.
 
-## Qwen3-VL Smoke Ergebnis
-- Modell: `Qwen/Qwen3-VL-4B-Instruct-FP8`
-- Lokaler Pfad: `/workspace/models/Qwen3-VL-4B-Instruct-FP8`
-- Testbild: `/workspace/status/qwen3_vl_smoke/clean_test_image.jpg`
-- Ergebnis: `provider=qwen3_vl`, `take_visual_review_status=passed`, `postability_score=1.0`
-- Laufzeit: ca. `10.983s`
-- Ergebnisdatei: `/workspace/status/qwen3_vl_smoke/qwen3_vl_smoke_result.json`
+## LTX/Gemma Status
+- Globales Transformers final: `4.52.4`.
+- `module_ops_from_gemma_root('/workspace/LTX-2/checkpoints/gemma-3')`: ok.
+- `TI2VidTwoStagesPipeline` import: ok.
+- `quality-morning-reset-003` beweist LTX und Qwen3-VL gleichzeitig im selben Job.
 
-## Phase D Ergebnis
-- Final Quality Verdict ist umgesetzt.
-- `ResultSummary.metadata.final_quality_verdict` enthaelt:
-  - `final_quality_status`
-  - `final_postability_score`
-  - `main_issues`
-  - `warnings`
-  - `problem_scenes`
-  - `recommended_next_action`
-  - `quality_policy_version`
-  - `quality_sources`
-- Erfolgreiche Assemblies spiegeln den Verdict auch in `metadata.assembly.final_quality_verdict` und Final-MP4-Artefakt-Metadata.
-- Failure-Resultate bekommen ebenfalls einen expliziten failed Verdict.
+## Tests
+- `bash -n init.sh`: ok.
+- `py_compile scripts/agent_core_cli.py`: ok.
+- `py_compile scripts/qwen3_vl_review_subprocess.py`: ok.
+- `bash -n scripts/ensure_qwen3_vl_review_runtime.sh`: ok.
+- `tests/test_take_visual_review.py`: ok, 6 Tests.
+- `tests/test_final_quality_verdict.py`: ok, 5 Tests.
+- `tests/test_output_quality_utils.py`: ok, 8 Tests.
 
-## Tests und Ergebnisse
-- `python3 -m unittest tests/test_output_quality_utils.py` -> OK
-- `python3 -m unittest tests/test_take_visual_review.py` -> OK
-- `python3 -m unittest tests/test_storyboard_pipeline.py` -> OK
-- `python3 -m unittest tests/test_scene_planner.py` -> OK
-- `python3 -m unittest tests/test_planner_rules.py` -> OK
-- `python3 -m unittest tests/test_assembler_mux.py` -> OK
-- `python3 -m unittest tests/test_final_quality_verdict.py` -> OK
+## Letzter Echter Run
+- Job: `quality-morning-reset-003`.
+- `success=True`.
+- `final_phase=assembled`.
+- `final.mp4`: `/workspace/agent_runs/quality-morning-reset-003/final.mp4`.
+- Final Quality: `needs_review`.
+- Grund: Qwen3-VL meldete echte sichtbare Text-/Papier-/Subtitle-Risiken im finalen Video.
 
-## Real geaenderte Dateien
+## Real Geaenderte Dateien
+- `init.sh`
+- `tools.config`
 - `agent_core/agent.py`
 - `agent_core/assembler.py`
+- `agent_core/planner.py`
 - `agent_core/utils.py`
-- `tests/test_take_visual_review.py`
-- `tests/test_final_quality_verdict.py`
+- `scripts/agent_core_cli.py`
+- `scripts/qwen3_vl_review_subprocess.py`
+- `scripts/download_qwen3_vl_model.py`
+- `scripts/ensure_qwen3_vl_review_runtime.sh`
+- `scripts/check_director_llm.py`
+- `scripts/download_director_model.py`
+- `scripts/ensure_llama_cpp.sh`
+- `scripts/serve_director_llm.sh`
 - `codex/CHANGELOG.md`
 - `codex/PROJECT_STATE.md`
 - `codex/MEMORY.md`
 - `codex/ACTIVE_PLAN.md`
 - `codex/HANDOFF.md`
-- Vorherige Init-/Director-Abschlussdateien liegen ebenfalls im Workspace und sind als Textdateien im Archiv enthalten, aber Phase D hat Runtime/init/Director nicht geaendert.
 
-## Modellstatus Qwen3-VL
-- Pfad: `/workspace/models/Qwen3-VL-4B-Instruct-FP8`
-- Groesse: ca. `5.7G`
-- Status: Dateien vollstaendig; Processor/Config/Model-Load und echter kleiner Bild-Smoke gruen.
-- Wichtig: Das Modell ist nicht im Archiv enthalten.
+## Nicht Im Archiv Enthalten
+- `/workspace/models`
+- `/workspace/venvs`
+- `/workspace/LTX-2/checkpoints`
+- Safetensors, GGUF, incomplete HF-Dateien
+- HF-/npm-Caches
+- `node_modules`
+- komplette llama.cpp Runtime
+- grosse Backend-Outputs
 
-## Offene naechste Schritte
-- Phase E CLI Produktions-Cockpit.
-- Echte Video-Qualitaetstests.
-- Qwen3-VL Vision-Provider produktiv schalten oder gezielt pro Job aktivieren, wenn Kosten/Latenz akzeptiert sind.
+## Restore Anleitung
+1. Archiv nach `/workspace` entpacken.
+2. `bash /workspace/init.sh`
+3. `bash /workspace/scripts/ensure_qwen3_vl_review_runtime.sh`
+4. FastAPI/Director pruefen:
+   - `curl -sS http://127.0.0.1:8000/health`
+   - `curl -sS http://127.0.0.1:8011/v1/models`
+5. Erster empfohlener Check:
+   - `python3 /workspace/scripts/agent_core_cli.py --inspect-run quality-morning-reset-003`
+6. Danach optional ein kleiner Morning-Reset-Test mit Qwen3-VL Vision Flags.
 
-## Explizite Nicht-Aenderungen
-- Runtime/init/Director wurden nicht in Phase D geaendert.
-- Qwen3.6/llama.cpp wurden nicht in Phase D geaendert.
-- LTX/Z-Image/TTS/ACE wurden nicht umgebaut.
-- Modelle sind nicht im Archiv enthalten.
-
-## Final archive verification additions
-- 2026-04-29T11:11:22Z finaler Archivcheck gegen die explizite Pflichtliste ausgefuehrt.
-- Nachgezogen, weil im ersten Archivordner noch nicht enthalten:
-  - `agent_core/planner.py`
-  - `agent_core/prompt_builder.py`
-  - `agent_core/director.py`
-  - `agent_core/schemas.py`
-  - `agent_core/adapters/zimage_storyboard_adapter.py`
-  - `tests/test_scene_planner.py`
-  - `tests/test_planner_rules.py`
-- Nicht nachgezogen: Modelle, GGUF/Safetensors, komplette llama.cpp Runtime, Codex-CLI-Fixdateien, node_modules/npm cache.
+## Naechster Schritt Morgen
+Echte Qualitaetsanalyse von `quality-morning-reset-003` und gezielter Motiv-/Prompt-Feinschliff. Keine weitere Setup-Arbeit als naechster Schritt.

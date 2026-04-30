@@ -449,6 +449,10 @@ class ProductionPlanner:
                 "voice_enabled": job.use_voice,
                 "music_requested": job.use_music,
                 "storyboard_requested_via_video_mode": storyboard_requested and not job.use_storyboard,
+                "vision_review_enabled": job.metadata.get("vision_review_enabled"),
+                "vision_review_provider": job.metadata.get("vision_review_provider"),
+                "vision_review_model_dir": job.metadata.get("vision_review_model_dir"),
+                "vision_review_max_frames": job.metadata.get("vision_review_max_frames"),
             },
         )
 

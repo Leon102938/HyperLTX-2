@@ -23,6 +23,29 @@ Eine kleine Director-/Brain-Schicht vor dem bestehenden Planner bauen, die Jobs 
 Den bereits vorbereiteten Director-Layer produktiv an ein echtes lokales Director-Modell anbinden, bevorzugt Qwen3.6-35B-A3B in praktikabler quantisierter Form als GGUF `Q4_K_M`, ohne Fake-Integration, ohne neuen Mega-Stack und mit sauberem Fallback auf den bisherigen regelbasierten Flow.
 
 ## Aktueller Operativer Fokus
+- Abschluss/Backup fuer heute: finaler Arbeitsstand wird schlank archiviert, ohne Modelle/Venvs/Caches; Qwen3-VL-Venv ist per Ensure-Script reproduzierbar.
+- Nach Restore zuerst `HANDOFF.md` folgen. Der naechste fachliche Schritt ist echte Qualitaetsanalyse von `quality-morning-reset-003` und gezielter Motiv-/Prompt-Feinschliff.
+- Dependency-Isolation ist abgeschlossen: LTX bleibt in der globalen FastAPI-Runtime auf `transformers 4.52.4`, Qwen3-VL laeuft in `/workspace/venvs/qwen3-vl-review` als Subprocess.
+- `quality-morning-reset-003` ist der aktuelle technische Beleg: Director, Voice, Storyboard, LTX und Qwen3-VL-Review laufen zusammen; `final.mp4` wurde assembled.
+- Naechster sinnvoller Schritt ist kein weiterer Dependency-Fix, sondern echte Qualitaetsruns ansehen/kalibrieren: Qwen3-VL meldete im Final Verdict sichtbare Subtitle-/Text-/Papier-Risiken.
+- Qwen3-VL Runtime-Fix ist jetzt isoliert umgesetzt: nicht mehr FastAPI-/Worker-Python selbst, sondern die Qwen3-VL-Venv kennt `qwen3_vl` und FP8-Kernels; `evaluate_take_visual_review()` nutzt diese echte Inferenz per Subprocess.
+- Kein weiterer Content-Maschine-Smoke wurde fuer diesen Fix gestartet; der naechste sinnvolle Lauf ist ein brauchbarer Morning-Reset-Qualitaetstest mit ruhiger Kueche/Fenster/Wasser/Bewegung und den CLI-Vision-Flags.
+- Vision-Review-Provider-Wiring ist umgesetzt: neue CLI-Flags schreiben Vision-Review-Settings in Job-Metadata, und Agent/Utils bevorzugen diese Metadata vor Env.
+- Naechster konkreter Test: `readiness-storyboard-vision-003` mit `--vision-review-enabled --vision-review-provider qwen3_vl --vision-review-model-dir /workspace/models/Qwen3-VL-4B-Instruct-FP8 --vision-review-max-frames 3`.
+- Phase E CLI Produktions-Cockpit ist umgesetzt: bessere Live-Ausgabe, Director-/Step-/Take-Summary, Quality Verdict und strukturierte Failure-Diagnose inklusive Backend-`job.log`-Tail.
+- Neue CLI-Diagnoseoptionen sind verfuegbar: `--inspect-run`, `--tail-error-log-lines`, `--no-log-tail`, `--quiet`, `--verbose`.
+- Naechster Schritt ist ein echter kleiner Storyboard-/Vision-Review-Test mit der neuen CLI-Ausgabe und danach Qualitaetsfeinschliff.
+- LTX/Gemma-Readiness ist repariert: Gemma wurde index-vollstaendig nachgeladen und `init.sh` prueft Gemma jetzt ueber Tokenizer, Preprocessor, Index und Shards statt nur `config.json`.
+- `readiness-small-social-003` ist der aktuelle gruene End-to-End-Beleg: Director `llm_augmented`, Voice, LTX und muxed `final.mp4` erfolgreich.
+- Naechster Schritt bleibt ein echter kleiner Video-/Qualitaetscheck oder Phase E CLI Produktions-Cockpit, nicht weitere Init-/Modellreparatur.
+- Finaler Init-Fokus 2026-04-30: Morgen nach frischem Pod soll `bash /workspace/init.sh` vorhandene Modelle skippen, fehlende Modelle laden und parallele Init-Laeufe per kleinem `flock` verhindern.
+- `hf_transfer` ist nicht mehr Default; stabiler Init-Default ist `HF_HUB_ENABLE_HF_TRANSFER=0`, Xet bleibt aus. Optionaler Speed nur bewusst per `HF_HUB_ENABLE_HF_TRANSFER=1 bash /workspace/init.sh`.
+- Qwen3-VL bleibt optional ueber `Qwen3_VL_Review=on` oder `Vision_Review_Model=on`; kein Qwen3-VL-Adapter-, `agent_core`-, API-, llama.cpp- oder Phase-E-Umbau in diesem Init-Schritt.
+- Naechster Projekt-Schritt bleibt Phase E CLI Produktions-Cockpit oder ein echter kleiner Video-Test.
+- Aktueller Init-Fokus 2026-04-30: `/workspace/init.sh` ist wieder die kleine OG-basierte Init, nicht die grosse Guard-/Lock-/Heartbeat-Version.
+- Der Director-Autostart-Fix bleibt minimal enthalten: vorhandenes `serve_director_llm.sh` wird best-effort executable gemacht und per `DIRECTOR_LLM_DAEMON=1 bash ...` gestartet.
+- Qwen3-VL ist im Init nur optional verdrahtet: `tools.config` enthaelt den sichtbaren Schalter `Qwen3_VL_Review`, Aktivierung ueber `Qwen3_VL_Review=on` oder `Vision_Review_Model=on`.
+- Qwen3-VL-Download/Verify ist ausgelagert nach `/workspace/scripts/download_qwen3_vl_model.py`; kein neuer Init-Modus, kein Phase-E-Bau, kein `agent_core`-/API-/llama.cpp-Umbau in diesem Schritt.
 - Qwen3-VL-Modellsetup ist abgeschlossen: `Qwen/Qwen3-VL-4B-Instruct-FP8` liegt unter `/workspace/models/Qwen3-VL-4B-Instruct-FP8`, Dateien und CPU-Load-Smoke sind verifiziert.
 - Qwen3-VL echter Bild-Smoke ist jetzt ebenfalls verifiziert: kleines lokales Testbild, `provider=qwen3_vl`, `take_visual_review_status=passed`, `postability_score=1.0`.
 - Phase C ist jetzt umgesetzt: Take Visual Review / Postability Score laeuft nach technischer Take-Validation, extrahiert Review-Frames, bewertet heuristisch gegen Scene World Contract und priorisiert Take-Auswahl visuell.

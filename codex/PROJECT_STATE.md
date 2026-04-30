@@ -6,6 +6,46 @@ Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E, 3A, 3B, 4A, 4B und
 - Kanonische Capability-Uebersicht: `/workspace/codex/CAPABILITY_MAP.md`
 
 ## Verifizierte Fakten
+- 2026-04-30 Final Backup/Handoff: Qwen3-VL-Review-Venv wird bewusst nicht archiviert, ist aber ueber `/workspace/scripts/ensure_qwen3_vl_review_runtime.sh` reproduzierbar.
+- `/workspace/codex/HANDOFF.md` dokumentiert Restore-Reihenfolge: Archiv entpacken, `bash /workspace/init.sh`, `bash /workspace/scripts/ensure_qwen3_vl_review_runtime.sh`, FastAPI/Director pruefen, dann `--inspect-run quality-morning-reset-003`.
+- Naechster Arbeitsschritt nach Restore ist echte Qualitaetsanalyse und Motiv-/Prompt-Feinschliff, keine Setup-/Dependency-Arbeit.
+- 2026-04-30 Dependency-Isolation-Fix: Das globale Qwen3-VL-Upgrade auf `transformers 5.7.0` hat den LTX/Gemma-Pfad gebrochen; `quality-morning-reset-002` scheiterte mit `SiglipVisionModel` ohne Attribut `vision_model`.
+- Main-/FastAPI-Runtime ist wieder LTX-kompatibel: `/usr/bin/python` nutzt global `transformers 4.52.4`; globales `kernels` ist entfernt, damit LTX/Gemma-Imports nicht ueber inkompatible `huggingface_hub`-Dataclasses scheitern.
+- LTX/Gemma-Smokes sind gruen: `module_ops_from_gemma_root('/workspace/LTX-2/checkpoints/gemma-3')` ok und `TI2VidTwoStagesPipeline` importiert.
+- Qwen3-VL ist isoliert: eigene Venv `/workspace/venvs/qwen3-vl-review` mit System-Site-Packages, `transformers 5.7.0`, `kernels 0.13.0` und vorhandener Torch-Systeminstallation.
+- Neues Script `/workspace/scripts/qwen3_vl_review_subprocess.py` kapselt echte Qwen3-VL-Inferenz als JSON-Subprocess; `agent_core/utils.py` nutzt diesen Pfad fuer `provider=qwen3_vl`.
+- Isolierter Qwen3-VL-Smoke ueber den Agent-Review-Pfad ist gruen: `real_vlm_inference_used=True`, `provider=qwen3_vl`, Status `passed`.
+- Echter Kontrollrun `quality-morning-reset-003` war technisch erfolgreich und erzeugte `/workspace/agent_runs/quality-morning-reset-003/final.mp4`; LTX und Qwen3-VL laufen damit gleichzeitig. Final Quality ist absichtlich `needs_review`, weil Qwen3-VL echte sichtbare Text-/Papier-Risiken im finalen Video meldete.
+- 2026-04-30 Qwen3-VL Runtime-Fix-Zwischenschritt: Das CLI-/Job-Metadata-Wiring war bereits korrekt; der erste Fix aktualisierte FastAPI-Python direkt fuer `qwen3_vl`.
+- Dieser direkte FastAPI-Runtime-Ansatz ist durch den Dependency-Isolation-Fix abgeloest. FastAPI bleibt jetzt LTX-kompatibel, und Qwen3-VL importiert `Qwen3VLForConditionalGeneration` in der separaten Venv.
+- FastAPI wurde nach dem Isolation-Fix neu gestartet und antwortet wieder auf `/health`; Director 8011 antwortet weiter auf `/v1/models`.
+- 2026-04-30 Vision-Review-Provider-Wiring umgesetzt: CLI-Flags schreiben `vision_review_enabled`, `vision_review_provider`, `vision_review_model_dir` und `vision_review_max_frames` in `job.metadata`.
+- `ProductionPlanner` propagiert diese Werte in `plan.metadata`; `VideoAgent` und `ResultAssembler` nutzen sie bevorzugt vor Env fuer Take Visual Review und Final Quality Verdict.
+- Dadurch reicht eine Env nur vor dem CLI-Prozess nicht mehr als einziger Steuerweg; Job-Metadata kann den laufenden FastAPI/Worker-Prozess explizit auf `qwen3_vl` stellen.
+- Pflichtverifikation gruen: `py_compile`, Take-Visual-Review-Tests, Final-Quality-Verdict-Tests, Output-Quality-Utils-Tests, CLI-Payload-Smoke und Provider-Override-Smoke.
+- Kein echter langer Storyboard-/Qwen3-VL-Run wurde in diesem Schritt erzwungen; naechster Test ist `readiness-storyboard-vision-003` mit CLI-Vision-Flags.
+- 2026-04-30 Phase E CLI Produktions-Cockpit umgesetzt: `scripts/agent_core_cli.py` wurde als bessere Terminal-Ausgabe/Diagnose-Schicht erweitert, ohne `agent_core`, API, Backend, Init oder Modelle zu aendern.
+- Die CLI zeigt jetzt strukturierten Jobstart, Live-Progress mit elapsed/phase elapsed, Director-Summary, Step-/Backend-/Take-Status, Success Summary und Final Quality Verdict.
+- Failure-Diagnose zeigt Phase, Scene, Take, Backend, Backend-Job-ID, Agent-/Backend-Fehler, `result.json`/`state.json`/`takes.json` und einen konfigurierbaren Backend-`job.log`-Tail.
+- Neuer Offline-Modus `--inspect-run` kann vorhandene lokale Runs wie `readiness-small-social-003` und `readiness-small-social-001` zusammenfassen, ohne neuen Render zu starten.
+- Phase-E-Verifikation: `py_compile` und `--help` gruen; Offline-Success-Fixture zeigt Final Quality `needs_review`/Score `0.772`, Offline-Failure-Fixture zeigt den alten LTX-`tokenizer.model`-Fehler inklusive Logtail.
+- 2026-04-30 LTX/Gemma-Readiness-Fix: `readiness-small-social-002` scheiterte im echten LTX-Backendlog an `FileNotFoundError: No files matching pattern 'preprocessor_config.json' found under /workspace/LTX-2/checkpoints/gemma-3`.
+- Gemma war trotz vorhandener `config.json` nicht vollstaendig: es fehlten `tokenizer.json`, `tokenizer_config.json`, `preprocessor_config.json`, `model.safetensors.index.json` und Shards 3 bis 5 von 5.
+- Fehlende Gemma-Dateien wurden gezielt aus `google/gemma-3-12b-it-qat-q4_0-unquantized` nachgeladen, ohne bestehende Shards zu loeschen oder Qwen3-VL/Director/llama.cpp anzufassen.
+- Gemma ist jetzt index-validiert: 5/5 Shards, Tokenizer-Dateien und Preprocessor-Datei vorhanden, keine `.incomplete` und keine 0-byte Dateien; Ordnergroesse ca. `23G`.
+- `init.sh` prueft Gemma jetzt minimal ueber eine `gemma_model_ready`-Funktion gegen Tokenizer, Preprocessor, Index und alle referenzierten Shards, damit ein frischer Pod nicht erneut nur wegen `config.json` skippt.
+- `readiness-small-social-003` war erfolgreich und erzeugte `/workspace/agent_runs/readiness-small-social-003/final.mp4` mit ca. `9.106s`.
+- 2026-04-30 Final-Init-Stabilisierung: `/workspace/init.sh` bleibt klein/uebersichtlich und nutzt nur einen minimalen `flock`-Lock unter `/workspace/status/init.lock`, damit keine zwei Init-Prozesse parallel dieselben HF-Locks/Downloads bedienen.
+- `hf_transfer` ist im Init nicht mehr Default. Wegen RunPod-Instabilitaet bei grossen Downloads (`no permits available`, `.incomplete` + `.lock`, Python in `futex_wait_queue`) ist der stabile Default jetzt `HF_HUB_ENABLE_HF_TRANSFER=0`; optionaler Speed bleibt per `HF_HUB_ENABLE_HF_TRANSFER=1 bash /workspace/init.sh` moeglich.
+- Xet bleibt im Init per Default deaktiviert: `HF_HUB_DISABLE_XET=1`.
+- Die Download-Helper skippen vorhandene vollstaendige Dateien bzw. Snapshot-Zielordner und loggen Repo/Datei/Ziel sowie `hf_transfer`-Status; Ready-Flags werden nur nach erfolgreichem Download-/Verify-Pfad gesetzt.
+- Qwen3-VL bleibt optional ueber `Qwen3_VL_Review=on` oder `Vision_Review_Model=on`; der direkte Verify von `/workspace/scripts/download_qwen3_vl_model.py` war am 2026-04-30 gegen den vorhandenen Modellordner gruen.
+- Naechster Projekt-Schritt bleibt Phase E CLI Produktions-Cockpit oder ein echter kleiner Video-Test; fuer diese Init-Stabilisierung wurden `agent_core`, App/API, Tests, Modelle und `llama.cpp` nicht umgebaut.
+- 2026-04-30 wurde `/workspace/init.sh` wieder auf die kleine, uebersichtliche `init(OG).sh`-Basis zurueckgefuehrt; die grosse Guard-Version aus `init(fehler).sh ` ist nicht mehr die Grundlage.
+- In der finalen Init blieben nur minimale Fixes: Non-Interactive-Env, `hf_transfer` an, Xet aus, optionaler Qwen3-VL-Aufruf und der kleine Director-Autostart-Fix per `chmod +x` plus `bash`.
+- Qwen3-VL wird im Init-Pfad nur bei aktivem Schalter geladen. `tools.config` enthaelt explizit `Qwen3_VL_Review`; Download/Verify laufen bei `Qwen3_VL_Review=on` oder `Vision_Review_Model=on`.
+- Qwen3-VL-Download/Verify liegt jetzt in `/workspace/scripts/download_qwen3_vl_model.py` und nutzt `huggingface_hub.snapshot_download` fuer `Qwen/Qwen3-VL-4B-Instruct-FP8` nach `/workspace/models/Qwen3-VL-4B-Instruct-FP8`.
+- Fuer diesen Init-Restore wurden `agent_core`, App/API, Tests, Modelle, Runtime-Dateien und `llama.cpp` nicht angefasst.
 - 2026-04-29 wurde ein echter Qwen3-VL-Bild-Smoke ausgefuehrt: lokales Testbild unter `/workspace/status/qwen3_vl_smoke/clean_test_image.jpg`, Ergebnis `provider=qwen3_vl`, `take_visual_review_status=passed`, `postability_score=1.0`, Laufzeit ca. `10.983s`.
 - 2026-04-29 wurde Phase D umgesetzt: `ResultSummary.metadata.final_quality_verdict` bewertet `final.mp4` technisch und kombiniert Assembly-, Take-, Keyframe-, Subtitle-/Overlay-, Voice-/Music- und Final-Frame-Quellen.
 - Final Quality Verdict schreibt `final_quality_status`, `final_postability_score`, `main_issues`, `warnings`, `problem_scenes`, `recommended_next_action`, `quality_policy_version` und `quality_sources`.

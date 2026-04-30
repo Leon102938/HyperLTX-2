@@ -571,10 +571,12 @@ def evaluate_take_visual_review(
     prompt_text: str | None = None,
     prompt_variant_text: str | None = None,
     selected_keyframe_visual_risk: dict[str, Any] | None = None,
+    enabled: Any | None = None,
     provider: str | None = None,
     model_dir: str | None = None,
+    max_frames: int | str | None = None,
 ) -> dict[str, Any]:
-    provider_name = _resolve_take_visual_review_provider(provider)
+    provider_name = _resolve_take_visual_review_provider(provider, enabled=enabled)
     if provider_name == "disabled":
         return _base_take_visual_review(
             status="needs_review",
@@ -607,6 +609,7 @@ def evaluate_take_visual_review(
         scene_world_contract=scene_world_contract or {},
         review_frames=review_frames or [],
         model_dir=model_dir,
+        max_frames=max_frames,
     )
     return qwen_result
 
@@ -622,6 +625,7 @@ def evaluate_final_quality_verdict(
     selected_scene_storyboards: list[dict[str, Any]] | None = None,
     assembly_metadata: dict[str, Any] | None = None,
     output_dir: str | Path | None = None,
+    final_frame_enabled: Any | None = None,
     final_frame_provider: str | None = None,
     final_frame_model_dir: str | None = None,
     max_final_frames: int = 3,
@@ -676,7 +680,7 @@ def evaluate_final_quality_verdict(
                 count=max_final_frames,
             )
             warnings.extend(f"final frame extraction: {warning}" for warning in final_frame_extraction.get("warnings") or [])
-            frame_provider = _resolve_take_visual_review_provider(final_frame_provider)
+            frame_provider = _resolve_take_visual_review_provider(final_frame_provider, enabled=final_frame_enabled)
             if frame_provider == "qwen3_vl":
                 sources.append("qwen3_vl_final_frame_review")
             else:
@@ -708,8 +712,10 @@ def evaluate_final_quality_verdict(
                 take_id="final_mp4",
                 prompt_text="Final assembled video frame review. Return strict JSON.",
                 prompt_variant_text="Check final frames for postability and visible text risks.",
+                enabled=final_frame_enabled,
                 provider=frame_provider,
                 model_dir=final_frame_model_dir,
+                max_frames=max_final_frames,
             )
             final_status = final_frame_review.get("take_visual_review_status")
             if final_status == "rejected":
@@ -1273,9 +1279,14 @@ def _positive_visual_risk_hits(value: str) -> list[str]:
     return [term for term in VISUAL_RISK_FORBIDDEN_TERMS if re.search(rf"\b{re.escape(term)}s?\b", lowered)]
 
 
-def _resolve_take_visual_review_provider(provider: str | None = None) -> str:
-    enabled = str(os.environ.get("VISION_REVIEW_ENABLED", "1")).strip().lower()
-    if enabled in {"0", "false", "off", "no"}:
+def _boolish_disabled(value: Any) -> bool:
+    return str(value).strip().lower() in {"0", "false", "off", "no", "none", "disabled"}
+
+
+def _resolve_take_visual_review_provider(provider: str | None = None, *, enabled: Any | None = None) -> str:
+    if enabled is not None and _boolish_disabled(enabled):
+        return "disabled"
+    if enabled is None and _boolish_disabled(os.environ.get("VISION_REVIEW_ENABLED", "1")):
         return "disabled"
     value = str(provider or os.environ.get("VISION_REVIEW_PROVIDER", "heuristic")).strip().lower()
     if value in {"", "none", "disabled", "off"}:
@@ -1347,6 +1358,7 @@ def _evaluate_take_visual_review_qwen3_vl(
     scene_world_contract: dict[str, Any],
     review_frames: list[dict[str, Any]],
     model_dir: str | None = None,
+    max_frames: int | str | None = None,
 ) -> dict[str, Any]:
     existing_frames = [frame for frame in review_frames if frame.get("exists")]
     if not existing_frames:
@@ -1366,20 +1378,8 @@ def _evaluate_take_visual_review_qwen3_vl(
         result["warnings"] = _unique_strings(list(result.get("warnings") or []) + [f"qwen3_vl model dir not ready: {model_path}"])
         return result
 
-    try:
-        # Keep this path lazy and optional; tests and normal runs stay heuristic unless explicitly requested.
-        from PIL import Image as PILImage
-        from transformers import AutoModelForImageTextToText, AutoProcessor
-    except Exception as exc:
-        result = dict(heuristic)
-        result["provider"] = "qwen3_vl"
-        if result.get("take_visual_review_status") != "rejected":
-            result["take_visual_review_status"] = "needs_review"
-        result["warnings"] = _unique_strings(list(result.get("warnings") or []) + [f"qwen3_vl dependencies unavailable: {exc}"])
-        return result
-
-    max_frames = max(1, int(os.environ.get("VISION_REVIEW_MAX_FRAMES", "3") or "3"))
-    selected_frames = existing_frames[:max_frames]
+    max_frame_count = max(1, int(max_frames or os.environ.get("VISION_REVIEW_MAX_FRAMES", "3") or "3"))
+    selected_frames = existing_frames[:max_frame_count]
     prompt = (
         "Review these video frames against the scene contract. Detect visible text, glyphs, screens, UI, "
         "paper, notebooks, documents, labels, logos, signs, posters, typography, letters, or numbers. "
@@ -1388,28 +1388,11 @@ def _evaluate_take_visual_review_qwen3_vl(
         f"Scene contract: {json.dumps(scene_world_contract, ensure_ascii=True)[:2500]}"
     )
     try:
-        processor = AutoProcessor.from_pretrained(str(model_path), trust_remote_code=True, local_files_only=True)
-        device_preference = os.environ.get("VISION_REVIEW_DEVICE", "auto").strip().lower()
-        model_kwargs: dict[str, Any] = {"trust_remote_code": True, "local_files_only": True}
-        if device_preference == "cpu":
-            model_kwargs["device_map"] = "cpu"
-        elif device_preference in {"cuda", "auto"}:
-            model_kwargs["device_map"] = "auto"
-        model = AutoModelForImageTextToText.from_pretrained(str(model_path), **model_kwargs)
-        images = [PILImage.open(str(frame["path"])).convert("RGB") for frame in selected_frames]
-        messages = [
-            {
-                "role": "user",
-                "content": [{"type": "image", "image": image} for image in images] + [{"type": "text", "text": prompt}],
-            }
-        ]
-        text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-        inputs = processor(text=[text], images=images, return_tensors="pt")
-        if hasattr(model, "device"):
-            inputs = inputs.to(model.device)
-        output_ids = model.generate(**inputs, max_new_tokens=180, do_sample=False)
-        generated = processor.batch_decode(output_ids[:, inputs["input_ids"].shape[-1]:], skip_special_tokens=True)[0]
-        payload = _extract_json_object(generated)
+        payload = _run_qwen3_vl_review_subprocess(
+            model_path=model_path,
+            frames=selected_frames,
+            prompt=prompt,
+        )
         status = _normalize_review_status(payload.get("status") or payload.get("take_visual_review_status"))
         score = float(payload.get("postability_score", heuristic.get("postability_score", 0.5)))
         result = dict(heuristic)
@@ -1421,6 +1404,7 @@ def _evaluate_take_visual_review_qwen3_vl(
                 "warnings": _unique_strings(list(payload.get("warnings") or [])),
                 "problem_frames": list(payload.get("problem_frames") or result.get("problem_frames") or []),
                 "provider": "qwen3_vl",
+                "real_vlm_inference_used": bool(payload.get("real_vlm_inference_used")),
                 "summary": str(payload.get("summary") or "qwen3_vl take visual review"),
             }
         )
@@ -1432,6 +1416,47 @@ def _evaluate_take_visual_review_qwen3_vl(
             result["take_visual_review_status"] = "needs_review"
         result["warnings"] = _unique_strings(list(result.get("warnings") or []) + [f"qwen3_vl inference failed: {exc}"])
         return result
+
+
+def _run_qwen3_vl_review_subprocess(*, model_path: Path, frames: list[dict[str, Any]], prompt: str) -> dict[str, Any]:
+    python_path = Path(os.environ.get("QWEN3_VL_PYTHON", "/workspace/venvs/qwen3-vl-review/bin/python"))
+    script_path = Path(os.environ.get("QWEN3_VL_REVIEW_SCRIPT", "/workspace/scripts/qwen3_vl_review_subprocess.py"))
+    timeout_sec = int(os.environ.get("QWEN3_VL_REVIEW_TIMEOUT_SEC", "240") or "240")
+    if not python_path.exists():
+        raise RuntimeError(f"qwen3_vl python not found: {python_path}")
+    if not script_path.exists():
+        raise RuntimeError(f"qwen3_vl subprocess script not found: {script_path}")
+
+    request = {
+        "model_dir": str(model_path),
+        "frames": [
+            {
+                "path": frame.get("path"),
+                "timestamp_sec": frame.get("timestamp_sec"),
+            }
+            for frame in frames
+            if frame.get("path")
+        ],
+        "prompt": prompt,
+        "max_new_tokens": 180,
+    }
+    proc = subprocess.run(
+        [str(python_path), str(script_path)],
+        input=json.dumps(request, ensure_ascii=True),
+        text=True,
+        capture_output=True,
+        timeout=timeout_sec,
+        check=False,
+    )
+    stdout = proc.stdout.strip()
+    if not stdout:
+        stderr_tail = proc.stderr.strip().splitlines()[-3:]
+        raise RuntimeError(f"qwen3_vl subprocess produced no JSON; exit={proc.returncode}; stderr={' | '.join(stderr_tail)}")
+    payload = json.loads(stdout.splitlines()[-1])
+    if proc.returncode != 0:
+        warning = "; ".join(str(item) for item in payload.get("warnings") or [])
+        raise RuntimeError(warning or f"qwen3_vl subprocess failed with exit {proc.returncode}")
+    return payload
 
 
 def _extract_json_object(text: str) -> dict[str, Any]:

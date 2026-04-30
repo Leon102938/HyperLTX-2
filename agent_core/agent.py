@@ -520,8 +520,10 @@ class VideoAgent:
                     prompt_text=take.prompt_text,
                     prompt_variant_text=take.prompt_variant_text,
                     selected_keyframe_visual_risk=selected_keyframe_visual_risk,
+                    enabled=plan.metadata.get("vision_review_enabled"),
                     provider=plan.metadata.get("vision_review_provider"),
                     model_dir=plan.metadata.get("vision_review_model_dir"),
+                    max_frames=plan.metadata.get("vision_review_max_frames"),
                 )
                 take_record = TakeResultRecord(
                     take_id=take.take_id,

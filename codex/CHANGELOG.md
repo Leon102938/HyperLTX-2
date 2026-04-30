@@ -1,5 +1,81 @@
 # CHANGELOG.md
 
+## 2026-04-30 Final Backup / Handoff
+- Abschlussstand fuer Download/Restore gesichert: schlankes Projektarchiv ohne Modelle, Venvs, Caches, GGUF oder Safetensors wird erstellt.
+- Reproduzierbarkeit fuer Qwen3-VL-Review-Venv ergaenzt: `/workspace/scripts/ensure_qwen3_vl_review_runtime.sh` erstellt `/workspace/venvs/qwen3-vl-review` mit System-Site-Packages und gepinnten Review-Dependencies.
+- Restore-Hinweise in `/workspace/codex/HANDOFF.md`: `init.sh`, Qwen3-VL-Venv-Ensure, FastAPI/Director-Checks und erster Inspect-Run.
+- Heutiger Endstand bleibt: init stabilisiert, Gemma/LTX readiness gefixt, Phase E CLI Produktions-Cockpit umgesetzt, CLI Vision Flags und Provider-Wiring aktiv, Qwen3-VL per Venv/Subprocess isoliert.
+- `quality-morning-reset-003` bleibt der letzte echte Beleg: technisch erfolgreich assembled, Final Quality `needs_review` wegen echter sichtbarer Text-/Papier-/Subtitle-Risiken.
+
+## 2026-04-30 Qwen3-VL Dependency Isolation Fix
+- Das globale Qwen3-VL-Transformers-Upgrade auf `5.7.0` brach den LTX/Gemma-Pfad: `quality-morning-reset-002` scheiterte in LTX mit `AttributeError: 'SiglipVisionModel' object has no attribute 'vision_model'`.
+- Main-/FastAPI-Runtime wurde wieder LTX-kompatibel gesetzt: globales `transformers==4.52.4`; globales `kernels` wurde entfernt, weil es mit dem alten `huggingface_hub` den LTX-Import blockierte.
+- Qwen3-VL laeuft jetzt isoliert in `/workspace/venvs/qwen3-vl-review` mit System-Site-Packages, eigener `transformers 5.7.0`-Installation und `kernels 0.13.0`; Torch wird aus der bestehenden Systeminstallation wiederverwendet.
+- Neues Subprocess-Script `/workspace/scripts/qwen3_vl_review_subprocess.py` nimmt JSON auf stdin und gibt JSON auf stdout zurueck.
+- `agent_core/utils.py` ruft fuer `provider=qwen3_vl` standardmaessig `/workspace/venvs/qwen3-vl-review/bin/python /workspace/scripts/qwen3_vl_review_subprocess.py` auf; konfigurierbar via `QWEN3_VL_PYTHON`, `QWEN3_VL_REVIEW_SCRIPT` und `QWEN3_VL_REVIEW_TIMEOUT_SEC`.
+- Isolierter Qwen3-VL-Smoke ueber `evaluate_take_visual_review()` ist gruen: `real_vlm_inference_used=True`, `provider=qwen3_vl`, Status `passed`.
+- Echter Kontrollrun `quality-morning-reset-003` war technisch erfolgreich: Director, Voice, Storyboard, LTX und Qwen3-VL-Review liefen; `final.mp4` wurde assembled. Final Quality blieb `needs_review`, weil Qwen3-VL echte sichtbare Subtitle-/Text-/Papier-Risiken im finalen Video meldete.
+
+## 2026-04-30 Qwen3-VL Runtime Fix
+- Qwen3-VL Provider-Wiring war korrekt: CLI-Vision-Flags kommen im Job an und `visual_review_provider=qwen3_vl` wird gesetzt.
+- Echter Fehler war die FastAPI/Worker-Runtime: `/usr/bin/python` nutzte `transformers 4.52.4`, das `model_type=qwen3_vl` nicht kannte.
+- Root-/FastAPI-Python unter `/usr/bin/python` bzw. `/usr/bin/python3.12` wurde in diesem Zwischenschritt gezielt aktualisiert; dieser Ansatz wurde danach durch den Qwen3-VL-Dependency-Isolation-Fix ersetzt, weil er LTX/Gemma brach.
+- Keine Torch-/CUDA-Reinstallation, keine Modell-Downloads und kein Init-/Backend-/Prompt-Umbau.
+- Qwen3-VL Runtime-Smoke ueber `evaluate_take_visual_review()` ist gruen: `provider=qwen3_vl`, `real_vlm_inference_used=True`, Status `passed`, keine Qwen3-VL-Warnungen, Laufzeit ca. `57.04s`.
+- FastAPI wurde nach dem Dependency-Fix neu gestartet; `/health` und Director `/v1/models` antworten.
+
+## 2026-04-30 Vision Review Provider Wiring
+- CLI-to-Agent Wiring fuer Vision Review umgesetzt, ohne Init, Modelle, Director, Backends oder grosse Phase-A-D-Logik umzubauen.
+- Ursache: `VISION_REVIEW_PROVIDER=qwen3_vl` als Env vor dem CLI-Aufruf erreicht den bereits laufenden FastAPI/Worker-Prozess nicht; der Job lief deshalb weiter mit `heuristic`.
+- Neue CLI-Flags in `scripts/agent_core_cli.py`:
+  - `--vision-review-enabled`
+  - `--no-vision-review`
+  - `--vision-review-provider {heuristic,qwen3_vl,none}`
+  - `--vision-review-model-dir PATH`
+  - `--vision-review-max-frames N`
+- Die CLI schreibt Vision-Settings in `job.metadata`; `ProductionPlanner` uebernimmt sie nach `plan.metadata`.
+- `VideoAgent` und `ResultAssembler` geben `vision_review_enabled`, Provider, Modellordner und Max-Frames aus `plan.metadata` an Take Visual Review und Final Quality Verdict weiter.
+- Provider-Aufloesung bevorzugt explizite Job-/Plan-Metadata vor Env; ein Job mit `vision_review_enabled=true` und `vision_review_provider=qwen3_vl` kann damit eine im Serverprozess anders gesetzte Env uebersteuern.
+- CLI-Startausgabe und Quality Summary zeigen Vision-Review-Settings, `final_frame_review.provider` und ob realer VLM-Pfad genutzt wurde.
+
+## 2026-04-30 Phase E CLI Produktions-Cockpit
+- Phase E gestartet und fuer die bestehende CLI umgesetzt, ohne Pipeline-, Backend-, API-, Modell- oder Init-Umbau.
+- `scripts/agent_core_cli.py` zeigt beim Jobstart jetzt Job-ID, Idee/Script-Kurzform, Dauer/Aufloesung/Orientierung, Voice/Storyboard/Music/Subtitles, Takes/Variations und API-Endpunkt.
+- Polling-Ausgabe ist strukturierter: Status-/Phasenwechsel mit elapsed time, Phase elapsed, Summary, Director-Status, Step-Status und Take-/Scene-Zusammenfassung; Heartbeat nur periodisch statt stumpf identischer Ausgabe.
+- Director-Zusammenfassung zeigt `director_mode`, `director_llm_active`, Provider, Modell und Fallback-Grund, sobald aus lokalen Artefakten sichtbar.
+- Abschlussausgabe zeigt Success Summary mit `final.mp4`, Datei-Groesse, Dauerwerten, Result-/State-/Takes-Pfaden und Final Quality Verdict.
+- Fehlerausgabe zeigt jetzt Error Summary mit Phase, Scene, Take, Backend, Backend-Job-ID, Agent-Fehler, Backend-Fehler, Artefaktpfaden und optionalem Backend-`job.log`-Tail.
+- Neue CLI-Optionen: `--tail-error-log-lines`, `--no-log-tail`, `--quiet`, `--verbose`, `--inspect-run`.
+- Offline-Fixtures geprueft: `readiness-small-social-003` als Success Summary und `readiness-small-social-001` als LTX-Failure mit Backend-Logtail.
+
+## 2026-04-30 LTX/Gemma Readiness Fix
+- Echten Fehler aus `readiness-small-social-002` analysiert: LTX scheiterte nicht mehr an `tokenizer.model`, sondern an fehlendem `preprocessor_config.json` unter `/workspace/LTX-2/checkpoints/gemma-3`.
+- Gemma-Ordner war unvollstaendig: `tokenizer.json`, `tokenizer_config.json`, `preprocessor_config.json`, `model.safetensors.index.json` und Shards `model-00003-of-00005.safetensors` bis `model-00005-of-00005.safetensors` fehlten bzw. waren nur als unvollstaendige Cache-Spuren vorhanden.
+- Nur fehlende Gemma-Dateien aus `google/gemma-3-12b-it-qat-q4_0-unquantized` mit `HF_HUB_ENABLE_HF_TRANSFER=0` und `HF_HUB_DISABLE_XET=1` nachgeladen; keine Modelle geloescht.
+- Gemma-Indexcheck danach gruen: 5/5 Shards vorhanden, keine `.incomplete` und keine 0-byte Dateien.
+- `init.sh` minimal gehaertet: Gemma gilt nicht mehr nur wegen `config.json` als fertig, sondern erst mit `tokenizer.model`, `tokenizer.json`, `tokenizer_config.json`, `preprocessor_config.json`, `model.safetensors.index.json` und allen Index-Shards.
+- Nicht-rendernder LTX/Gemma-Smoke gruen: `module_ops_from_gemma_root()` akzeptiert den Gemma-Root, `TI2VidTwoStagesPipeline` importiert.
+- `readiness-small-social-003` lief erfolgreich mit Director `llm_augmented`, Qwen-TTS, LTX-Video und muxed `final.mp4` unter `/workspace/agent_runs/readiness-small-social-003/final.mp4`.
+
+## 2026-04-30 Final Init Stabilisierung
+- `/workspace/init.sh` bleibt klein und OG-basiert; es wurde kein Guard-/Heartbeat-/Stall-Framework eingebaut.
+- Minimaler `flock`-Lock ueber `/workspace/status/init.lock` verhindert parallele Init-Laeufe; ein zweiter Lauf beendet sich mit klarer Meldung.
+- `hf_transfer` ist nicht mehr Default, weil es auf RunPod bei grossen Downloads mit `no permits available`, `.incomplete`-/Lock-Haengern und futex-wartenden Python-Prozessen instabil war.
+- Stabiler Default ist jetzt der normale HuggingFace-Downloader: `HF_HUB_ENABLE_HF_TRANSFER="${HF_HUB_ENABLE_HF_TRANSFER:-0}"`; Speed bleibt optional per `HF_HUB_ENABLE_HF_TRANSFER=1 bash /workspace/init.sh`.
+- Xet bleibt standardmaessig aus: `HF_HUB_DISABLE_XET="${HF_HUB_DISABLE_XET:-1}"`.
+- Die `hf_download_*`-Helper loggen Repo/Datei/Ziel und aktiven hf_transfer-Status, skippen vorhandene Dateien bzw. vorhandene Snapshot-Zielordner und setzen Ready-Flags nur nach erfolgreichem Helper-/Verify-Lauf.
+- Qwen3-VL bleibt optional ueber `Qwen3_VL_Review=on` oder `Vision_Review_Model=on`; Verify/Download laeuft weiterhin ueber `/workspace/scripts/download_qwen3_vl_model.py`.
+- Keine Aenderungen an `agent_core`, App/API, Tests, Modellen, llama.cpp oder Phase E.
+
+## 2026-04-30 Init Restore auf kleine OG-Basis
+- `/workspace/init.sh` wurde wieder aus der kleinen, funktionierenden `init(OG).sh` aufgebaut; die grosse Guard-/Heartbeat-/Lock-Version aus `init(fehler).sh ` wurde bewusst nicht weitergefuehrt.
+- Aus der grossen Version wurden nur minimale Fixes uebernommen:
+  - Non-Interactive-Env fuer apt/git/HF/pip inklusive HF-Transfer-/Xet-Defaults
+  - Director-Autostart prueft jetzt auf vorhandene `serve_director_llm.sh`, setzt best-effort `chmod +x` und startet per `DIRECTOR_LLM_DAEMON=1 bash ...`
+- Qwen3-VL wurde nicht als grosser Shell-Block in `init.sh` eingebaut, sondern ueber `/workspace/scripts/download_qwen3_vl_model.py`.
+- Qwen3-VL-Download ist optional; `tools.config` enthaelt den expliziten Schalter `Qwen3_VL_Review`, Aktivierung ueber `Qwen3_VL_Review=on` oder `Vision_Review_Model=on`.
+- Keine Aenderungen an `agent_core`, API, App, llama.cpp, Runtime-Dateien oder Modellbestaenden.
+
 ## 2026-04-29 Phase D Final Quality Verdict
 - Qwen3-VL echter Bild-Smoke vor Phase D erfolgreich:
   - Testbild: `/workspace/status/qwen3_vl_smoke/clean_test_image.jpg`

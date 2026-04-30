@@ -1,6 +1,38 @@
 # MEMORY.md
 
 ## Dauerhafte Erkenntnisse
+- Fuer Backups keine Modelle, Venvs, Caches, GGUF/Safetensors oder komplette Backend-Runtimes archivieren. Qwen3-VL-Review-Venv wird ueber `scripts/ensure_qwen3_vl_review_runtime.sh` reproduziert.
+- Nach Restore ist die Reihenfolge: Archiv entpacken, `bash /workspace/init.sh`, `bash /workspace/scripts/ensure_qwen3_vl_review_runtime.sh`, FastAPI/Director pruefen, dann `agent_core_cli.py --inspect-run quality-morning-reset-003`.
+- `quality-morning-reset-003` ist ein technischer Erfolgsbeleg, aber kein finaler Qualitaetsbeleg: Qwen3-VL meldete echte Text-/Papier-/Subtitle-Risiken. Morgen zuerst Qualitaet ansehen, nicht Setup weiter umbauen.
+- Qwen3-VL darf nicht mehr global in der FastAPI-/LTX-Runtime laufen. Aktueller stabiler Vertrag: Main Runtime bleibt LTX-kompatibel mit `transformers 4.52.4`; Qwen3-VL laeuft isoliert ueber `/workspace/venvs/qwen3-vl-review/bin/python`.
+- Globales `kernels` kann die LTX/Gemma-Runtime brechen, wenn global wieder `huggingface_hub 0.36.x` fuer Transformers 4.52.4 aktiv ist. `kernels` gehoert in die Qwen3-VL-Venv, nicht in die Main Runtime.
+- Qwen3-VL-Review im Agent-Core wird ueber `/workspace/scripts/qwen3_vl_review_subprocess.py` ausgefuehrt. Steuerung: `QWEN3_VL_PYTHON`, `QWEN3_VL_REVIEW_SCRIPT`, `QWEN3_VL_REVIEW_TIMEOUT_SEC`.
+- `quality-morning-reset-003` belegt nach der Isolation beide Seiten gleichzeitig: LTX rendert wieder, Qwen3-VL liefert echte Reviews. Ein `needs_review`/Reject im Final Quality Verdict ist danach ein echter visueller Befund, kein Dependency-Fehler.
+- Qwen3-VL Env-/Metadata-Wiring und Qwen3-VL Runtime-Support sind getrennte Fehlerklassen. Wenn `visual_review_provider=qwen3_vl` im Run steht, aber Warnungen wie `model type qwen3_vl not recognized` erscheinen, ist der Jobvertrag korrekt und die Python-Runtime falsch.
+- Der echte FastAPI/Worker-Kontext fuer diese Pod-Session ist `/usr/bin/python` bzw. `/usr/bin/python3.12` mit Packages unter `/usr/local/lib/python3.12/dist-packages`; nicht irgendein anderes Venv fixen.
+- Qwen3-VL-FP8 braucht in seiner isolierten Review-Venv aktuellen Transformers-Support plus FP8-Kernels. Verifizierter Stand am 2026-04-30: Venv-`transformers 5.7.0`, `qwen-vl-utils 0.0.14`, `kernels 0.13.0`, Torch aus System-Site-Packages unveraendert `2.7.0+cu128`.
+- Der Qwen3-VL Runtime-Smoke muss ueber `evaluate_take_visual_review()` laufen und `provider=qwen3_vl` sowie `real_vlm_inference_used=True` ohne Qwen3-VL-Warnungen zeigen; der aktuelle Beleg lief in ca. `57.04s`.
+- Vision-Review-Steuerung darf nicht nur ueber Env vor `agent_core_cli.py` laufen, weil der echte Job im bereits gestarteten FastAPI/Worker-Prozess ausgefuehrt wird.
+- Fuer echte qwen3_vl-Reviews muss die CLI die Settings in `job.metadata` mitsenden: `vision_review_enabled`, `vision_review_provider`, `vision_review_model_dir`, `vision_review_max_frames`.
+- Provider-Aufloesung soll Job-/Plan-Metadata vor Env bevorzugen; Env bleibt Fallback fuer direkte/in-process Runs.
+- Naechster echter Beleg fuer qwen3_vl ist ein Storyboard-/Vision-Run mit den neuen CLI-Flags, nicht nur `VISION_REVIEW_PROVIDER=... python3 scripts/agent_core_cli.py`.
+- Phase E CLI Produktions-Cockpit ist als CLI-Ausgabe-/Diagnose-Schicht umgesetzt. Es darf nicht als Pipeline- oder Quality-System-Umbau verstanden werden.
+- `scripts/agent_core_cli.py` ist jetzt der bevorzugte manuelle Produktionspfad: Jobstart, Live-Progress, Director, Steps, Takes, Quality Verdict, Success Summary und Failure Summary werden direkt im Terminal lesbar.
+- Bei Failures muss zuerst die neue CLI-Fehlerzusammenfassung gelesen werden; sie zeigt Backend-Job-ID und `job.log`-Tail, damit generische Agent-Fehler wie `no technically valid take` nicht mehr allein stehen.
+- `--inspect-run <job_id>` ist der leichte Offline-Diagnosepfad fuer vorhandene lokale Runs ohne neuen Render.
+- LTX/Gemma-Readiness-Falle 2026-04-30: `config.json` allein ist kein ausreichender Gemma-Fertigkeitsbeweis. LTX braucht u. a. `preprocessor_config.json`; ausserdem muessen `tokenizer.model`, `tokenizer.json`, `tokenizer_config.json`, `model.safetensors.index.json` und alle Index-Shards vorhanden sein.
+- Der echte Fehler in `readiness-small-social-002` war `No files matching pattern 'preprocessor_config.json' found under /workspace/LTX-2/checkpoints/gemma-3`; danach zeigte der Indexcheck, dass Shards 3 bis 5 und mehrere Tokenizer-/Index-Dateien fehlten.
+- Gemma wurde gezielt mit stabilem HF-Downloader nachvervollstaendigt; keine Modelle wurden geloescht. Der erfolgreiche Beleg ist `readiness-small-social-003` mit muxed `final.mp4`.
+- `init.sh` darf Gemma kuenftig nur ueber `gemma_model_ready` skippen, nicht ueber eine einfache `config.json`-Pruefung.
+- Finaler Init-Stand 2026-04-30: `/workspace/init.sh` soll klein bleiben. Erlaubt ist ein minimaler `flock`-Lock unter `/workspace/status/init.lock`, aber keine Rueckkehr zur grossen Guard-/Heartbeat-/Stall-Init.
+- `hf_transfer` ist auf RunPod fuer die grossen Modell-Downloads nicht verlaesslich genug; beobachtet wurden `no permits available`, `.incomplete`-/Lock-Haenger und Python-Prozesse in `futex_wait_queue`.
+- Init-Default ist deshalb stabiler HuggingFace-Downloader: `HF_HUB_ENABLE_HF_TRANSFER=0`. Wer Speed bewusst riskieren will, startet explizit mit `HF_HUB_ENABLE_HF_TRANSFER=1 bash /workspace/init.sh`.
+- `HF_HUB_DISABLE_XET=1` bleibt Default, weil Xet/HF-Locks bereits reale Init-Haenger verursacht haben.
+- Ready-Flags im Init duerfen nur nach echten Datei-/Verify-Erfolgen gesetzt werden; Qwen3-VL-ready kommt nur nach erfolgreichem `/workspace/scripts/download_qwen3_vl_model.py`.
+- Init-Restore 2026-04-30: Die kanonische `/workspace/init.sh` basiert wieder auf der kleinen funktionierenden `init(OG).sh`; die grosse Guard-/Heartbeat-/Lock-Version aus `init(fehler).sh ` soll nicht weiter aufgeblasen oder als Basis verwendet werden.
+- Minimal in `init.sh` behalten: Non-Interactive-Env, stabiler HF-Downloader-Default, `HF_HUB_DISABLE_XET=1`, Director-Autostart per vorhandener `serve_director_llm.sh`, best-effort `chmod +x` und Start ueber `DIRECTOR_LLM_DAEMON=1 bash ...`.
+- Qwen3-VL-Setup gehoert nicht als grosser Shell-Block in `init.sh`; der optionale Download/Verify lebt in `/workspace/scripts/download_qwen3_vl_model.py`.
+- Qwen3-VL darf beim Init nur bei aktivem Schalter laden. `tools.config` fuehrt `Qwen3_VL_Review` explizit; opt-in ist `Qwen3_VL_Review=on` oder `Vision_Review_Model=on`.
 - Phase D ist umgesetzt: `ResultSummary.metadata.final_quality_verdict` ist der kanonische Abschlussvertrag fuer finale Output-Qualitaet.
 - Final Quality Verdict kombiniert technische `final.mp4`-Validation, Assembly-Metadata, selected scene outputs, Phase-C-`take_visual_review`, Phase-B2-Keyframe-Risiken, Subtitle-/Overlay-Metadata, Voice-/Music-Metadata und wenige Final-Frames.
 - Wenn kein echter VLM-Check fuer Final-Frames laeuft, bleibt der Verdict bewusst eher `needs_review` als dass visuelle Qualitaet schoengeredet wird.
@@ -21,7 +53,7 @@
 - 2026-04-29 Init-/Download-Freeze: der reale Hänger lag im Z-Image-Turbo-HF-Snapshot; ein alter `python3`-Downloadprozess hielt eine HF-Lockdatei auf einem `.incomplete`-Blob, waehrend die Datei nicht weiter wuchs. Parallele Init-Laeufe warten dann hinter derselben Lockdatei und wirken wie ein weiterer Freeze.
 - `init.sh` muss parallele Downloader verhindern. Der aktuelle Pfad nutzt deshalb ein `flock`-Lock unter `/workspace/status/init.lock` und beendet einen zweiten Init-Lauf sofort mit Logmeldung statt still auf HF-Locks zu warten.
 - HF-Downloads im Init-Pfad muessen sichtbare Heartbeats, Gesamt-Timeout, Stall-Timeout und Retries haben. Ein reiner langer `timeout 3600` reicht nicht, weil ein Netzwerk-/Xet-Stall sonst lange wie ein eingefrorener Init wirkt.
-- Fuer den aktuellen Pod ist der stabile schnelle Primaerpfad: `huggingface_hub` mit `hf_transfer`, falls installiert, aber `HF_HUB_DISABLE_XET=1` als Default. Der Xet-Pfad war der konkret eingefrorene Pfad.
+- Fuer den aktuellen Pod ist der stabile Init-Pfad der normale `huggingface_hub`-Downloader ohne `hf_transfer`; `hf_transfer` bleibt nur ein expliziter Speed-Override. `HF_HUB_DISABLE_XET=1` bleibt Default.
 - HuggingFace `local_files_only=True` allein ist kein ausreichender Vollstaendigkeitsbeweis fuer sharded Modelle. Der Init-Skip-Check validiert jetzt zusaetzlich `*.index.json` gegen alle referenzierten Shards.
 - Diagnose-Modi duerfen keine falschen Ready-Flags setzen: `INIT_CHECK_ONLY=1` verlaesst den Init frueh, `INIT_SKIP_DOWNLOADS=1` markiert kein `zimage_ready` und kein `init_done`.
 - Director-Folgeabschluss 2026-04-29: Wenn der Director-Port nach einem Skip-Smoke down ist, reicht das nicht als Init-Fix-Beleg. Der echte Abschluss braucht das konfigurierte GGUF unter `/workspace/models/director/qwen3.6-35b-a3b/gguf/Qwen_Qwen3.6-35B-A3B-Q4_K_M.gguf`, `serve_director_llm.sh` als Startpfad, gruenes `/v1/models` und gruenes `scripts/check_director_llm.py`.
