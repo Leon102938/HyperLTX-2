@@ -6,6 +6,28 @@ Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E, 3A, 3B, 4A, 4B und
 - Kanonische Capability-Uebersicht: `/workspace/codex/CAPABILITY_MAP.md`
 
 ## Verifizierte Fakten
+- 2026-04-30 Tagesabschluss: CLI E2/E2.1/E2.2, Qwen3-VL-Isolation und erster Morning-Reset-Quality-Fix sind der gesicherte Arbeitsstand.
+- `quality-morning-reset-006` lief technisch erfolgreich (`success=True`, `final_phase=assembled`, `final.mp4` vorhanden) mit Director `llm_augmented`, LTX, Storyboard, Voice und Qwen3-VL real VLM.
+- `quality-morning-reset-006` ist visuell/qualitativ weiterhin failed: Scene 1 Fake-Text, Scene 2 Phone/Device-Risiko neben Glas, Scene 3 Split-Screen/Collage/Text/UI-Drift; zusaetzlich Qwen3-VL non-json/parser warning.
+- Kritischer offener Bug fuer morgen: rejected Take wurde selected, obwohl passed/needs_review Alternativen existieren koennen; Selection muss rejected Takes hart ausschliessen, wenn bessere Kandidaten vorhanden sind.
+- Restore-Pfad fuer naechsten Pod: Archiv nach `/workspace` entpacken, `bash /workspace/init.sh`, `bash /workspace/scripts/ensure_qwen3_vl_review_runtime.sh`, FastAPI/Director pruefen, dann erst neuer Qualitaetsrun.
+- 2026-04-30 erster echter Morning-Reset-Output-Qualitaetsfix umgesetzt: Visual Prompt Sanitizer plus Morning Reset Safe Motif Contract, ohne CLI-/Runtime-/Model-/Director-/Init-/Backend-Aenderungen.
+- Problem aus `quality-morning-reset-005`: Social-/Content-/UI-/Phone-Begriffe waren als Format-Metadaten gemeint, konnten aber als Bildinhalt in Prompts/Storyboard-Motive driften; Burned Subtitles bleiben ein separater Policy-/Config-Text-Konflikt.
+- Morning-Reset-Motive sind jetzt konkreter und sicherer: Vorhaenge/Fensterlicht, Wasserglas auf Holz, Hand am Fenstergriff/Vorhangstoff, Pflanzen/Stoff/Licht, ruhiges Atmen am Fenster; keine Smartphones, Screens, UI, Website/App, Papier, Logos oder Split-Screen/Collage-Motive.
+- `allowed_props` werden gegen Device-/UI-/Text-/Paper-Begriffe gesaeubert; `forbidden_props` enthalten diese Begriffe weiterhin hart.
+- PromptBuilder ersetzt positive `readable human action`-Formulierungen durch `clear human action` und fuegt nahe am Motiv Device-/UI-Verbote ein.
+- Storyboard-`effective_prompt` respektiert den Safe-Morning-Reset-Contract und wiederholt Verbote gegen phones/screens/UI/app layout/social media frame/webpage/device surfaces/split screen/collage.
+- Take-/Keyframe-Review bestraft positive Phone/Screen/UI/App/Website-Hinweise strenger; Qwen3-VL-Hinweise auf sichtbare Device-/UI-Risiken duerfen nicht als `passed` durchlaufen.
+- Plan-only Dry-Run `/workspace/agent_runs/quality-morning-reset-006-plan-dry-run` ist erstellt; positive Prompt-Verletzungen fuer phone/screen/ui/app/website/browser/social media frame: keine.
+- 2026-04-30 Phase E2.2 CLI Dashboard Polishing umgesetzt: Pipeline-Block nutzt keine doppelte `Video`-Zeile mehr, sondern `Video Backend`, `Vision Review`, `Render` und `Assembly`.
+- Vision-Review-Status ist im CLI-Dashboard jetzt eindeutiger und unterscheidet echte Qwen3-VL-Inferenz, Parser-Warnungen, fehlende Runtime und heuristischen Fallback.
+- Quality-Meldungen werden nach Quality Issues, Vision Runtime Warnings, Vision Review Warnings und Policy/Config Warnings gruppiert; `subtitle-mode=burn` bekommt einen expliziten Hinweis auf sichtbaren Text.
+- Scene Summary und Next Actions sind aussagekraeftiger; `quality-morning-reset-005` zeigt jetzt Real VLM True, qwen3_vl Parser Warning, Subtitle-Burn-Hinweis und passende Debug-/Rerun-Hinweise.
+- Auch Phase E2.2 blieb strikt CLI-only: keine Pipeline-/Quality-/Prompt-/Model-/Director-/Backend-/Init-Aenderungen.
+- 2026-04-30 Phase E2 CLI Dashboard umgesetzt: `scripts/agent_core_cli.py` ist weiterhin nur CLI-/Darstellungsschicht, kein Pipeline-/Model-/Director-/Quality-/Init-Umbau.
+- Standardausgabe ist jetzt dashboard-artig und kompakter: Run-Header, System/Mode, Progress, Current Step, Scene Summary, Quality Live, Success/Failure Dashboard und klare Next Actions.
+- `--inspect-run` nutzt die neue Summary-Ausgabe fuer vorhandene lokale Runs; in diesem Workspace fehlen die angefragten `quality-morning-reset-002/003`-Artefakte, daher wurde der Offline-Fehlerpfad ehrlich verifiziert.
+- Fehlerausgabe zeigt Root Cause aus Backend-Logtail, bekannte Pattern-Deutung und `NEXT DEBUG COMMAND` fuer das relevante `job.log`.
 - 2026-04-30 Final Backup/Handoff: Qwen3-VL-Review-Venv wird bewusst nicht archiviert, ist aber ueber `/workspace/scripts/ensure_qwen3_vl_review_runtime.sh` reproduzierbar.
 - `/workspace/codex/HANDOFF.md` dokumentiert Restore-Reihenfolge: Archiv entpacken, `bash /workspace/init.sh`, `bash /workspace/scripts/ensure_qwen3_vl_review_runtime.sh`, FastAPI/Director pruefen, dann `--inspect-run quality-morning-reset-003`.
 - Naechster Arbeitsschritt nach Restore ist echte Qualitaetsanalyse und Motiv-/Prompt-Feinschliff, keine Setup-/Dependency-Arbeit.

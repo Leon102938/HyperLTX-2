@@ -23,6 +23,15 @@ Eine kleine Director-/Brain-Schicht vor dem bestehenden Planner bauen, die Jobs 
 Den bereits vorbereiteten Director-Layer produktiv an ein echtes lokales Director-Modell anbinden, bevorzugt Qwen3.6-35B-A3B in praktikabler quantisierter Form als GGUF `Q4_K_M`, ohne Fake-Integration, ohne neuen Mega-Stack und mit sauberem Fallback auf den bisherigen regelbasierten Flow.
 
 ## Aktueller Operativer Fokus
+- Tagesabschluss/Backup ist der aktuelle Modus. Kein weiterer Feature-, Quality-, CLI-, Runtime- oder Init-Umbau in dieser Session.
+- Morgen genau ein technischer Fokus: rejected selected Take Bug und Hard Keyframe Visual Gate gegen Text/Phone/Split-Screen fixen; danach neuer Clean-Visual-Test.
+- Erster Morning-Reset-Qualitaetsfix nach Phase E2 ist abgeschlossen: Visual Prompt Sanitizer, Safe Morning Reset Motivbibliothek, allowed_props Cleanup, Storyboard-Prompt-Schutz und strengere Device-/UI-Review-Risiken.
+- Naechster echter Test ist `quality-morning-reset-006` mit `--subtitle-mode off`, Storyboard, Qwen3-VL und 2-3 Takes pro Szene; danach visuell beurteilen statt weitere Runtime-Arbeit zu machen.
+- Phase E2.2 CLI Dashboard Polishing ist abgeschlossen: keine doppelte Video-Zeile mehr, Vision Review klarer, Issues nach Quality/Vision/Config gruppiert, Subtitle-Burn-Hinweis und smartere Next Actions.
+- Naechster fachlicher Schritt bleibt: `quality-morning-reset-005` visuell anschauen und danach gezielten Prompt-/Motiv-Fix machen, nicht Pipeline oder Runtime umbauen.
+- Phase E2 CLI Dashboard / Produktionsansicht ist umgesetzt: Standardausgabe kompakter und dashboard-artig, `--inspect-run` nutzt die neue Summary, Fehlerausgabe zeigt Root Cause und Next Debug Command.
+- Fuer Phase E2 wurden keine Pipeline-/Quality-/Prompt-/Model-/Director-/Backend-/Init-Aenderungen gemacht; es ist ein reiner CLI-UX-Schritt in `scripts/agent_core_cli.py` plus Doku.
+- Naechster Schritt: echter Qualitaetsrun mit neuer CLI-Ausgabe und anschliessender visueller Analyse.
 - Abschluss/Backup fuer heute: finaler Arbeitsstand wird schlank archiviert, ohne Modelle/Venvs/Caches; Qwen3-VL-Venv ist per Ensure-Script reproduzierbar.
 - Nach Restore zuerst `HANDOFF.md` folgen. Der naechste fachliche Schritt ist echte Qualitaetsanalyse von `quality-morning-reset-003` und gezielter Motiv-/Prompt-Feinschliff.
 - Dependency-Isolation ist abgeschlossen: LTX bleibt in der globalen FastAPI-Runtime auf `transformers 4.52.4`, Qwen3-VL laeuft in `/workspace/venvs/qwen3-vl-review` als Subprocess.

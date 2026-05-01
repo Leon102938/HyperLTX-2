@@ -159,8 +159,19 @@ VISUAL_RISK_FORBIDDEN_TERMS = (
     "document",
     "page",
     "screen",
+    "phone",
+    "smartphone",
+    "mobile device",
     "ui",
     "interface",
+    "app",
+    "website",
+    "webpage",
+    "browser",
+    "dashboard",
+    "social media frame",
+    "split screen",
+    "collage",
     "logo",
     "label",
     "poster",
@@ -175,10 +186,13 @@ VISUAL_RISK_ACTION_PATTERNS = (
     r"\bhandwriting\b",
     r"\btyping\b.*\b(?:screen|ui|interface)\b",
     r"\breading\b.*\b(?:paper|notebook|document|page|screen)\b",
+    r"\b(?:holding|using|checking|scrolling)\b.*\b(?:phone|smartphone|mobile device|screen|app|website|ui|interface)\b",
 )
 VISUAL_RISK_PROMPT_PATTERNS = (
     r"\bvisible\s+(?:screen|ui|interface|text|logo|label|poster|sign)\b",
     r"\b(?:screen|ui|interface)\s+facing\s+(?:camera|viewer)\b",
+    r"\b(?:phone|smartphone|mobile device)\s+(?:beside|next to|on|in|near|facing|visible)\b",
+    r"\b(?:app|website|webpage|browser|dashboard|social media frame|split screen|collage)\b",
     r"\bopen\s+(?:notebook|document|page)\b",
     r"\b(?:paper|notebook|document|page)\s+(?:on|in|across)\s+(?:the\s+)?(?:desk|table|counter)\b",
     r"\bwriting\s+on\s+(?:paper|a\s+notebook|the\s+notebook|a\s+document|the\s+page)\b",
@@ -1274,8 +1288,9 @@ def _positive_visual_risk_hits(value: str) -> list[str]:
     if not lowered:
         return []
     lowered = re.sub(r"\bhidden\s+(?:logos?|labels?|device faces?|displays?|screens?|interfaces?)\b", " ", lowered)
-    lowered = re.sub(r"\bno\s+(?:readable\s+|visible\s+)?(?:text|paper|notebooks?|documents?|pages?|screens?|ui|interfaces?|logos?|labels?|posters?|signs?)\b", " ", lowered)
-    lowered = re.sub(r"\bwithout\s+(?:readable\s+|visible\s+)?(?:text|paper|notebooks?|documents?|pages?|screens?|ui|interfaces?|logos?|labels?|posters?|signs?)\b", " ", lowered)
+    risk_terms = r"text|paper|notebooks?|documents?|pages?|screens?|phones?|smartphones?|mobile devices?|ui|interfaces?|apps?|websites?|webpages?|browsers?|dashboards?|logos?|labels?|posters?|signs?|social media frames?|split screens?|collages?"
+    lowered = re.sub(rf"\bno\s+(?:readable\s+|visible\s+)?(?:{risk_terms})\b", " ", lowered)
+    lowered = re.sub(rf"\bwithout\s+(?:readable\s+|visible\s+)?(?:{risk_terms})\b", " ", lowered)
     return [term for term in VISUAL_RISK_FORBIDDEN_TERMS if re.search(rf"\b{re.escape(term)}s?\b", lowered)]
 
 
@@ -1408,6 +1423,26 @@ def _evaluate_take_visual_review_qwen3_vl(
                 "summary": str(payload.get("summary") or "qwen3_vl take visual review"),
             }
         )
+        qwen_risk_text = " ".join(
+            [
+                *(str(item) for item in result.get("issues") or []),
+                *(str(item) for item in result.get("warnings") or []),
+                str(result.get("summary") or ""),
+            ]
+        )
+        qwen_hits = _positive_visual_risk_hits(qwen_risk_text)
+        device_hits = [
+            hit
+            for hit in qwen_hits
+            if hit in {"phone", "smartphone", "mobile device", "screen", "ui", "interface", "app", "website", "webpage", "browser", "dashboard"}
+        ]
+        if device_hits and result.get("take_visual_review_status") == "passed":
+            result["take_visual_review_status"] = "needs_review"
+            result["postability_score"] = min(float(result.get("postability_score", 0.5)), 0.62)
+            result["warnings"] = _unique_strings(
+                list(result.get("warnings") or [])
+                + [f"qwen3_vl reported visible device/UI risk: {', '.join(_unique_strings(device_hits))}"]
+            )
         return result
     except Exception as exc:
         result = dict(heuristic)

@@ -489,8 +489,8 @@ class ProductionPlanner:
             [
                 "clean unlabeled surfaces",
                 "window-lit daily routine",
-                "readable human action without text props",
-                "plain everyday props with hidden logos and covers",
+                "clear human action without text props",
+                "plain everyday props with no logos, labels, phones, screens, or device surfaces",
             ],
         )
         guarded.style_lock.avoid = self._merge_unique_texts(
@@ -501,9 +501,9 @@ class ProductionPlanner:
             list(guarded.prompt_guidance.prompt_rules),
             [
                 "for short social tip videos, prefer daily routine b-roll over literal instruction props",
-                "avoid readable text surfaces, writing actions, and interface-led compositions",
+                "avoid readable text surfaces, writing actions, phones, screens, UI, websites, apps, and interface-led compositions",
                 "keep desks, tables, and hands in neutral non-writing actions",
-                "prefer calm repeatable social-safe motifs like curtains, water, stretch, window light, kitchen routine, and clean b-roll",
+                "prefer calm repeatable safe motifs like curtains, water, window fabric, clear glass, plants, soft bedding, breathing by a window, kitchen routine, and clean b-roll",
             ],
         )
         guarded.prompt_guidance.negative_cues = self._merge_unique_texts(
@@ -555,7 +555,7 @@ class ProductionPlanner:
     def _social_tip_style_identity(self, family: str) -> str:
         identities = {
             "morning_reset": "Quiet portrait morning routine in soft window light, tidy room, calm human action, no readable props",
-            "focus_break": "Calm portrait desk reset in soft daylight, uncluttered workspace turned away from displays, readable body movement, no readable props",
+            "focus_break": "Calm portrait desk reset in soft daylight, uncluttered workspace turned away from displays, clear body movement, no readable props",
             "kitchen_reset": "Clean portrait kitchen routine in soft daylight, uncluttered counter, tactile household detail, no readable packaging",
             "movement_reset": "Simple portrait movement reset in soft window light, uncluttered room, readable body action, no readable props",
         }
@@ -574,16 +574,16 @@ class ProductionPlanner:
         motif_library: dict[str, list[dict[str, object]]] = {
             "morning_reset": [
                 {
-                    "hook_focus": "person waking up in a tidy room, opening curtains, soft window light, gentle stretch, calm morning atmosphere",
-                    "visual_goal": "show a clean morning reset through window light, tidy bedding, and one readable human action with no text-bearing props",
-                    "shot_intent": "start with a broad readable wake-up moment, then guide the eye toward the curtains and the subject",
-                    "keywords": ["waking", "curtains", "window", "stretching", "tidy", "morning"],
+                    "hook_focus": "person opens bright curtains at a window, soft morning light, clear silhouette, tidy room",
+                    "visual_goal": "show a clean morning reset through window light, tidy bedding, fabric movement, and one clear human action with no text-bearing props",
+                    "shot_intent": "start with a broad clear wake-up moment, then guide the eye toward the curtain fabric and the subject",
+                    "keywords": ["curtains", "window", "sunlight", "bedding", "plant", "morning"],
                 },
                 {
-                    "hook_focus": "plain phone placed face down beside a clear glass of water on a clean wooden table, natural daylight, hidden display, no visible logos",
-                    "visual_goal": "make the habit instantly legible with clean tabletop b-roll, water, and one neutral hand action without labels or notes",
-                    "shot_intent": "favor a medium close everyday action shot with simple object choreography and no readable surfaces",
-                    "keywords": ["phone", "water", "glass", "table", "daylight", "routine"],
+                    "hook_focus": "hand sets a single clear water glass on a plain wooden table, natural daylight, empty surrounding surface",
+                    "visual_goal": "make the habit visually clear with clean tabletop b-roll, water, one neutral hand action, and no labels, notes, or device surfaces",
+                    "shot_intent": "favor a close everyday action shot with clear glass, wood grain, hand movement, and a clean unlabeled tabletop",
+                    "keywords": ["water", "glass", "wooden table", "hand", "daylight", "routine"],
                 },
                 {
                     "hook_focus": "quiet kitchen routine with kettle steam, ceramic mug, fruit bowl, clean counter, soft morning daylight, no packaging front faces",
@@ -592,10 +592,10 @@ class ProductionPlanner:
                     "keywords": ["kitchen", "kettle", "mug", "steam", "counter", "morning"],
                 },
                 {
-                    "hook_focus": "person by a bright window with tea or coffee, slow breathing, tidy room, serene morning light",
-                    "visual_goal": "land on the clearest calm payoff through window light, relaxed posture, and one simple lifestyle prop without text",
-                    "shot_intent": "resolve with a wide or hero composition that feels calm, open, and easy to read at a glance",
-                    "keywords": ["window", "coffee", "calm", "payoff", "morning", "serene"],
+                    "hook_focus": "person stands or sits near an open bright window, slow breathing, tidy room, soft light, empty hands",
+                    "visual_goal": "land on the clearest calm payoff through window light, relaxed posture, plant or plain cup, and no text or device surfaces",
+                    "shot_intent": "resolve with a wide clean composition that feels calm and open with one continuous lifestyle frame",
+                    "keywords": ["window", "breathing", "plant", "curtain", "morning", "serene"],
                 },
             ],
             "focus_break": [

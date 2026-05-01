@@ -7,10 +7,50 @@ from agent_core.schemas import DirectorOutput, JobInput, SceneIntent, StyleLock,
 
 class PromptBuilder:
     BUILDER_VERSION = "phaseA_scene_world_contract_v2"
+    VISUAL_META_TERMS = (
+        "social clip",
+        "social-clip",
+        "reel",
+        "reels",
+        "tiktok",
+        "youtube",
+        "post",
+        "content",
+        "content machine",
+        "website",
+        "webpage",
+        "app",
+        "ui",
+        "interface",
+        "screen",
+        "phone",
+        "smartphone",
+        "mobile device",
+        "feed",
+        "browser",
+        "dashboard",
+    )
+    DEVICE_UI_FORBIDDEN_VISUALS = [
+        "phones",
+        "smartphones",
+        "mobile devices",
+        "screens",
+        "user interface",
+        "app layout",
+        "social media frame",
+        "webpage",
+        "website",
+        "browser",
+        "dashboard",
+        "device surfaces",
+        "split screen",
+        "collage",
+        "screenshot aesthetic",
+    ]
     BASE_FORBIDDEN_VISUALS = [
         "readable text",
         "handwriting",
-        "paper pages",
+            "paper pages",
         "notebooks",
         "documents",
         "screens or UI facing camera",
@@ -22,7 +62,8 @@ class PromptBuilder:
         "typography",
         "glyphs",
         "letters",
-        "numbers",
+            "numbers",
+            *DEVICE_UI_FORBIDDEN_VISUALS,
     ]
     SOCIAL_FORBIDDEN_VISUALS = [
         "paper",
@@ -40,7 +81,8 @@ class PromptBuilder:
         "glyphs",
         "letters",
         "numbers",
-        "office desk paper drift",
+            "office desk paper drift",
+            *DEVICE_UI_FORBIDDEN_VISUALS,
     ]
 
     def build_global_prompt(self, job: JobInput, director_output: DirectorOutput) -> str:
@@ -74,6 +116,7 @@ class PromptBuilder:
         clauses = [
             f"WORLD / SETTING: {scene_world_contract['environment']}. Visible anchor: {scene_world_contract['visual_anchor']}.",
             f"SUBJECT / ACTION: {scene_world_contract['visible_subject']}; {scene_world_contract['action']}. One clear human or subject action only.",
+            "MOTIF SAFETY: no phones, no screens, no user interface, no app layout, no social media frame, no webpage, no device surfaces.",
             f"CAMERA / LIGHTING: {scene_world_contract['camera']}. Lighting: {scene_world_contract['lighting']}.",
             f"STYLE LOCK: {scene_world_contract['style_continuity']}. Palette: {style_lock.color_palette}. Texture: {style_lock.texture}.",
             f"ALLOWED VISUALS: {', '.join(scene_world_contract['allowed_props'])}.",
@@ -186,6 +229,15 @@ class PromptBuilder:
                 "no notebook",
                 "no document pages",
                 "no screens or UI",
+                "no phones",
+                "no smartphones",
+                "no user interface",
+                "no app layout",
+                "no social media frame",
+                "no webpage",
+                "no device surfaces",
+                "no split screen",
+                "no collage",
                 "no labels",
                 "no logos",
                 "no posters",
@@ -199,17 +251,18 @@ class PromptBuilder:
         )
         storyboard_negative = (
             "No readable text, no handwriting, no paper, no notebook, no document pages, "
-            "no screens or UI facing camera, no labels, no logos, no posters, no signs, no typography, "
+            "no phones, no screens, no user interface, no app layout, no social media frame, no webpage, "
+            "no device surfaces, no split screen, no collage, no labels, no logos, no posters, no signs, no typography, "
             "no glyphs, no letters, no numbers; use clean unlabeled surfaces only."
         )
 
         clauses = [
-            f"Scene keyframe: {self._short_clause(contract.get('environment') or scene_prompt_text, 180)}.",
-            f"Visible subject/action: {self._short_clause(contract.get('visible_subject'), 140)}; {self._short_clause(contract.get('action'), 140)}.",
+            f"Scene keyframe: {self._sanitize_visual_text(self._short_clause(contract.get('environment') or scene_prompt_text, 180))}.",
+            f"Visible subject/action: {self._sanitize_visual_text(self._short_clause(contract.get('visible_subject'), 140))}; {self._sanitize_visual_text(self._short_clause(contract.get('action'), 140))}.",
             f"Variation: {self._short_clause(shot_type, 80)}; {self._short_clause(variation_intent, 140)}.",
             f"Framing: {self._short_clause(framing_hint, 120)}.",
             f"Camera/light: {self._short_clause(camera_style or contract.get('camera'), 140)}; {self._short_clause(camera_motion or contract.get('lighting'), 140)}.",
-            f"Allowed visuals: {', '.join(allowed_visuals)}.",
+            f"Allowed visuals: {', '.join(self._sanitize_allowed_props(allowed_visuals))}.",
             f"Forbidden visuals: {', '.join(forbidden_visuals)}.",
             f"Text risk policy: {contract.get('text_risk_policy') or storyboard_negative}.",
             "Single clean representative storyboard still, sharp composition, no motion blur, phone-readable subject silhouette.",
@@ -220,7 +273,7 @@ class PromptBuilder:
         if contract.get("social_format_rules"):
             clauses.append(f"Social format contract: {self._short_clause(contract['social_format_rules'], 220)}.")
         if candidate_prompt_text:
-            clauses.append(f"Candidate prompt source: {self._short_clause(candidate_prompt_text, 260)}.")
+            clauses.append(f"Candidate prompt source: {self._sanitize_visual_text(self._short_clause(candidate_prompt_text, 260))}.")
 
         prompt_text = self._join_clauses(clauses)
         return prompt_text, {
@@ -276,11 +329,11 @@ class PromptBuilder:
             )
 
         return {
-            "visible_subject": self._short_clause(scene_intent.hook_focus or description),
-            "visual_anchor": self._short_clause(scene_intent.visual_goal or description),
-            "environment": self._short_clause(description or scene_text or scene_intent.visual_goal),
-            "action": self._short_clause(scene_intent.shot_intent or scene_intent.hook_focus),
-            "allowed_props": allowed_props,
+            "visible_subject": self._sanitize_visual_text(self._short_clause(scene_intent.hook_focus or description)),
+            "visual_anchor": self._sanitize_visual_text(self._short_clause(scene_intent.visual_goal or description)),
+            "environment": self._sanitize_visual_text(self._short_clause(description or scene_text or scene_intent.visual_goal)),
+            "action": self._sanitize_visual_text(self._short_clause(scene_intent.shot_intent or scene_intent.hook_focus)),
+            "allowed_props": self._sanitize_allowed_props(allowed_props),
             "forbidden_props": forbidden_props,
             "lighting": self._short_clause(style_lock.lighting),
             "camera": self._short_clause(style_lock.camera_language),
@@ -343,10 +396,11 @@ class PromptBuilder:
                     "plain everyday props",
                     "window light",
                     "human movement",
-                    "hidden device faces",
+                    "clear glass",
+                    "plain fabric",
                 ]
             )
-        return self._unique_terms(values, limit=10) or ["clear subject", "clean environment", "controlled props"]
+        return self._sanitize_allowed_props(self._unique_terms(values, limit=10)) or ["clear subject", "clean environment", "controlled props"]
 
     def _forbidden_visuals(self, *, style_lock: StyleLock, director_output: DirectorOutput) -> list[str]:
         values = [
@@ -374,6 +428,56 @@ class PromptBuilder:
             if len(result) >= limit:
                 break
         return result
+
+    @classmethod
+    def _sanitize_allowed_props(cls, values: list[Any]) -> list[str]:
+        return [
+            cls._sanitize_visual_text(normalized)
+            for value in values
+            if (normalized := " ".join(str(value).split()).strip())
+            and not cls._contains_visual_meta_term(normalized)
+        ]
+
+    @classmethod
+    def _sanitize_visual_text(cls, value: Any) -> str:
+        text = " ".join(str(value or "").split())
+        if not text:
+            return ""
+        replacements = {
+            "readable human action": "clear human action",
+            "readable body movement": "clear body movement",
+            "readable stretch": "clear stretch",
+            "readable stand-up": "clear stand-up",
+            "readable wake-up": "clear wake-up",
+            "readable depth separation": "clear depth separation",
+            "readable at a glance": "clear at a glance",
+            "phone size": "small portrait frame",
+            "no phone beside it": "empty surrounding surface",
+            "no phone in hand": "empty hands",
+            "no phones, no screens, no ui": "clean device-free composition",
+            "no phone, no screen, no paper, no labels": "clean unlabeled tabletop",
+        }
+        for source, target in replacements.items():
+            text = text.replace(source, target)
+            text = text.replace(source.title(), target)
+        text = cls._remove_visual_meta_terms(text)
+        text = " ".join(text.split(" ,")).replace(" ,", ",")
+        return text.strip(" ,.;") or "clean daily routine moment"
+
+    @classmethod
+    def _remove_visual_meta_terms(cls, text: str) -> str:
+        cleaned = text
+        for term in sorted(cls.VISUAL_META_TERMS, key=len, reverse=True):
+            cleaned = __import__("re").sub(rf"\b{__import__('re').escape(term)}s?\b", " ", cleaned, flags=__import__("re").IGNORECASE)
+        cleaned = __import__("re").sub(r"\s+", " ", cleaned)
+        return cleaned.strip()
+
+    @classmethod
+    def _contains_visual_meta_term(cls, text: str) -> bool:
+        import re
+
+        lowered = text.lower()
+        return any(re.search(rf"\b{re.escape(term)}s?\b", lowered) for term in cls.VISUAL_META_TERMS)
 
     @staticmethod
     def _short_clause(value: Any, limit: int = 220) -> str:

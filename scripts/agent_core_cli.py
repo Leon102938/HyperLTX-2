@@ -197,6 +197,77 @@ def _short_text(value: Any, limit: int = 120) -> str:
     return text[: max(0, limit - 3)] + "..."
 
 
+def short_prompt(text: Any, max_len: int = 90) -> str:
+    return _short_text(text, max_len) or "-"
+
+
+def format_status_icon(status: Any) -> str:
+    value = str(status or "").lower()
+    if value in {"success", "succeeded", "done", "completed", "passed", "assembled", "created"}:
+        return "[✓]"
+    if value in {"running", "in_progress", "processing", "submitted"}:
+        return "[>]"
+    if value in {"failed", "error", "rejected"}:
+        return "[x]"
+    if value in {"needs_review", "warning", "warn"}:
+        return "[!]"
+    if value in {"waiting", "pending", "planned", "queued", "skipped"}:
+        return "[-]"
+    return "[-]"
+
+
+def _plain_icon(status: Any) -> str:
+    value = str(status or "").lower()
+    if value in {"success", "succeeded", "done", "completed", "passed", "assembled", "created", "enabled", "true"}:
+        return "✓"
+    if value in {"failed", "error", "rejected", "false", "disabled"}:
+        return "x"
+    if value in {"needs_review", "warning", "warn"}:
+        return "!"
+    return "-"
+
+
+def _line(label: str, value: Any, width: int = 13) -> str:
+    text = "-" if value is None or value == "" else str(value)
+    return f"  {label:<{width}} {text}"
+
+
+def print_box_header(title: str, rows: list[tuple[str, Any]] | None = None) -> None:
+    width = 60
+    print("╭" + "─" * width + "╮")
+    print("│ " + str(title).ljust(width - 1) + "│")
+    if rows:
+        print("├" + "─" * width + "┤")
+        for label, value in rows:
+            body = f"{label:<10} {str(value or '-')}"
+            print("│ " + body[: width - 1].ljust(width - 1) + "│")
+    print("╰" + "─" * width + "╯")
+
+
+def format_file_size(path: str | Path | None) -> str:
+    if not path:
+        return "unknown"
+    try:
+        p = Path(path)
+        if not p.is_file():
+            return "unknown"
+        size = p.stat().st_size
+    except Exception:
+        return "unknown"
+    if size >= 1024 * 1024:
+        return f"{size / (1024 * 1024):.1f} MB"
+    if size >= 1024:
+        return f"{size / 1024:.1f} KB"
+    return f"{size} B"
+
+
+def _first_present(*values: Any) -> Any:
+    for value in values:
+        if value is not None and value != "":
+            return value
+    return None
+
+
 def load_json_safe(path: str | Path | None) -> dict[str, Any]:
     if not path:
         return {}
@@ -245,23 +316,42 @@ def _local_run_files(job_id: str | None, result: dict[str, Any] | None = None) -
 def summarize_job_payload(payload: dict[str, Any], base_url: str) -> None:
     job = payload.get("job") or {}
     metadata = job.get("metadata") or {}
-    print("JOB START")
-    print(f"- job_id: {job.get('job_id')}")
-    if job.get("idea"):
-        print(f"- idea: {_short_text(job.get('idea'))}")
-    if job.get("script"):
-        print(f"- script: {_short_text(job.get('script'))}")
-    print(f"- duration/resolution/orientation: {job.get('duration_sec', 'auto')}s / {job.get('resolution')} / {job.get('orientation')}")
-    print(f"- flags: voice={job.get('use_voice')} storyboard={job.get('use_storyboard')} music={job.get('use_music')} subtitles={metadata.get('subtitle_mode')}")
-    print(f"- takes/variations: takes={metadata.get('takes_per_scene', 'auto')} variations={metadata.get('variations_per_scene', 'auto')}")
-    print(
-        "- vision_review: "
-        f"enabled={metadata.get('vision_review_enabled', 'default')} "
-        f"provider={metadata.get('vision_review_provider', 'default')} "
-        f"model_dir={_short_text(metadata.get('vision_review_model_dir', 'default'), 80)} "
-        f"max_frames={metadata.get('vision_review_max_frames', 'default')}"
+    duration = job.get("duration_sec")
+    duration_text = f"{duration:g}s" if isinstance(duration, (int, float)) else "auto"
+    format_text = f"{job.get('orientation')} {job.get('resolution')} · {duration_text}"
+    if metadata.get("fps"):
+        format_text += f" · {metadata.get('fps')}fps"
+    mode_parts = []
+    if job.get("use_storyboard"):
+        mode_parts.append("Storyboard")
+    if job.get("use_voice"):
+        mode_parts.append("Voice")
+    provider = metadata.get("vision_review_provider")
+    if metadata.get("vision_review_enabled") or provider:
+        mode_parts.append(f"{provider or 'Vision'} Review")
+    if not mode_parts:
+        mode_parts.append("Video")
+    prompt = job.get("idea") or job.get("script") or job.get("style")
+    print_box_header(
+        "CONTENT MASCHINE RUN",
+        [
+            ("Job", job.get("job_id")),
+            ("Format", format_text),
+            ("Mode", " + ".join(mode_parts)),
+            ("Prompt", short_prompt(prompt, 46)),
+            ("Started", datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")),
+        ],
     )
-    print(f"- api: {base_url}")
+    print()
+    print("SYSTEM / MODE")
+    print(_line("API", f"{_plain_icon('enabled')} {base_url}"))
+    print(_line("Director", "pending · local Qwen3.6 if available"))
+    print(_line("Voice", f"{_plain_icon(job.get('use_voice'))} {'enabled' if job.get('use_voice') else 'disabled'} · {job.get('voice_id', 'none')}"))
+    print(_line("Storyboard", f"{_plain_icon(job.get('use_storyboard'))} {'enabled' if job.get('use_storyboard') else 'disabled'}"))
+    print(_line("Video", f"{job.get('pipeline_preference', 'auto')}"))
+    print(_line("Vision Review", f"{metadata.get('vision_review_provider', 'default')} · enabled={metadata.get('vision_review_enabled', 'default')}"))
+    print(_line("Music", f"{_plain_icon(job.get('use_music'))} {'enabled' if job.get('use_music') else 'disabled'}"))
+    print(_line("Subtitles", metadata.get("subtitle_mode", "off")))
 
 
 def _extract_director_summary(result: dict[str, Any], state: dict[str, Any], takes: dict[str, Any]) -> dict[str, Any]:
@@ -304,6 +394,31 @@ def _print_director_summary(summary: dict[str, Any]) -> None:
         parts.append(f"fallback={summary['director_fallback_reason']}")
     if parts:
         print("Director: " + " ".join(parts))
+
+
+def summarize_system_mode(payload: dict[str, Any], state: dict[str, Any], takes: dict[str, Any], result: dict[str, Any], base_url: str | None = None) -> list[tuple[str, str]]:
+    steps = state.get("steps") or {}
+    director = _extract_director_summary(result, state, takes)
+    director_bits = []
+    if director.get("director_mode"):
+        director_bits.append(str(director.get("director_mode")))
+    if director.get("director_llm_model"):
+        director_bits.append(str(director.get("director_llm_model")))
+    elif director.get("director_llm_active") is not None:
+        director_bits.append("llm active" if director.get("director_llm_active") else "fallback")
+
+    voice = steps.get("voice") or {}
+    storyboard = steps.get("storyboard") or {}
+    video = steps.get("video") or {}
+    vision_icon, vision_text = _vision_review_status(result)
+    return [
+        ("API", f"{_plain_icon('enabled')} {base_url or DEFAULT_BASE_URL}"),
+        ("Director", f"{_plain_icon('enabled' if director_bits else 'pending')} {' · '.join(director_bits) if director_bits else 'pending'}"),
+        ("Voice", f"{_plain_icon(voice.get('status', 'pending'))} {voice.get('status', 'pending')} · {voice.get('backend_name', 'qwen_tts')}"),
+        ("Storyboard", f"{_plain_icon(storyboard.get('status', 'pending'))} {storyboard.get('status', 'pending')} · {storyboard.get('backend_name', 'zimage_storyboard')}"),
+        ("Video Backend", f"{_plain_icon(video.get('status', 'pending'))} {video.get('backend_name') or 'LTX-2.3'}"),
+        ("Vision Review", f"{vision_icon} {vision_text}"),
+    ]
 
 
 def _step_line(name: str, step: dict[str, Any]) -> str:
@@ -375,6 +490,153 @@ def _take_lines(takes: dict[str, Any], state: dict[str, Any], result: dict[str, 
     return lines
 
 
+def _all_scene_outputs(takes: dict[str, Any], state: dict[str, Any], result: dict[str, Any]) -> list[dict[str, Any]]:
+    scenes: list[dict[str, Any]] = []
+    seen: set[Any] = set()
+    for scene in _iter_scene_outputs(takes, state, result):
+        key = scene.get("scene_id") or len(scenes)
+        if key in seen:
+            continue
+        seen.add(key)
+        scenes.append(scene)
+    return scenes
+
+
+def _review_status(take: dict[str, Any]) -> str:
+    review = take.get("take_visual_review") or take.get("metadata", {}).get("take_visual_review") or {}
+    return str(take.get("take_visual_review_status") or take.get("review_status") or review.get("take_visual_review_status") or take.get("status") or "pending")
+
+
+def extract_scene_progress(state: dict[str, Any], takes: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
+    scenes = _all_scene_outputs(takes, state, result)
+    total_scenes = len(scenes) or None
+    total_takes = 0
+    done_takes = 0
+    running_scene = None
+    running_take = None
+    selected = 0
+    counts = {"passed": 0, "needs_review": 0, "rejected": 0, "failed": 0, "pending": 0}
+    for index, scene in enumerate(scenes, start=1):
+        if scene.get("selected_take_id"):
+            selected += 1
+        for take_index, take in enumerate(scene.get("takes") or [], start=1):
+            total_takes += 1
+            status = str(take.get("status") or "pending")
+            review_status = _review_status(take)
+            bucket = review_status if review_status in counts else status
+            if bucket not in counts:
+                bucket = "pending"
+            counts[bucket] += 1
+            if status in {"succeeded", "completed", "failed", "rejected"} or review_status in {"passed", "needs_review", "rejected", "failed"}:
+                done_takes += 1
+            if running_take is None and status in {"running", "processing", "submitted"}:
+                running_scene = index
+                running_take = take_index
+    return {
+        "scene_count": total_scenes,
+        "take_count": total_takes or None,
+        "done_takes": done_takes,
+        "running_scene": running_scene,
+        "running_take": running_take,
+        "selected": selected,
+        "counts": counts,
+        "scenes": scenes,
+    }
+
+
+def extract_current_step(status: dict[str, Any], state: dict[str, Any], takes: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
+    steps = state.get("steps") or {}
+    phase = status.get("current_phase") or state.get("current_phase") or result.get("final_phase") or "unknown"
+    step = steps.get(str(phase)) if isinstance(steps.get(str(phase)), dict) else {}
+    if not step:
+        for name in ("voice", "storyboard", "music", "video"):
+            candidate = steps.get(name)
+            if isinstance(candidate, dict) and candidate.get("status") in {"running", "processing", "submitted"}:
+                phase = name
+                step = candidate
+                break
+    progress = extract_scene_progress(state, takes, result)
+    return {
+        "step": phase,
+        "status": status.get("status") or step.get("status") or state.get("status"),
+        "scene": progress.get("running_scene"),
+        "scene_count": progress.get("scene_count"),
+        "take": progress.get("running_take"),
+        "take_count": progress.get("take_count"),
+        "backend": step.get("backend_name") or ("LTX-2.3" if phase == "video" else None),
+        "backend_job_id": step.get("backend_job_id"),
+        "mode": (step.get("details") or {}).get("mode") or (step.get("params") or {}).get("mode"),
+        "prompt": _first_present((step.get("params") or {}).get("prompt"), status.get("status_summary"), result.get("message")),
+    }
+
+
+def render_progress_block(status: dict[str, Any], state: dict[str, Any], takes: dict[str, Any], result: dict[str, Any], *, elapsed: float | None = None, quiet: bool = False) -> None:
+    steps = state.get("steps") or {}
+    progress = extract_scene_progress(state, takes, result)
+    print("PROGRESS")
+    validate_status = "succeeded" if state or result else status.get("status", "pending")
+    print(f"  {format_status_icon(validate_status)} Validate job")
+    director = _extract_director_summary(result, state, takes)
+    director_detail = director.get("director_mode") or "pending"
+    print(f"  {format_status_icon('succeeded' if director else 'pending')} Director plan        {director_detail}")
+    for name, label in (("voice", "Voice"), ("storyboard", "Storyboard"), ("music", "Music"), ("video", "Video render")):
+        step = steps.get(name) if isinstance(steps.get(name), dict) else {}
+        if not step and name == "music":
+            continue
+        detail = []
+        if step.get("duration_sec") is not None:
+            detail.append(f"{step.get('duration_sec')}s")
+        if step.get("backend_name"):
+            detail.append(str(step.get("backend_name")))
+        if name == "video" and progress.get("scene_count"):
+            if progress.get("running_scene"):
+                detail.append(f"scene {progress.get('running_scene')}/{progress.get('scene_count')}")
+            if progress.get("running_take") and progress.get("take_count"):
+                detail.append(f"take {progress.get('running_take')}/{progress.get('take_count')}")
+        if elapsed is not None and step.get("status") in {"running", "processing", "submitted"}:
+            detail.append(f"{format_elapsed(elapsed)} elapsed")
+        print(f"  {format_status_icon(step.get('status', 'pending'))} {label:<20} {' · '.join(detail) if detail else step.get('status', 'pending')}")
+    if quiet:
+        return
+    print()
+    current = extract_current_step(status, state, takes, result)
+    print("CURRENT")
+    print(_line("Step", current.get("step")))
+    scene_text = f"{current.get('scene')}/{current.get('scene_count')}" if current.get("scene") else "-"
+    take_text = f"{current.get('take')}/{current.get('take_count')}" if current.get("take") else "-"
+    print(_line("Scene", scene_text))
+    print(_line("Take", take_text))
+    print(_line("Backend", current.get("backend")))
+    print(_line("Mode", current.get("mode") or "running"))
+    print(_line("Prompt", short_prompt(current.get("prompt"), 84)))
+
+
+def render_scene_summary(state: dict[str, Any], takes: dict[str, Any], result: dict[str, Any], *, verbose: bool = False) -> None:
+    scenes = _all_scene_outputs(takes, state, result)
+    if not scenes:
+        return
+    print("SCENES")
+    for index, scene in enumerate(scenes, start=1):
+        title = scene.get("title") or scene.get("scene_title") or scene.get("scene_id") or f"Scene {index}"
+        selected = scene.get("selected_take_id")
+        selection = scene.get("selection") or {}
+        suffix = f" · selected {selected}" if selected else ""
+        if selection.get("technical_selection_status"):
+            suffix += f" · {selection.get('technical_selection_status')}"
+        print(f"  Scene {index} · {title}{suffix}")
+        keyframe = scene.get("selected_keyframe") or scene.get("keyframe") or {}
+        key_status = "passed" if keyframe else scene.get("keyframe_status", "waiting")
+        print(f"    Keyframe     {_plain_icon(key_status)} {key_status}")
+        for take_index, take in enumerate((scene.get("takes") or [])[: 8 if verbose else 4], start=1):
+            take_id = take.get("take_id") or f"take {take_index}"
+            status = _review_status(take)
+            score = take.get("postability_score") or take.get("metadata", {}).get("postability_score")
+            score_text = f" · score {score}" if score is not None else ""
+            selected_text = " · selected" if selected and take_id == selected else ""
+            print(f"    Take {take_index:<2}     {_plain_icon(status)} {status}{selected_text}{score_text}")
+    print()
+
+
 def _extract_quality_verdict(result: dict[str, Any]) -> dict[str, Any]:
     metadata = result.get("metadata") or {}
     verdict = metadata.get("final_quality_verdict")
@@ -418,6 +680,249 @@ def _print_quality_summary(result: dict[str, Any]) -> None:
         print(f"- real_vlm_inference_used: {real_vlm}")
 
 
+def _real_vlm_from_verdict(verdict: dict[str, Any]) -> bool | None:
+    frame_review = verdict.get("final_frame_review") or {}
+    if not isinstance(frame_review, dict) or not frame_review:
+        return None
+    if frame_review.get("real_vlm_inference_used") is not None:
+        return bool(frame_review.get("real_vlm_inference_used"))
+    provider = frame_review.get("provider")
+    warnings = [str(item).lower() for item in frame_review.get("warnings") or []]
+    return provider == "qwen3_vl" and not any(
+        marker in warning
+        for warning in warnings
+        for marker in ("skipped", "unavailable", "failed", "model dir not ready", "not recognized")
+    )
+
+
+def _all_quality_messages(verdict: dict[str, Any]) -> list[str]:
+    return [str(item) for item in list(verdict.get("main_issues") or []) + list(verdict.get("warnings") or [])]
+
+
+def _quality_message_category(message: str) -> str:
+    text = message.lower()
+    if "subtitle" in text or "burned subtitles" in text:
+        return "policy"
+    if "qwen3_vl inference failed" in text or "python not found" in text or "model type" in text or "runtime missing" in text:
+        return "vision_runtime"
+    if "non-json" in text or "json" in text or "parser" in text:
+        return "vision_review"
+    return "quality"
+
+
+def _group_quality_messages(verdict: dict[str, Any]) -> dict[str, list[str]]:
+    groups = {"quality": [], "vision_review": [], "vision_runtime": [], "policy": []}
+    for message in _all_quality_messages(verdict):
+        groups[_quality_message_category(message)].append(message)
+    return groups
+
+
+def _vision_review_status(result: dict[str, Any]) -> tuple[str, str]:
+    verdict = _extract_quality_verdict(result)
+    frame_review = verdict.get("final_frame_review") if isinstance(verdict, dict) else {}
+    provider = _first_present(
+        (frame_review or {}).get("provider") if isinstance(frame_review, dict) else None,
+        verdict.get("visual_review_provider") if isinstance(verdict, dict) else None,
+        result.get("metadata", {}).get("vision_review_provider") if isinstance(result.get("metadata"), dict) else None,
+        "heuristic",
+    )
+    messages = " ".join(_all_quality_messages(verdict)).lower() if verdict else ""
+    real_vlm = _real_vlm_from_verdict(verdict) if verdict else None
+    if provider == "qwen3_vl" and ("python not found" in messages or "model type" in messages or "runtime missing" in messages or "inference failed" in messages):
+        return "✗", "qwen3_vl · runtime missing"
+    if provider == "qwen3_vl" and ("non-json" in messages or "parser" in messages):
+        return "⚠", "qwen3_vl · parser warning"
+    if provider == "qwen3_vl" and real_vlm is True:
+        return "✓", "qwen3_vl · real inference used"
+    if provider == "qwen3_vl" and real_vlm is False:
+        return "⚠", "qwen3_vl · no real inference"
+    if provider and provider != "heuristic":
+        return "-", str(provider)
+    return "-", "heuristic"
+
+
+def _selected_take_for_scene(scene: dict[str, Any]) -> dict[str, Any]:
+    selected = scene.get("selected_take_id")
+    for take in scene.get("takes") or []:
+        if take.get("take_id") == selected:
+            return take
+    return {}
+
+
+def _take_review(take: dict[str, Any]) -> dict[str, Any]:
+    review = take.get("take_visual_review") or take.get("metadata", {}).get("take_visual_review") or {}
+    return review if isinstance(review, dict) else {}
+
+
+def _format_score(score: Any) -> str:
+    try:
+        return f"{float(score):.2f}"
+    except (TypeError, ValueError):
+        return "unknown"
+
+
+def _scene_icon(status: str, score: Any, marker: str) -> str:
+    try:
+        score_value = float(score)
+    except (TypeError, ValueError):
+        score_value = None
+    lowered = f"{status} {marker}".lower()
+    if "rejected" in lowered or "failed" in lowered or (score_value is not None and score_value < 0.4):
+        return "✗"
+    if "needs_review" in lowered or "warning" in lowered or "parser" in lowered or (score_value is not None and score_value < 0.8):
+        return "⚠"
+    return "✓"
+
+
+def _next_action_hints(verdict: dict[str, Any]) -> list[str]:
+    messages = " ".join(_all_quality_messages(verdict)).lower()
+    hints: list[str] = []
+    if "burned subtitles" in messages or "subtitle" in messages:
+        hints.append("Suggested rerun for clean visual test: use --subtitle-mode off or sidecar.")
+    if "non-json" in messages or "parser" in messages:
+        hints.append("Inspect qwen3_vl review warnings in takes.json; if frequent, improve subprocess JSON extraction later.")
+    if "final frame review rejected" in messages:
+        hints.append("Open final.mp4 and inspect the rejected scene/frame before changing prompts.")
+    if "selected take needs visual review" in messages:
+        hints.append("Consider --takes-per-scene 3 or tune the scene prompt/motif.")
+    deduped: list[str] = []
+    for hint in hints:
+        if hint not in deduped:
+            deduped.append(hint)
+    return deduped
+
+
+def render_quality_summary(result: dict[str, Any], state: dict[str, Any], takes: dict[str, Any], *, live: bool = False, verbose: bool = False) -> None:
+    verdict = _extract_quality_verdict(result)
+    progress = extract_scene_progress(state, takes, result)
+    counts = progress.get("counts") or {}
+    if live:
+        print("QUALITY LIVE")
+        print(_line("Selected takes", f"{counts.get('passed', 0)} passed · {counts.get('needs_review', 0)} review · {counts.get('rejected', 0) + counts.get('failed', 0)} rejected"))
+        provider = "pending"
+        if verdict:
+            frame_review = verdict.get("final_frame_review") or {}
+            provider = frame_review.get("provider") if isinstance(frame_review, dict) else provider
+        print(_line("Vision provider", provider or "pending"))
+        real_vlm = _real_vlm_from_verdict(verdict) if verdict else None
+        print(_line("Real VLM", "pending" if real_vlm is None else real_vlm))
+        print()
+        return
+    if not verdict:
+        return
+    print("QUALITY VERDICT")
+    print(_line("Status", verdict.get("final_quality_status", "unknown")))
+    print(_line("Score", verdict.get("final_postability_score", "unknown")))
+    real_vlm = _real_vlm_from_verdict(verdict)
+    print(_line("Real VLM", f"✓ {real_vlm}" if real_vlm is True else ("⚠ False" if real_vlm is False else "unknown")))
+    vision_icon, vision_text = _vision_review_status(result)
+    provider = vision_text.split(" · ", 1)[0] if vision_text else "unknown"
+    print(_line("Provider", f"{vision_icon} {provider}"))
+    print(_line("Recommendation", verdict.get("recommended_next_action", "unknown")))
+    groups = _group_quality_messages(verdict)
+    section_specs = [
+        ("QUALITY ISSUES", groups["quality"], None),
+        ("VISION RUNTIME WARNINGS", groups["vision_runtime"], None),
+        ("VISION REVIEW WARNINGS", groups["vision_review"], None),
+        ("POLICY / CONFIG WARNINGS", groups["policy"], "subtitle-mode=burn intentionally adds visible text. Use --subtitle-mode off or sidecar for clean no-text visual tests."),
+    ]
+    limit = 12 if verbose else 6
+    for title, messages, hint in section_specs:
+        if not messages:
+            continue
+        print()
+        print(title)
+        for message in messages[:limit]:
+            print(f"  ! {short_prompt(message, 116)}")
+        if hint:
+            print(f"    hint: {hint}")
+    print()
+
+
+def _scene_result_lines(state: dict[str, Any], takes: dict[str, Any], result: dict[str, Any]) -> list[str]:
+    lines: list[str] = []
+    for index, scene in enumerate(_all_scene_outputs(takes, state, result), start=1):
+        selected = scene.get("selected_take_id") or "none"
+        selection = scene.get("selection") or {}
+        selected_take = _selected_take_for_scene(scene)
+        review = _take_review(selected_take)
+        scene_status = (
+            selection.get("visual_selection_status")
+            or review.get("take_visual_review_status")
+            or selection.get("technical_selection_status")
+            or ("passed" if selected != "none" else "unknown")
+        )
+        score = selection.get("postability_score") or selection.get("selected_postability_score") or review.get("postability_score")
+        if score is None:
+            for take in scene.get("takes") or []:
+                if take.get("take_id") == selected:
+                    score = take.get("postability_score") or take.get("metadata", {}).get("postability_score")
+        provider = review.get("provider") or selected_take.get("visual_review_provider") or selected_take.get("metadata", {}).get("visual_review_provider")
+        warnings = " ".join(str(item) for item in review.get("warnings") or [])
+        issues = " ".join(str(item) for item in review.get("issues") or [])
+        marker = ""
+        if "non-json" in warnings.lower() or "parser" in warnings.lower():
+            marker = "parser warning"
+        elif "inference failed" in warnings.lower() or "python not found" in warnings.lower() or "model type" in warnings.lower():
+            marker = "runtime warning"
+        elif warnings or issues:
+            marker = "warning"
+        icon = _scene_icon(str(scene_status), score, marker)
+        score_text = _format_score(score)
+        provider_text = f" · {provider}" if provider else ""
+        marker_text = f" {marker}" if marker else ""
+        lines.append(f"  Scene {index:<2} {icon} {str(scene_status):<12} · take {selected} · score {score_text}{provider_text}{marker_text}")
+    return lines
+
+
+def render_success_dashboard(result: dict[str, Any], state: dict[str, Any], takes: dict[str, Any], run_dir: Path | None, base_url: str, *, verbose: bool = False) -> None:
+    print_box_header("RUN COMPLETE")
+    final_path = result.get("output_final_path") or _artifact_path(result, "final_output_mp4")
+    print()
+    print("RESULT")
+    print(_line("Status", "✓ success"))
+    print(_line("Final phase", result.get("final_phase")))
+    print(_line("Final video", final_path))
+    print(_line("Size", format_file_size(final_path)))
+    print(_line("Duration", f"{result.get('actual_final_duration_sec')}s" if result.get("actual_final_duration_sec") is not None else "unknown"))
+    print()
+    print("PIPELINE")
+    for label, value in summarize_system_mode({}, state, takes, result, base_url):
+        print(_line(label, value))
+    progress = extract_scene_progress(state, takes, result)
+    print(_line("Render", f"✓ {progress.get('scene_count') or 0} scenes · {progress.get('take_count') or 0} takes"))
+    print(_line("Assembly", "✓ final.mp4 created" if final_path else "unknown"))
+    print()
+    render_quality_summary(result, state, takes, live=False, verbose=verbose)
+    scene_lines = _scene_result_lines(state, takes, result)
+    if scene_lines:
+        print("SCENE SUMMARY")
+        for line in scene_lines:
+            print(line)
+        print()
+    print("NEXT ACTION")
+    action_index = 1
+    if final_path:
+        print(f"  {action_index}. Open video:")
+        print(f"     {final_path}")
+        action_index += 1
+    if result.get("job_id"):
+        print(f"  {action_index}. Inspect run:")
+        print(f"     python3 /workspace/scripts/agent_core_cli.py --inspect-run {result.get('job_id')}")
+        action_index += 1
+    verdict = _extract_quality_verdict(result)
+    for hint in _next_action_hints(verdict):
+        print(f"  {action_index}. {hint}")
+        action_index += 1
+    if run_dir:
+        print()
+        print("ARTIFACTS")
+        print(_line("Run folder", run_dir))
+        log_path = run_dir / "logs" / "agent.log"
+        if log_path.exists():
+            print(_line("Logs", log_path))
+
+
 def tail_file(path: str | Path | None, lines: int = 80) -> str:
     if not path:
         return ""
@@ -429,6 +934,38 @@ def tail_file(path: str | Path | None, lines: int = 80) -> str:
         return "\n".join(data[-lines:])
     except Exception as exc:
         return f"<could not read {p}: {exc}>"
+
+
+def extract_root_cause_from_log_tail(log_tail: str) -> dict[str, str]:
+    patterns = (
+        "CUDA out of memory",
+        "FileNotFoundError",
+        "AttributeError",
+        "RuntimeError",
+        "ImportError",
+        "ModuleNotFoundError",
+    )
+    lines = [line.rstrip() for line in (log_tail or "").splitlines() if line.strip()]
+    cause = ""
+    for line in reversed(lines):
+        if any(pattern in line for pattern in patterns):
+            cause = line.strip()
+            break
+    if not cause:
+        return {"root_cause": "unknown; inspect backend log", "likely_meaning": "unknown; inspect backend log"}
+    lower = cause.lower()
+    meaning = "unknown; inspect backend log"
+    if "tokenizer.model" in lower:
+        meaning = "Gemma/LTX model folder looks incomplete; tokenizer.model is missing."
+    elif "siglipvisionmodel" in lower and "vision_model" in lower:
+        meaning = "LTX/Gemma runtime dependency mismatch. Global transformers version may be incompatible with LTX."
+    elif "cuda out of memory" in lower:
+        meaning = "GPU VRAM exhausted. Reduce resolution, scene count, takes, or concurrent model load."
+    elif "qwen3_vl" in lower and ("not recognized" in lower or "unrecognized" in lower):
+        meaning = "Wrong Transformers runtime for Qwen3-VL; use the isolated Qwen3-VL review runtime."
+    elif "modulenotfounderror" in lower or "importerror" in lower:
+        meaning = "Python runtime dependency is missing or loaded from the wrong environment."
+    return {"root_cause": cause, "likely_meaning": meaning}
 
 
 def _candidate_backend_logs(state: dict[str, Any], takes: dict[str, Any]) -> list[dict[str, Any]]:
@@ -513,53 +1050,49 @@ def _print_step_and_take_summary(state: dict[str, Any], takes: dict[str, Any], r
 
 
 def print_success_summary(result: dict[str, Any], state: dict[str, Any], takes: dict[str, Any], run_dir: Path | None, base_url: str, *, verbose: bool = False) -> None:
-    print("SUCCESS SUMMARY")
-    print(f"- success: {result.get('success')}")
-    print(f"- final_phase: {result.get('final_phase')}")
-    final_path = result.get("output_final_path") or _artifact_path(result, "final_output_mp4")
-    if final_path:
-        size = "unknown"
-        p = Path(final_path)
-        if p.is_file():
-            size = f"{p.stat().st_size / (1024 * 1024):.1f} MB"
-        print(f"- final.mp4: {final_path} ({size})")
-    print(f"- planned/voice/video/final duration: {result.get('planned_duration_sec')} / {result.get('actual_voice_duration_sec')} / {result.get('actual_video_duration_sec')} / {result.get('actual_final_duration_sec')}")
-    if run_dir:
-        print(f"- result.json: {run_dir / 'result.json'}")
-        print(f"- state.json: {run_dir / 'state.json'}")
-        if (run_dir / "takes.json").exists():
-            print(f"- takes.json: {run_dir / 'takes.json'}")
-    _print_director_summary(_extract_director_summary(result, state, takes))
-    if verbose:
-        _print_step_and_take_summary(state, takes, result, verbose=True)
-    _print_quality_summary(result)
+    render_success_dashboard(result, state, takes, run_dir, base_url, verbose=verbose)
 
 
 def print_failure_summary(result: dict[str, Any], state: dict[str, Any], takes: dict[str, Any], run_dir: Path | None, *, tail_lines: int = 80, show_tail: bool = True) -> None:
     details = _extract_failure_details(result, state, takes)
-    print("ERROR SUMMARY")
-    print(f"- phase: {details.get('phase')}")
-    print(f"- scene: {details.get('scene_id') or 'unknown'}")
-    print(f"- take: {details.get('take_id') or 'unknown'}")
-    print(f"- backend: {details.get('backend') or 'unknown'}")
-    print(f"- backend_job_id: {details.get('backend_job_id') or 'unknown'}")
-    print(f"- agent_error: {_short_text(details.get('agent_error'), 200)}")
-    if details.get("backend_error"):
-        print(f"- backend_error: {_short_text(details.get('backend_error'), 200)}")
+    tail = tail_file(details.get("log_file"), tail_lines) if details.get("log_file") else ""
+    diagnosis = extract_root_cause_from_log_tail(tail)
+    print_box_header("RUN FAILED")
+    print()
+    print("ERROR")
+    print(_line("Phase", details.get("phase")))
+    print(_line("Scene", details.get("scene_id") or "unknown"))
+    print(_line("Take", details.get("take_id") or "unknown"))
+    print(_line("Backend", details.get("backend") or "unknown"))
+    print(_line("Message", short_prompt(details.get("backend_error") or details.get("agent_error"), 120)))
+    if details.get("backend_job_id"):
+        print(_line("Backend job", details.get("backend_job_id")))
+    print()
+    print("ROOT CAUSE")
+    print(_line("Detected", diagnosis.get("root_cause")))
+    print()
+    print("LIKELY MEANING")
+    print(f"  {diagnosis.get('likely_meaning')}")
+    print()
+    print("FILES")
     if details.get("log_file"):
-        print(f"- log_file: {details.get('log_file')}")
+        print(_line("Backend log", details.get("log_file")))
     if run_dir:
-        print(f"- result.json: {run_dir / 'result.json'}")
-        print(f"- state.json: {run_dir / 'state.json'}")
+        print(_line("Result", run_dir / "result.json"))
+        print(_line("State", run_dir / "state.json"))
         if (run_dir / "takes.json").exists():
-            print(f"- takes.json: {run_dir / 'takes.json'}")
-    _print_step_and_take_summary(state, takes, result, verbose=False)
-    _print_quality_summary(result)
-    if show_tail and details.get("log_file"):
-        tail = tail_file(details.get("log_file"), tail_lines)
-        if tail:
-            print(f"BACKEND LOG TAIL ({tail_lines} lines): {details.get('log_file')}")
-            print(tail)
+            print(_line("Takes", run_dir / "takes.json"))
+    render_quality_summary(result, state, takes, live=False, verbose=False)
+    if show_tail and tail:
+        print("LOG TAIL")
+        print("  " + "─" * 56)
+        for line in tail.splitlines()[-tail_lines:]:
+            print(f"  {line}")
+        print("  " + "─" * 56)
+        print()
+    if details.get("log_file"):
+        print("NEXT DEBUG COMMAND")
+        print(f"  cat {details.get('log_file')}")
 
 
 def _status_signature(payload: dict[str, Any], state: dict[str, Any], takes: dict[str, Any]) -> tuple[Any, ...]:
@@ -571,6 +1104,7 @@ def _status_signature(payload: dict[str, Any], state: dict[str, Any], takes: dic
         payload.get("current_phase"),
         payload.get("status_summary"),
         step_sig,
+        tuple(_take_lines(takes, state, payload.get("result") or {}, failures_only=False)[:8]),
         tuple(sorted(director.items())),
     )
 
@@ -631,10 +1165,12 @@ def _absolute_url(base_url: str, maybe_relative: str | None) -> str | None:
 def _print_submit(payload: dict[str, Any], submit_response: dict[str, Any], base_url: str) -> None:
     job_id = submit_response.get("job_id") or payload["job"]["job_id"]
     poll_url = _absolute_url(base_url, submit_response.get("poll_url"))
-    print(f"Submitted job_id={job_id}")
+    print()
+    print("SUBMITTED")
+    print(_line("Job", job_id))
     if poll_url:
-        print(f"Poll URL: {poll_url}")
-    print(f"Initial status: {submit_response.get('status')} phase={submit_response.get('current_phase')}")
+        print(_line("Poll URL", poll_url))
+    print(_line("Initial", f"{submit_response.get('status')} · {submit_response.get('current_phase')}"))
 
 
 def _extract_director_fields(result: dict[str, Any]) -> tuple[Any, Any]:
@@ -680,20 +1216,14 @@ def _poll_job(
         signature = _status_signature(payload, state, takes)
         heartbeat_due = now - last_heartbeat >= 30
         if signature != last_signature or heartbeat_due:
-            prefix = f"[{format_elapsed(now - start)}]"
-            print(
-                f"{prefix} {payload.get('status')} phase={phase} "
-                f"phase_elapsed={format_elapsed(now - phase_started)} summary={payload.get('status_summary')}"
-            )
-            director = _extract_director_summary(result, state, takes)
-            if director and not quiet:
-                _print_director_summary(director)
+            print()
+            print(f"UPDATE {format_elapsed(now - start)} · {payload.get('status')} · phase {phase} · phase elapsed {format_elapsed(now - phase_started)}")
+            if payload.get("status_summary"):
+                print(_line("Summary", short_prompt(payload.get("status_summary"), 110)))
             if not quiet:
-                for line in _extract_step_summary(state):
-                    print(f"- {line}")
-                take_lines = _take_lines(takes, state, result, failures_only=False)
-                for line in take_lines[:8 if not verbose else 20]:
-                    print(f"- {line}")
+                render_progress_block(payload, state, takes, result, elapsed=now - start, quiet=quiet)
+                render_scene_summary(state, takes, result, verbose=verbose)
+                render_quality_summary(result, state, takes, live=True, verbose=verbose)
             last_signature = signature
             last_heartbeat = now
 
@@ -722,26 +1252,26 @@ def _print_terminal(
     result = local_result or result
     refs = payload.get("refs") or {}
     public_refs = payload.get("public_refs") or {}
-    print(f"Terminal status: {payload.get('status')} success={payload.get('success')}")
 
     if payload.get("success") or result.get("success"):
         print_success_summary(result, state, takes, run_dir, base_url, verbose=verbose)
     else:
         print_failure_summary(result, state, takes, run_dir, tail_lines=tail_lines, show_tail=show_log_tail)
 
-    for key in ("final_mp4_path", "result_json_path", "state_json_path"):
-        value = refs.get(key)
-        if value:
-            print(f"{key}: {value}")
+    if verbose:
+        for key in ("final_mp4_path", "result_json_path", "state_json_path"):
+            value = refs.get(key)
+            if value:
+                print(f"{key}: {value}")
 
-    for key in ("final_mp4_url", "result_json_url", "state_json_url"):
-        value = public_refs.get(key) or refs.get(key)
-        absolute = _absolute_url(base_url, value)
-        if absolute:
-            print(f"{key}: {absolute}")
+        for key in ("final_mp4_url", "result_json_url", "state_json_url"):
+            value = public_refs.get(key) or refs.get(key)
+            absolute = _absolute_url(base_url, value)
+            if absolute:
+                print(f"{key}: {absolute}")
 
     error_payload = payload.get("error")
-    if error_payload:
+    if error_payload and verbose:
         print(f"error: {json.dumps(error_payload, ensure_ascii=True)}")
 
 
@@ -753,7 +1283,8 @@ def _inspect_run(path: Path, *, tail_lines: int, show_log_tail: bool, verbose: b
     if not result and not state:
         print(f"ERROR: no result.json/state.json found under {run_dir}", file=sys.stderr)
         return 1
-    print(f"INSPECT RUN {run_dir}")
+    print_box_header("INSPECT RUN", [("Run", run_dir)])
+    print()
     success = bool(result.get("success")) if result else state.get("status") == "done"
     if success:
         print_success_summary(result, state, takes, run_dir, DEFAULT_BASE_URL, verbose=verbose)

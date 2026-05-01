@@ -288,6 +288,33 @@ class ScenePlannerTest(unittest.TestCase):
         ]:
             self.assertIn(cue, effective_prompt)
 
+    def test_morning_reset_storyboard_effective_prompt_has_no_positive_device_ui_motif(self) -> None:
+        job = JobInput(
+            idea="Morning Reset social clip, no app or website feeling.",
+            script="Vorhang auf. Wasserglas abstellen. Am Fenster ruhig atmen.",
+            duration_sec=9,
+            use_voice=True,
+            use_storyboard=True,
+            orientation="portrait",
+            resolution="draft",
+            metadata={"subtitle_mode": "off", "storyboard_candidates_per_scene": 2},
+        )
+
+        plan = self.planner.build_plan(job)
+        scene = plan.scenes[1 if len(plan.scenes) > 1 else 0]
+        candidate = scene.keyframe_candidates[0]
+        storyboard_plan = self.planner.build_storyboard_render_plan(plan, scene, candidate)
+        effective_prompt = storyboard_plan.steps[0].params["effective_prompt"].lower()
+        allowed_section = effective_prompt.split("forbidden visuals:", 1)[0]
+
+        self.assertTrue(storyboard_plan.steps[0].params["storyboard_prompt_metadata"]["contract_preserved"])
+        for term in ["phone", "smartphone", "screen", " ui ", "app layout", "website", "browser", "social media frame"]:
+            self.assertNotIn(term, allowed_section)
+        self.assertIn("no phones", effective_prompt)
+        self.assertIn("no user interface", effective_prompt)
+        self.assertIn("no social media frame", effective_prompt)
+        self.assertIn("no split screen", effective_prompt)
+
     def test_scene_video_mode_override_can_force_storyboard_reference_or_text_only(self) -> None:
         job = JobInput(
             idea="A teaser with per-scene video-mode overrides.",

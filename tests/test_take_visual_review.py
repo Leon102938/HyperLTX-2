@@ -160,6 +160,26 @@ class TakeVisualReviewTest(unittest.TestCase):
         self.assertTrue(any("allowed_props" in issue for issue in review["issues"]))
         self.assertTrue(any("action" in issue for issue in review["issues"]))
 
+    def test_heuristic_review_rejects_positive_phone_screen_ui_risk(self) -> None:
+        review = evaluate_take_visual_review(
+            validation={"passed": True, "issues": [], "warnings": []},
+            scene_world_contract={
+                "visible_subject": "hand placing water beside a smartphone",
+                "environment": "morning table with app interface visible",
+                "action": "checking phone screen next to a glass of water",
+                "allowed_props": ["clear water glass", "smartphone", "visible app screen"],
+                "forbidden_props": ["phones", "screens", "user interface", "website", "paper"],
+                "text_risk_policy": "No readable text, no phones, no screens.",
+            },
+            review_frames=[{"timestamp_sec": 0.5, "path": "/tmp/frame.jpg", "exists": True}],
+            prompt_text="A clean table with a phone beside the water glass.",
+        )
+
+        self.assertEqual(review["take_visual_review_status"], "rejected")
+        joined_issues = " ".join(review["issues"]).lower()
+        self.assertIn("smartphone", joined_issues)
+        self.assertIn("screen", joined_issues)
+
     def test_heuristic_review_missing_frames_needs_review(self) -> None:
         review = evaluate_take_visual_review(
             validation={"passed": True, "issues": [], "warnings": []},

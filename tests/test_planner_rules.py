@@ -1,4 +1,5 @@
 import unittest
+import re
 
 from pydantic import ValidationError
 
@@ -310,6 +311,43 @@ class PlannerRulesTest(unittest.TestCase):
             self.assertNotIn("interfaces", delta)
             self.assertIn("without screens", delta)
             self.assertIn("paper", delta)
+
+    def test_morning_reset_visual_prompt_sanitizer_removes_positive_device_ui_terms(self) -> None:
+        job = JobInput(
+            idea="Morning Reset social clip for TikTok content without phone distractions.",
+            script=(
+                "Atme kurz durch. Stell das Wasserglas ab. "
+                "Oeffne das Fenster und starte klar in den Morgen."
+            ),
+            duration_sec=9,
+            use_voice=True,
+            use_storyboard=True,
+            orientation="portrait",
+            resolution="draft",
+            metadata={"subtitle_mode": "off", "takes_per_scene": 2},
+        )
+
+        plan = self.planner.build_plan(job)
+        forbidden_positive_terms = ["phone", "smartphone", "screen", "ui", "app", "website", "browser", "social media frame"]
+        for scene in plan.scenes:
+            contract = scene.prompt_build_metadata["scene_world_contract"]
+            positive_text = " ".join(
+                [
+                    contract["visible_subject"],
+                    contract["visual_anchor"],
+                    contract["environment"],
+                    contract["action"],
+                    " ".join(contract["allowed_props"]),
+                ]
+            ).lower()
+            for term in forbidden_positive_terms:
+                self.assertIsNone(re.search(rf"\b{re.escape(term)}s?\b", positive_text))
+            self.assertNotIn("readable human action", scene.prompt_text.lower())
+            allowed_props = [value.lower() for value in contract["allowed_props"]]
+            self.assertFalse(any(any(term in prop for term in forbidden_positive_terms) for prop in allowed_props))
+            forbidden_props = " ".join(contract["forbidden_props"]).lower()
+            for term in ["phones", "screens", "user interface", "app layout", "website", "social media frame"]:
+                self.assertIn(term, forbidden_props)
 
 
 if __name__ == "__main__":

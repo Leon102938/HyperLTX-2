@@ -1,6 +1,23 @@
 # MEMORY.md
 
 ## Dauerhafte Erkenntnisse
+- Tagesabschluss 2026-04-30: Nicht weiter an Features arbeiten. Gesicherter Stand ist CLI E2/E2.1/E2.2 + Qwen3-VL-Isolation + erster Morning-Reset-Quality-Fix.
+- `quality-morning-reset-006` ist technisch erfolgreich, aber qualitativ failed. Merken: technische Pipeline-Gruenheit reicht nicht; Selection/Gating muss rejected Takes und schlechte Keyframes haerter verhindern.
+- Offener Morgen-Fokus ist genau: rejected selected Take verhindern, Hard Keyframe Visual Gate gegen Fake-Text/Phone/Split-Screen/Collage, Qwen3-VL JSON-Robustheit, Morning Reset Motive weiter konkretisieren.
+- Qwen3-VL-Venv niemals archivieren; nach Restore `bash /workspace/scripts/ensure_qwen3_vl_review_runtime.sh` ausfuehren.
+- Erster echter Output-Qualitaetsfix nach E2: Morning Reset braucht einen Safe Motif Contract, weil Social-/Content-/UI-/Phone-Worte als Format-Metadaten sonst in visuelle Motive rutschen koennen.
+- Social-Clip/Reel/Post/Content/App/Website/UI/Screen/Phone/Browser/Dashboard sind fuer visuelle Prompts keine Motive. Sie duerfen in positiven Feldern und `allowed_props` nicht erscheinen, nur als Forbidden/Policy.
+- Morning-Reset-safe Motive: Vorhaenge/Fensterlicht, Wasserglas auf Holz, Hand an Vorhang/Fenstergriff, Pflanzen/Stoff/Licht, ruhiges Atmen am Fenster, Tasse/Glas ohne Logo/Label.
+- `allowed_props` muessen sauber bleiben; Device-/UI-/Text-/Paper-/Logo-Begriffe gehoeren in `forbidden_props`.
+- `readable human action` ist gefaehrlich, weil `readable` Text-Assoziationen triggern kann; positive Prompts sollen `clear human action` oder `visually clear action` verwenden.
+- Burned subtitles sind ein separater Policy-/Config-Konflikt: fuer Clean-Visual-Tests `--subtitle-mode off` oder `sidecar` nutzen.
+- Phase E2.2 CLI Dashboard Polishing ist umgesetzt: Pipeline-Labels sind entdoppelt, Vision Review Status ist klarer, Issues werden nach Quality/Vision/Config gruppiert und Next Actions werden aus den sichtbaren Meldungen abgeleitet.
+- `subtitle-mode=burn` ist fuer Social-Finalausgaben legitim, kollidiert aber absichtlich mit clean no-readable-text Visual Tests; die CLI weist jetzt explizit auf `--subtitle-mode off` oder `sidecar` hin.
+- Qwen3-VL `non-json`/Parser-Warnungen sind aktuell nur Anzeige-/Diagnosematerial in Phase E2.2. Der Qwen3-VL-Subprocess und JSON-Extraction wurden bewusst nicht geaendert.
+- Phase E2 CLI Dashboard ist umgesetzt und bleibt bewusst eine Anzeige-/Diagnoseschicht. Keine agent_core-Pipeline, Prompt-Regeln, Quality-Regeln, Modelle, Director, LTX/Z-Image/TTS/ACE oder `init.sh` wurden dafuer umgebaut.
+- `scripts/agent_core_cli.py` soll fuer manuelle Produktionsruns eine kompakte Terminal-Produktionsansicht liefern: Header, System/Mode, Progress, Current Step, Scenes, Quality Live, Success/Failure Dashboard und Next Actions.
+- Live-Ausgabe soll weiterhin nur echte Aenderungen oder ca. 30s-Heartbeats zeigen; keine Fake-Prozentwerte einfuehren.
+- Failure-Diagnose soll zuerst Root Cause aus Backend-`job.log`-Tail und den Next Debug Command zeigen; bekannte Muster sind fehlendes `tokenizer.model`, `SiglipVisionModel.vision_model`, CUDA-OOM, Qwen3-VL-Runtime-Mismatch und Importfehler.
 - Fuer Backups keine Modelle, Venvs, Caches, GGUF/Safetensors oder komplette Backend-Runtimes archivieren. Qwen3-VL-Review-Venv wird ueber `scripts/ensure_qwen3_vl_review_runtime.sh` reproduziert.
 - Nach Restore ist die Reihenfolge: Archiv entpacken, `bash /workspace/init.sh`, `bash /workspace/scripts/ensure_qwen3_vl_review_runtime.sh`, FastAPI/Director pruefen, dann `agent_core_cli.py --inspect-run quality-morning-reset-003`.
 - `quality-morning-reset-003` ist ein technischer Erfolgsbeleg, aber kein finaler Qualitaetsbeleg: Qwen3-VL meldete echte Text-/Papier-/Subtitle-Risiken. Morgen zuerst Qualitaet ansehen, nicht Setup weiter umbauen.

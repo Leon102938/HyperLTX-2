@@ -1,5 +1,41 @@
 # CHANGELOG.md
 
+## 2026-04-30 Day-End Backup / Handoff
+- Tagesabschluss vorbereitet: CLI E2/E2.1/E2.2, Qwen3-VL-Isolation und erster Morning-Reset-Quality-Fix sind dokumentiert und werden schlank archiviert.
+- `quality-morning-reset-006` ist der aktuelle technische Beleg nach dem ersten Quality-Fix: `success=True`, `final_phase=assembled`, Qwen3-VL real aktiv, aber Final Quality `failed`.
+- Offene Diagnose fuer morgen: Scene 1 Fake-Text, Scene 2 Phone/Device-Risiko neben Wasserglas, Scene 3 Split-Screen/Collage/Text/UI-Drift, rejected selected Take Bug, Qwen3-VL non-json/parser warning.
+- Naechster Schritt bleibt bewusst ungefixt fuer morgen: rejected Take Selection verhindern, Hard Keyframe Visual Gate gegen Text/Phone/Split-Screen, Qwen3-VL JSON-Robustheit, Morning-Reset-Motive weiter konkretisieren.
+- Backup-Regel bleibt: keine Modelle, Venvs, Caches, GGUF/Safetensors oder grosse Runtime-/Checkpoint-Ordner archivieren; Qwen3-VL-Venv wird per Ensure-Script reproduziert.
+
+## 2026-04-30 First Morning Reset Output Quality Fix
+- Erster echter Output-Qualitaetsfix nach Phase E2 umgesetzt; kein CLI-, Runtime-, Dependency-, Modell-, Director-, Init- oder Backend-Umbau.
+- Ursache aus `quality-morning-reset-005`: Social-/Content-/UI-/Phone-Begriffe konnten als visuelle Motive in Morning-Reset-Prompts rutschen; Scene 2 zeigte ein phone/screen-artiges Objekt, Scene 3 driftete Richtung UI/App/Web-Ausschnitt.
+- `PromptBuilder` fuehrt jetzt einen Visual Prompt Sanitizer fuer positive visuelle Felder und `allowed_props`: Meta-/Formatbegriffe wie `social clip`, `reel`, `content`, `website`, `app`, `ui`, `screen`, `phone`, `browser`, `dashboard` werden aus Motivfeldern entfernt.
+- Morning-Reset-Motivbibliothek geschaerft: Vorhang/Fensterlicht, Wasserglas auf Holzoberflaeche, Handbewegung, Pflanzen/Stoff/Licht und ruhiges Atmen am Fenster statt Smartphone-/Screen-/App-Motive.
+- `allowed_props` werden von Device-/UI-/Text-/Paper-Begriffen bereinigt; `forbidden_props` enthalten diese Begriffe weiterhin hart inklusive phones, screens, user interface, app layout, website, social media frame, split screen und collage.
+- PromptBuilder wiederholt Device-/UI-Verbote nahe am Motiv ueber `MOTIF SAFETY` und schuetzt Storyboard-`effective_prompt` gegen UI/mockup/collage/split-screen Drift.
+- `readable human action` wurde aus positiven Prompts durch `clear human action` ersetzt.
+- Take-/Keyframe-Review erkennt positive Phone/Screen/UI/App/Website-Hinweise strenger; Qwen3-VL-Hinweise auf sichtbare Device-/UI-Risiken koennen nicht mehr als `passed` stehen bleiben.
+- Plan-only Dry-Run unter `/workspace/agent_runs/quality-morning-reset-006-plan-dry-run` erzeugt `plan.json`, `scene_plan.json` und `storyboard_plan.json` ohne Medienrender; positive Prompt-Verletzungen: keine.
+
+## 2026-04-30 Phase E2.2 CLI Dashboard Polishing
+- Phase E2.2 als reines CLI-Dashboard-Polishing umgesetzt; keine Pipeline-, Quality-, Prompt-, Modell-, Director-, Backend- oder Init-Aenderungen.
+- Duplicate-Video-Label im Pipeline-Block gefixt: `Video Backend`, `Vision Review`, `Render` und `Assembly` sind jetzt getrennt.
+- Vision-Review-Status ist klarer: `qwen3_vl · real inference used`, `qwen3_vl · parser warning`, `qwen3_vl · runtime missing`, `qwen3_vl · no real inference` oder `heuristic`.
+- Quality-Ausgabe gruppiert Meldungen jetzt in `QUALITY ISSUES`, `VISION RUNTIME WARNINGS`, `VISION REVIEW WARNINGS` und `POLICY / CONFIG WARNINGS`.
+- Subtitle-Burn-Konflikt wird explizit erklaert: `subtitle-mode=burn` fuegt sichtbaren Text hinzu und ist fuer clean no-text visual tests nicht geeignet.
+- Scene Summary zeigt Status, Take, Score mit zwei Nachkommastellen, Provider und kurze Warning-Marker.
+- Next Actions sind regelbasiert smarter: Hinweise fuer Subtitle-Off/Sidecar, Qwen3-VL-JSON-Warnungen, Final-Frame-Rejects und needs-review-Takes.
+
+## 2026-04-30 Phase E2 CLI Dashboard / Produktionsansicht
+- Phase E2 als reiner CLI-Output-/Darstellungs-Task umgesetzt; keine Pipeline-, Prompt-, Quality-, Modell-, Director-, Backend- oder Init-Aenderungen.
+- `scripts/agent_core_cli.py` rendert jetzt einen dashboard-artigen Run-Header mit Job, Format, Mode, Prompt und Startzeit sowie einen klaren System-/Mode-Block.
+- Live-Polling ist kompakter: Ausgabe nur bei Status-/Phasen-/Detailaenderung oder periodischem Heartbeat; keine erfundenen Prozentwerte, stattdessen echte Scene-/Take-/Elapsed-Informationen soweit verfuegbar.
+- Neue Dashboard-Bloecke fuer Progress, Current Step, Scene Summary, Quality Live, Success Summary und Failure Summary.
+- `--inspect-run` nutzt dieselben Success-/Failure-Dashboards fuer vorhandene lokale Runs.
+- Failure-Ausgabe extrahiert Root-Cause-Zeilen aus Backend-`job.log`-Tails und zeigt bekannte Bedeutungen fuer `tokenizer.model`, `SiglipVisionModel.vision_model`, CUDA-OOM, Qwen3-VL-Runtime und Importfehler.
+- Next Actions enthalten Inspect-Command, Video-Pfad bzw. Next Debug Command fuer Backend-Logs.
+
 ## 2026-04-30 Final Backup / Handoff
 - Abschlussstand fuer Download/Restore gesichert: schlankes Projektarchiv ohne Modelle, Venvs, Caches, GGUF oder Safetensors wird erstellt.
 - Reproduzierbarkeit fuer Qwen3-VL-Review-Venv ergaenzt: `/workspace/scripts/ensure_qwen3_vl_review_runtime.sh` erstellt `/workspace/venvs/qwen3-vl-review` mit System-Site-Packages und gepinnten Review-Dependencies.
