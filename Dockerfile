@@ -1,10 +1,7 @@
 # 1. Das Fundament: Maximale CUDA Power
-FROM nvidia/cuda:12.8.0-cudnn-devel-ubuntu22.04
+FROM nvidia/cuda:12.8.0-cudnn-devel-ubuntu24.04
 
 SHELL ["/bin/bash","-lc"]
-
-
-
 
 # 2. System-Setup & Python 3.12
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -12,45 +9,41 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     TZ=Europe/Berlin \
     HF_HOME=/workspace/.cache/hf \
-    # FIX: Pfade für CUDA Compiler setzen
     CUDA_HOME=/usr/local/cuda \
-    PATH="/usr/local/cuda/bin:/root/.local/bin:${PATH}" \
+    PATH="/usr/local/cuda/bin:/opt/venv/bin:/root/.local/bin:${PATH}" \
     LD_LIBRARY_PATH="/usr/local/cuda/lib64:${LD_LIBRARY_PATH}" \
-    PYTHONPATH="/workspace/LTX-2/packages/ltx-core/src:/workspace/LTX-2/packages/ltx-pipelines/src"
+    PYTHONPATH="/workspace/LTX-2/packages/ltx-core/src:/workspace/LTX-2/packages/ltx-pipelines/src" \
+    VIRTUAL_ENV=/opt/venv
 
-RUN apt-get update && apt-get install -y software-properties-common && \
-    add-apt-repository ppa:deadsnakes/ppa && \
-    apt-get update && \
-    apt-get install -y \
-    python3.12 \
-    python3.12-dev \
-    python3.12-venv \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    python3-dev \
+    python3-venv \
+    python3-pip \
+    python-is-python3 \
     git \
     ffmpeg \
     curl \
+    ca-certificates \
     build-essential \
-    && rm -rf /var/lib/apt/lists/*
+  && rm -rf /var/lib/apt/lists/*
 
-# Pip für Python 3.12
-RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12
-RUN ln -sf /usr/bin/python3.12 /usr/bin/python3 && ln -sf /usr/bin/python3.12 /usr/bin/python
+RUN python -m venv /opt/venv \
+  && python -m pip install --upgrade pip setuptools wheel \
+  && python --version \
+  && python -m pip --version
 
-# 3. PyTorch 2.7 (Stabil für CUDA 12.8)
-RUN python -m pip install --no-cache-dir --upgrade pip && \
-    python -m pip install --no-cache-dir \
+# 3. PyTorch 2.7 für CUDA 12.8
+RUN python -m pip install --no-cache-dir \
       "torch==2.7.0+cu128" \
       "torchvision==0.22.0+cu128" \
       "torchaudio==2.7.0+cu128" \
       --index-url https://download.pytorch.org/whl/cu128
 
-
-RUN python -m pip install --no-cache-dir -U pip setuptools wheel \
- && python -m pip install --no-cache-dir ninja packaging psutil pybind11 qwen_tts einops
+RUN python -m pip install --no-cache-dir ninja packaging psutil pybind11 qwen_tts einops
 
 RUN python -m pip install --no-cache-dir "flash-attn==2.8.3" --no-build-isolation \
  && python -c "import flash_attn; print('flash_attn ok', flash_attn.__version__)"
-
-
 
 WORKDIR /workspace
 
