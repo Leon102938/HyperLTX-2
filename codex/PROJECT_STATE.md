@@ -6,6 +6,48 @@ Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E, 3A, 3B, 4A, 4B und
 - Kanonische Capability-Uebersicht: `/workspace/codex/CAPABILITY_MAP.md`
 
 ## Verifizierte Fakten
+- 2026-05-01 Tagesabschluss-F2 ist umgesetzt: Creative OS hat jetzt Hook Patterns, Shot Recipes und Anti-Patterns als kleine Playbook-Libraries.
+- Morning Reset Mode fuehrt jetzt Creative Goal, Audience Feel, Pacing, Shot Roles, Shot Recipe Order, Quality Targets und Backend Prompt Policy (`zimage=positive_only`, `ltx=positive_plus_short_avoid`).
+- Clean Lifestyle Morning Style fuehrt preferred camera moves, texture targets, object_count_max, human visibility rules und positive prompt style rules.
+- `model_prompts.json` ist neuer Pflicht-Trace pro geplantem Run: `zimage_prompt_sent`, `ltx_prompt_sent`, Prompt-Quellen, Backend Policy, Shot Recipe, Hook Function und Checks gegen Debug-/Script-Leaks.
+- Z-Image bekommt fuer Morning Reset keine kombinierte Avoid-Spam-Liste mehr, sondern den kurzen positiven Prompt; LTX bekommt positive Prosa plus kurze Avoid-Liste unter 140 Woertern.
+- CLI-Live-Dashboard ist produktiver: TTY-Redraw mit `--live`/`--no-live`, Prompt Preview, Current Work, Pipeline, Szenen, Artefakte, elapsed/phase elapsed und ehrlicher ETA unknown statt Fake-Prozentwerten.
+- Dry-Run `/workspace/agent_runs/phase-f2-creative-os-dry-run` ist erstellt: `prompt_audit.json`, `model_prompts.json`, `storyboard_plan.json`, `plan.json`, `scene_plan.json`, `state.json`; alle neuen Audit-/Trace-Checks true.
+- Tests am Tagesabschluss: 70 Unit Tests OK inklusive Creative System, CLI Live Dashboard, Planner, Scene Planner, Storyboard, Take Visual Review, Output Quality Utils und Final Quality Verdict.
+- Es wurde kein echter Render gestartet; Modelle, Venvs, `init.sh`, Runtime, LTX/Z-Image/TTS/ACE-Backends und Director Runtime wurden nicht umgebaut.
+- 2026-05-01 Phase F1.1 Model Prompt Compiler Cleanup ist umgesetzt: `positive_model_prompt`, `negative_model_prompt` und kurzer kombinierter `model_prompt` werden getrennt erzeugt und persistiert.
+- F1.1 behebt die F1-Restluecke: formal gruene Audits reichten nicht, weil die Model-Prompts noch zu lang/negativ waren und Risk-Woerter im positiven Prompt haeuften.
+- Positive Morning-Reset-Prompts sind jetzt kurz, englisch, visuell und enthalten keine Debuglabels, deutschen Script-Snippets, langen No-Listen oder riskante positive Begriffe wie readable/text-bearing/phone/screen/ui/app/website.
+- Negative Prompts sind separat und auf kurze Avoid-Listen begrenzt; kombinierte Backend-Prompts bleiben unter 140 Woertern.
+- Positive Constraints werden nicht mehr in negative Begriffe umgewandelt: `single full-frame shot`, `one continuous scene`, `one clear water glass only`, `plain empty wooden table` bleiben positiv.
+- Der konkrete Bug `no single full-frame shot` / `no one continuous scene` ist im Compiler/Audit abgedeckt.
+- Prompt Audit prueft jetzt zusaetzlich Wortlaenge, positive risky terms, separate negative prompts, positive constraints in negative prompt, overlong combined prompt und repeated forbidden spam.
+- Dry-Run `/workspace/agent_runs/phase-f1-1-morning-reset-prompt-clean-dry-run` ist erstellt: alle neuen Checks true; Scene-Prompts 39-43 positive Woerter, 58-65 kombinierte Woerter; Z-Image effective model prompts ohne Debuglabels/Script-Leaks.
+- 2026-05-01 Phase F1 Creative Operating System + Prompt Audit ist umgesetzt: `agent_core/creative_system/` enthaelt Mode-, Style-, Prompt- und Library-Playbooks.
+- Ausloeser: `quality-morning-reset-008` war technisch erfolgreich, aber Quality failed, weil Z-Image/LTX weiterhin model-facing Debug-/Strukturprompt und Narration sehen konnten (`WORLD / SETTING Stell ein Glas Wasser ab` wurde sichtbar generiert).
+- Morning Reset ist jetzt ein expliziter Mode mit festen Motiven fuer Scene 1/2/3 statt freiem Director-Drift; `mode_id` und `style_id` werden in `plan.metadata` persistiert.
+- PromptCompiler-Vertrag: `debug_prompt` darf Labels wie `WORLD / SETTING` enthalten; `model_prompt` fuer Z-Image/LTX darf keine Debuglabels, Script-Snippets, deutschen Imperative oder Titelphrasen enthalten.
+- Z-Image Storyboard Adapter nutzt `effective_model_prompt` bevorzugt; LTX2 nutzt den Take-`model_prompt` aus Step-Params.
+- `prompt_audit.json` wird beim Planen gespeichert und prueft Debuglabel-Leaks, Script-Snippet-Leaks, deutsche Imperative und positive Risk-Terms.
+- Qwen3-VL Reviewer-Systemprompt liegt im Creative System und fordert JSON-only sowie strenge sichtbare Text/Device/UI/Split/Collage-Pruefung.
+- Dry-Run `/workspace/agent_runs/phase-f1-morning-reset-dry-run` ist erstellt: Audit-Checks gruen, keine `WORLD / SETTING`-/`Vorhang auf`-/`Stell ein Glas Wasser ab`-/`Atme ruhig am Fenster`-Leaks in Model-Prompts, Motive aus Playbook.
+- F1 hat keine Runtime-/Modell-/CLI-/init.sh-/Director-Runtime-/LTX-/Z-Image-/TTS-/ACE-Aenderungen gemacht.
+- 2026-05-01 Fix nach echtem `quality-morning-reset-007` ist umgesetzt: Narration/Script wird aus visuellen Prompts isoliert, stale Review-Felder werden vor Selection normalisiert, Device/UI-Risiken werden fuer Morning Reset strenger behandelt.
+- `quality-morning-reset-007` Diagnose: Run technisch erfolgreich, aber Final Quality failed. Scene 1 zeigte sichtbaren Text `Vorhang auf` als UI-Element; Scene 2/3 hatten Qwen3-VL Device/UI-Warnungen; Inspect zeigte weiter `passed` + Score 0.0 bzw. stale Score-Felder.
+- Root Cause: kurze deutsche Script-Saetze wurden als `scene_text`/`description` in `environment`, `STORY BEAT`, Scene Prompt, Take Prompt und teils Storyboard-Prompt-Kontext kopiert statt in englische visuelle Handlung uebersetzt zu werden.
+- Neuer Visual-Prompt-Vertrag: Script bleibt Voice/Timing/Intent; Bild-/Video-Prompts nutzen englische visuelle Beschreibungen und keine deutschen Imperative, Quotes, Captions oder `Morning Reset:`-Titelphrasen.
+- Selection-Timing-Fix: `VideoAgent` normalisiert `take_visual_review` direkt am TakeRecord und bevorzugt den finalen Review-Payload vor alten Top-Level-Feldern; ein spaeter Qwen3-VL-Reject kann so vor Auswahl einen zuvor passed wirkenden Kandidaten verdrängen.
+- Score-Konsistenz-Fix: `passed` + Score < 0.7 wird zentral korrigiert; missing/invalid score oder parser warning bleibt `needs_review`.
+- Device/UI-Fix: Qwen3-VL-Hinweise auf sichtbare UI/Device-Risiken werden fuer Social/Morning-Reset als rejected mit niedrigem Score behandelt, damit sichere Alternativen gewinnen.
+- Dry-Run `/workspace/agent_runs/quality-morning-reset-008-plan-dry-run` ist erstellt und geprueft: `Vorhang auf`, `Stell ein Glas Wasser ab`, `Atme ruhig am Fenster` und `Morning Reset:` fehlen in visuellen Prompts und Storyboard-Effective-Prompts; englische Visual Actions sind vorhanden.
+- 2026-05-01 naechster echter Qualitaetsfix nach `quality-morning-reset-006` ist umgesetzt: Take Selection, Score/Status-Konsistenz, Hard Keyframe Visual Gate, Morning-Reset-Motive und Qwen3-VL JSON-Robustheit wurden gezielt gehaertet.
+- `quality-morning-reset-006` Diagnose: Scene 1 scheiterte an sichtbarem Fake-Text/Typografie, Scene 2 an schwarzem Smartphone/Device neben dem Wasserglas, Scene 3 an Split-Screen/Collage/Panel-artigem Layout mit eingebettetem Text/Subtitle-Look; Qwen3-VL lieferte teils non-json.
+- Rejected-Take-Auswahl ist jetzt hart begrenzt: technically valid + visual `passed` gewinnt vor `needs_review`, `rejected` nur als `selection_reason=last_resort_no_better_candidate`.
+- `passed` Reviews bekommen keinen Score 0.0 mehr: mindestens `postability_score=0.7`; Qwen3-VL Parser-Warnungen oder invalide Scores werden `needs_review`, nicht `passed`.
+- Keyframe Visual Gate erkennt und rejected positive Risiken fuer Text/Fake-Text/Typografie, Untertitel, Phone/Smartphone/Black Rectangle, Screen/UI/App/Web/Browser, Split-Screen/Collage/Panels, Paper/Notebook/Document und Logo/Label/Sign.
+- Morning Reset ist konkreter: plain fabric curtains + blank wall, one clear water glass only auf plain empty wooden table ohne zweites Objekt/Phone/Black Rectangle, finaler single full-frame continuous shot ohne Split/Panel/Collage/embedded subtitles.
+- Qwen3-VL Review-Subprocess ist robuster: STRICT JSON ONLY, JSON-Extraktion aus umgebendem Text, ein Retry mit validem JSON-only Prompt, danach `needs_review` + `qwen3_vl_parser_warning`.
+- Plan-/Storyboard-Dry-Run `/workspace/agent_runs/quality-morning-reset-007-plan-dry-run` ist erstellt; selected keyframes haben `contract_preserved=true` und `visual_risk_status=passed`.
 - 2026-04-30 Tagesabschluss: CLI E2/E2.1/E2.2, Qwen3-VL-Isolation und erster Morning-Reset-Quality-Fix sind der gesicherte Arbeitsstand.
 - `quality-morning-reset-006` lief technisch erfolgreich (`success=True`, `final_phase=assembled`, `final.mp4` vorhanden) mit Director `llm_augmented`, LTX, Storyboard, Voice und Qwen3-VL real VLM.
 - `quality-morning-reset-006` ist visuell/qualitativ weiterhin failed: Scene 1 Fake-Text, Scene 2 Phone/Device-Risiko neben Glas, Scene 3 Split-Screen/Collage/Text/UI-Drift; zusaetzlich Qwen3-VL non-json/parser warning.

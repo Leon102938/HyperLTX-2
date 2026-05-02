@@ -132,6 +132,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-log-tail", action="store_true", help="Do not print backend job.log tails on failure.")
     parser.add_argument("--quiet", action="store_true", help="Print only major progress and terminal summaries.")
     parser.add_argument("--verbose", action="store_true", help="Print extra local artifact paths and backend details.")
+    parser.add_argument("--live", action="store_true", help="Force the TTY live dashboard redraw mode.")
+    parser.add_argument("--no-live", action="store_true", help="Disable the TTY live dashboard and append progress updates instead.")
     parser.add_argument("--inspect-run", help="Summarize an existing local run id or /workspace/agent_runs path without submitting a new job.")
     parser.add_argument(
         "--print-payload",
@@ -278,6 +280,14 @@ def load_json_safe(path: str | Path | None) -> dict[str, Any]:
         return json.loads(p.read_text(encoding="utf-8"))
     except Exception:
         return {}
+
+
+def _should_use_live(args: argparse.Namespace) -> bool:
+    if getattr(args, "no_live", False):
+        return False
+    if getattr(args, "live", False):
+        return True
+    return bool(sys.stdout.isatty())
 
 
 def _run_dir_for_job(job_id: str | None) -> Path | None:
@@ -635,6 +645,196 @@ def render_scene_summary(state: dict[str, Any], takes: dict[str, Any], result: d
             selected_text = " · selected" if selected and take_id == selected else ""
             print(f"    Take {take_index:<2}     {_plain_icon(status)} {status}{selected_text}{score_text}")
     print()
+
+
+def _load_prompt_trace(run_dir: Path | None) -> dict[str, Any]:
+    if not run_dir:
+        return {}
+    trace = load_json_safe(run_dir / "model_prompts.json")
+    if trace:
+        return trace
+    return load_json_safe(run_dir / "prompt_audit.json")
+
+
+def _scene_trace_for_index(trace: dict[str, Any], scene_index: Any) -> dict[str, Any]:
+    scenes = trace.get("scenes") or []
+    try:
+        index = int(scene_index)
+    except (TypeError, ValueError):
+        index = 1
+    if 1 <= index <= len(scenes) and isinstance(scenes[index - 1], dict):
+        return scenes[index - 1]
+    for scene in scenes:
+        if isinstance(scene, dict) and scene.get("scene_id") == f"scene_{index:02d}":
+            return scene
+    return scenes[0] if scenes and isinstance(scenes[0], dict) else {}
+
+
+def _live_pipeline_status(state: dict[str, Any], result: dict[str, Any], status_payload: dict[str, Any]) -> list[tuple[str, str, str]]:
+    steps = state.get("steps") or {}
+    director = _extract_director_summary(result, state, {})
+    phase = str(status_payload.get("current_phase") or state.get("current_phase") or "")
+    rows = [
+        ("Validate", "succeeded" if state or result else status_payload.get("status", "pending"), "job accepted"),
+        ("Director plan", "succeeded" if director else ("running" if phase == "planned" else "pending"), director.get("director_mode") or "pending"),
+    ]
+    for key, label in (("storyboard", "Storyboard"), ("video", "Video render")):
+        step = steps.get(key) if isinstance(steps.get(key), dict) else {}
+        rows.append((label, step.get("status", "pending"), step.get("backend_name") or ("waiting" if not step else "")))
+    rows.append(("Vision review", "pending", "waiting" if not result else "see quality"))
+    rows.append(("Assembly", "succeeded" if result.get("success") else "pending", "final summary" if result else "waiting"))
+    return rows
+
+
+def _latest_storyboard_hint(run_dir: Path | None) -> str:
+    if not run_dir:
+        return "unknown"
+    log_path = run_dir / "logs" / "agent.log"
+    tail = tail_file(log_path, 80)
+    latest = ""
+    for line in tail.splitlines():
+        if "storyboard candidate" in line:
+            latest = line
+    if not latest:
+        return "unknown"
+    return _short_text(latest, 70)
+
+
+def _format_live_lines(
+    payload: dict[str, Any],
+    state: dict[str, Any],
+    takes: dict[str, Any],
+    result: dict[str, Any],
+    *,
+    run_dir: Path | None,
+    base_url: str,
+    start: float,
+    phase_started: float,
+    quiet: bool,
+    verbose: bool,
+) -> list[str]:
+    now = time.monotonic()
+    current = extract_current_step(payload, state, takes, result)
+    trace = _load_prompt_trace(run_dir)
+    scene_trace = _scene_trace_for_index(trace, current.get("scene") or 1)
+    job_id = payload.get("job_id") or state.get("job_id") or result.get("job_id") or "-"
+    mode_id = trace.get("mode_id") or result.get("metadata", {}).get("mode_id") or "-"
+    style_id = trace.get("style_id") or result.get("metadata", {}).get("style_id") or "-"
+    phase = payload.get("current_phase") or state.get("current_phase") or current.get("step") or "unknown"
+    status = payload.get("status") or state.get("status") or "unknown"
+    width = 60
+    header_rows = [
+        ("Job", job_id),
+        ("Mode", f"{mode_id} · {style_id}" if mode_id != "-" or style_id != "-" else "-"),
+        ("Format", "-"),
+        ("Status", f"{status} · {phase} · elapsed {format_elapsed(now - start)}"),
+    ]
+    if result.get("metadata"):
+        meta = result.get("metadata") or {}
+        if meta.get("width") and meta.get("height"):
+            header_rows[2] = ("Format", f"{meta.get('orientation', '-')} {meta.get('width')}x{meta.get('height')}")
+    lines = ["╭" + "─" * width + "╮", "│ CONTENT MASCHINE LIVE".ljust(width + 1) + "│", "├" + "─" * width + "┤"]
+    for label, value in header_rows:
+        body = f"{label:<10} {str(value or '-')}"
+        lines.append("│ " + body[: width - 1].ljust(width - 1) + "│")
+    lines.append("╰" + "─" * width + "╯")
+    lines.append("")
+    lines.append("SYSTEM")
+    for label, value in summarize_system_mode({}, state, takes, result, base_url):
+        lines.append(_line(label, value, width=14))
+    subtitle_mode = result.get("metadata", {}).get("subtitle_mode") or "off"
+    lines.append(_line("Subtitles", subtitle_mode, width=14))
+    lines.append("")
+    lines.append("PIPELINE")
+    for label, step_status, detail in _live_pipeline_status(state, result, payload):
+        lines.append(f"  {format_status_icon(step_status)} {label:<18} {detail or step_status}")
+    if quiet:
+        return lines
+    lines.append("")
+    lines.append("CURRENT WORK")
+    scene_text = f"scene_{int(current['scene']):02d}" if current.get("scene") else "unknown"
+    if scene_trace:
+        scene_text += f" · {scene_trace.get('scene_role') or scene_trace.get('role') or '-'} · {scene_trace.get('motif_id') or '-'}"
+    take_text = f"{current.get('take')}/{current.get('take_count')}" if current.get("take") else "-"
+    phase_elapsed = now - phase_started
+    lines.append(_line("Step", current.get("step"), width=14))
+    lines.append(_line("Scene", scene_text, width=14))
+    lines.append(_line("Candidate", _latest_storyboard_hint(run_dir) if str(current.get("step")) == "storyboard" else take_text, width=14))
+    lines.append(_line("Backend", current.get("backend") or "unknown", width=14))
+    lines.append(_line("Elapsed", format_elapsed(phase_elapsed), width=14))
+    lines.append(_line("Best ETA", "unknown", width=14))
+    if phase_elapsed >= 600:
+        lines.append(_line("Note", "check backend log if no progress", width=14))
+    elif phase_elapsed >= 300:
+        lines.append(_line("Note", "long-running but process not known failed", width=14))
+    lines.append("")
+    lines.append("CURRENT PROMPT")
+    positive = scene_trace.get("positive_model_prompt") or "-"
+    negative = scene_trace.get("negative_model_prompt") or "-"
+    zimage_prompt = scene_trace.get("zimage_prompt_sent")
+    ltx_prompt = scene_trace.get("ltx_prompt_sent")
+    policy = (trace.get("backend_prompt_policy") or scene_trace.get("backend_prompt_policy") or {})
+    if str(current.get("step")) == "storyboard" and zimage_prompt:
+        actual = zimage_prompt
+    elif str(current.get("step")) == "video" and ltx_prompt:
+        actual = ltx_prompt
+    else:
+        actual = zimage_prompt or ltx_prompt or positive
+    lines.append(_line("Positive", short_prompt(positive, 96), width=14))
+    lines.append(_line("Negative", short_prompt(negative, 96), width=14))
+    lines.append(_line("Actual", short_prompt(actual, 96), width=14))
+    lines.append(_line("Policy", f"zimage {policy.get('zimage', 'unknown')} / ltx {policy.get('ltx', 'unknown')}" if isinstance(policy, dict) else "unknown", width=14))
+    lines.append("")
+    lines.append("SCENES")
+    trace_scenes = trace.get("scenes") or []
+    if trace_scenes:
+        for idx, scene in enumerate(trace_scenes[:6], start=1):
+            marker = "[>]" if current.get("scene") == idx else "[-]"
+            if result.get("success"):
+                marker = "[✓]"
+            lines.append(
+                f"  Scene {idx:<2} {marker} {scene.get('scene_role') or scene.get('role') or '-'} · {scene.get('shot_recipe_id') or scene.get('motif_id') or '-'}"
+            )
+    else:
+        lines.append("  pending")
+    lines.append("")
+    lines.append("ARTIFACTS")
+    lines.append(_line("Run folder", run_dir or "pending", width=14))
+    if run_dir:
+        lines.append(_line("Prompt audit", "ready" if (run_dir / "prompt_audit.json").exists() else "pending", width=14))
+        lines.append(_line("Model prompts", "ready" if (run_dir / "model_prompts.json").exists() else "pending", width=14))
+    if verbose and payload.get("status_summary"):
+        lines.append(_line("Summary", short_prompt(payload.get("status_summary"), 110), width=14))
+    return lines
+
+
+def render_live_dashboard(
+    payload: dict[str, Any],
+    state: dict[str, Any],
+    takes: dict[str, Any],
+    result: dict[str, Any],
+    *,
+    run_dir: Path | None,
+    base_url: str,
+    start: float,
+    phase_started: float,
+    quiet: bool,
+    verbose: bool,
+) -> None:
+    lines = _format_live_lines(
+        payload,
+        state,
+        takes,
+        result,
+        run_dir=run_dir,
+        base_url=base_url,
+        start=start,
+        phase_started=phase_started,
+        quiet=quiet,
+        verbose=verbose,
+    )
+    sys.stdout.write("\033[H\033[J" + "\n".join(lines) + "\n")
+    sys.stdout.flush()
 
 
 def _extract_quality_verdict(result: dict[str, Any]) -> dict[str, Any]:
@@ -1196,6 +1396,7 @@ def _poll_job(
     fallback_poll_sec: float,
     quiet: bool = False,
     verbose: bool = False,
+    live: bool = False,
 ) -> dict[str, Any]:
     poll_url = f"{base_url}/agent-core/jobs/{job_id}"
     deadline = time.monotonic() + timeout_sec
@@ -1216,14 +1417,28 @@ def _poll_job(
         signature = _status_signature(payload, state, takes)
         heartbeat_due = now - last_heartbeat >= 30
         if signature != last_signature or heartbeat_due:
-            print()
-            print(f"UPDATE {format_elapsed(now - start)} · {payload.get('status')} · phase {phase} · phase elapsed {format_elapsed(now - phase_started)}")
-            if payload.get("status_summary"):
-                print(_line("Summary", short_prompt(payload.get("status_summary"), 110)))
-            if not quiet:
-                render_progress_block(payload, state, takes, result, elapsed=now - start, quiet=quiet)
-                render_scene_summary(state, takes, result, verbose=verbose)
-                render_quality_summary(result, state, takes, live=True, verbose=verbose)
+            if live:
+                render_live_dashboard(
+                    payload,
+                    state,
+                    takes,
+                    result,
+                    run_dir=run_dir,
+                    base_url=base_url,
+                    start=start,
+                    phase_started=phase_started,
+                    quiet=quiet,
+                    verbose=verbose,
+                )
+            else:
+                print()
+                print(f"UPDATE {format_elapsed(now - start)} · {payload.get('status')} · phase {phase} · phase elapsed {format_elapsed(now - phase_started)}")
+                if payload.get("status_summary"):
+                    print(_line("Summary", short_prompt(payload.get("status_summary"), 110)))
+                if not quiet:
+                    render_progress_block(payload, state, takes, result, elapsed=now - start, quiet=quiet)
+                    render_scene_summary(state, takes, result, verbose=verbose)
+                    render_quality_summary(result, state, takes, live=True, verbose=verbose)
             last_signature = signature
             last_heartbeat = now
 
@@ -1297,6 +1512,7 @@ def main() -> int:
     parser = _build_parser()
     args = parser.parse_args()
     base_url = _normalize_base_url(args.base_url)
+    live = _should_use_live(args)
 
     try:
         if args.inspect_run:
@@ -1322,7 +1538,10 @@ def main() -> int:
             fallback_poll_sec=args.poll_interval_sec,
             quiet=args.quiet,
             verbose=args.verbose,
+            live=live,
         )
+        if live:
+            print()
         _print_terminal(
             terminal_payload,
             base_url,

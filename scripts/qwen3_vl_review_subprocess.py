@@ -36,6 +36,30 @@ def _normalize_status(value: Any) -> str:
     return status if status in {"passed", "needs_review", "rejected"} else "needs_review"
 
 
+def _generate_review_payload(model: Any, processor: Any, images: list[Any], prompt: str, max_new_tokens: int) -> tuple[dict[str, Any] | None, str]:
+    strict_prompt = (
+        "STRICT JSON ONLY. Do not use Markdown, prose, code fences, or explanations. "
+        "Return exactly one JSON object with keys: status, postability_score, issues, warnings, problem_frames, summary. "
+        f"{prompt}"
+    )
+    messages = [
+        {
+            "role": "user",
+            "content": [{"type": "image", "image": image} for image in images] + [{"type": "text", "text": strict_prompt}],
+        }
+    ]
+    text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+    inputs = processor(text=[text], images=images, return_tensors="pt")
+    if hasattr(model, "device"):
+        inputs = inputs.to(model.device)
+    output_ids = model.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
+    generated = processor.batch_decode(output_ids[:, inputs["input_ids"].shape[-1] :], skip_special_tokens=True)[0]
+    try:
+        return _extract_json_object(generated), generated
+    except Exception:
+        return None, generated
+
+
 def main() -> None:
     try:
         request = json.load(sys.stdin)
@@ -73,21 +97,17 @@ def main() -> None:
 
         model = AutoModelForImageTextToText.from_pretrained(str(model_dir), **model_kwargs)
         images = [PILImage.open(str(frame["path"])).convert("RGB") for frame in frames]
-        messages = [
-            {
-                "role": "user",
-                "content": [{"type": "image", "image": image} for image in images] + [{"type": "text", "text": prompt}],
-            }
-        ]
-        text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-        inputs = processor(text=[text], images=images, return_tensors="pt")
-        if hasattr(model, "device"):
-            inputs = inputs.to(model.device)
-        output_ids = model.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
-        generated = processor.batch_decode(output_ids[:, inputs["input_ids"].shape[-1] :], skip_special_tokens=True)[0]
-        try:
-            payload = _extract_json_object(generated)
-        except Exception as exc:
+        payload, generated = _generate_review_payload(model, processor, images, prompt, max_new_tokens)
+        if payload is None:
+            retry_prompt = (
+                "Return only valid JSON. No Markdown. No prose. "
+                "The previous response was invalid. Use status needs_review if uncertain. "
+                f"{prompt}"
+            )
+            payload, retry_generated = _generate_review_payload(model, processor, images, retry_prompt, max_new_tokens)
+            if payload is None:
+                generated = retry_generated or generated
+        if payload is None:
             _emit(
                 {
                     "provider": "qwen3_vl",
@@ -95,7 +115,7 @@ def main() -> None:
                     "status": "needs_review",
                     "postability_score": 0.5,
                     "issues": [],
-                    "warnings": [f"qwen3_vl returned non-json review: {exc}"],
+                    "warnings": ["qwen3_vl_parser_warning: returned non-json review"],
                     "problem_frames": [],
                     "summary": generated.strip()[:500] or "qwen3_vl returned no review text",
                 }

@@ -149,6 +149,41 @@ class OutputQualityUtilsTest(unittest.TestCase):
         self.assertTrue(any("allowed_props" in issue for issue in review["issues"]))
         self.assertTrue(any("action" in issue for issue in review["issues"]))
 
+    def test_keyframe_visual_risk_rejects_split_text_phone_prompt(self) -> None:
+        review = evaluate_keyframe_visual_risk(
+            scene_world_contract={
+                "visible_subject": "water glass beside a smartphone",
+                "environment": "split screen collage with embedded subtitles",
+                "action": "showing a black rectangle phone next to the glass",
+                "allowed_props": ["clear water glass", "smartphone", "panel layout"],
+                "forbidden_props": ["phones", "split screen", "collage", "typography"],
+                "text_risk_policy": "No readable text, no phones, no split screen.",
+            },
+            candidate_prompt_text="A split screen collage with fake text and a phone beside the glass.",
+            effective_prompt="Single shot. Forbidden visuals: no phone, no split screen.",
+        )
+
+        self.assertEqual(review["visual_risk_status"], "rejected")
+        joined = " ".join(review["issues"]).lower()
+        self.assertIn("smartphone", joined)
+        self.assertIn("split screen", joined)
+
+    def test_keyframe_visual_risk_passes_safe_morning_reset_keyframe(self) -> None:
+        review = evaluate_keyframe_visual_risk(
+            scene_world_contract={
+                "visible_subject": "hand sets one clear water glass only",
+                "environment": "plain empty wooden table in natural daylight",
+                "action": "placing the glass on the empty table",
+                "allowed_props": ["one clear water glass only", "plain empty wooden table", "window light"],
+                "forbidden_props": ["phones", "black rectangle", "paper", "labels", "split screen", "collage"],
+                "text_risk_policy": "No readable text, no phone, no black rectangle, no paper, no labels.",
+            },
+            candidate_prompt_text="Clean tabletop still with one clear water glass only.",
+            effective_prompt="Single full-frame shot, one continuous scene, no split screen, no collage.",
+        )
+
+        self.assertEqual(review["visual_risk_status"], "passed")
+
     def test_keyframe_visual_risk_missing_contract_needs_review(self) -> None:
         review = evaluate_keyframe_visual_risk(
             scene_world_contract={"visible_subject": "person by window"},

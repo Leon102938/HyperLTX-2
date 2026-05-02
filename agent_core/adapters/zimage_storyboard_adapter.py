@@ -4,6 +4,7 @@ import time
 from pathlib import Path
 
 from agent_core.adapters.base import StoryboardAdapter
+from agent_core.prompt_builder import PromptBuilder
 from agent_core.schemas import ArtifactRef, BackendCapabilities, ExecutionResult, JobInput, ProductionPlan
 from agent_core.utils import compress_visual_prompt, http_json
 
@@ -98,7 +99,14 @@ class ZImageStoryboardAdapter(StoryboardAdapter):
                         "variation_id": storyboard_step.params.get("variation_id"),
                         "candidate_id": storyboard_step.params.get("candidate_id"),
                         "effective_prompt": effective_prompt,
+                        "effective_model_prompt": effective_prompt,
+                        "effective_prompt_debug": storyboard_step.params.get("effective_prompt_debug") or storyboard_step.params.get("effective_prompt"),
                         "prompt_source": prompt_source,
+                        "positive_model_prompt": storyboard_step.params.get("positive_model_prompt"),
+                        "negative_model_prompt": storyboard_step.params.get("negative_model_prompt"),
+                        "combined_model_prompt": storyboard_step.params.get("combined_model_prompt"),
+                        "backend_prompt_policy": storyboard_step.params.get("backend_prompt_policy"),
+                        "prompt_audit": storyboard_step.params.get("prompt_audit"),
                     },
                 )
             )
@@ -116,7 +124,14 @@ class ZImageStoryboardAdapter(StoryboardAdapter):
                 "submit": submit,
                 "status": latest_status,
                 "effective_prompt": effective_prompt,
+                "effective_model_prompt": effective_prompt,
+                "effective_prompt_debug": storyboard_step.params.get("effective_prompt_debug") or storyboard_step.params.get("effective_prompt"),
                 "prompt_source": prompt_source,
+                "positive_model_prompt": storyboard_step.params.get("positive_model_prompt"),
+                "negative_model_prompt": storyboard_step.params.get("negative_model_prompt"),
+                "combined_model_prompt": storyboard_step.params.get("combined_model_prompt"),
+                "backend_prompt_policy": storyboard_step.params.get("backend_prompt_policy"),
+                "prompt_audit": storyboard_step.params.get("prompt_audit"),
                 "candidate_prompt_text": storyboard_step.params.get("candidate_prompt_text"),
                 "scene_prompt_text": storyboard_step.params.get("scene_prompt_text"),
                 "storyboard_prompt_metadata": storyboard_step.params.get("storyboard_prompt_metadata"),
@@ -124,12 +139,21 @@ class ZImageStoryboardAdapter(StoryboardAdapter):
         )
 
     def _resolve_effective_prompt(self, plan: ProductionPlan, storyboard_step) -> tuple[str, str]:
+        policy = storyboard_step.params.get("backend_prompt_policy") or {}
+        if isinstance(policy, dict) and str(policy.get("zimage") or "") == "positive_only":
+            positive_prompt = str(storyboard_step.params.get("positive_model_prompt") or storyboard_step.params.get("effective_model_prompt") or "").strip()
+            if positive_prompt:
+                return positive_prompt, "positive_model_prompt"
+
+        model_prompt = str(storyboard_step.params.get("effective_model_prompt") or storyboard_step.params.get("model_prompt") or "").strip()
+        if model_prompt:
+            return model_prompt, str(storyboard_step.params.get("prompt_source") or "storyboard_step_effective_model_prompt")
         step_prompt = str(storyboard_step.params.get("effective_prompt") or "").strip()
         if step_prompt:
-            return step_prompt, str(storyboard_step.params.get("prompt_source") or "storyboard_step_effective_prompt")
+            return PromptBuilder._strip_debug_and_leaked_terms(step_prompt), str(storyboard_step.params.get("prompt_source") or "storyboard_step_effective_prompt")
 
         candidate_prompt = str(storyboard_step.params.get("candidate_prompt_text") or "").strip()
         if candidate_prompt:
-            return compress_visual_prompt(candidate_prompt), "candidate_prompt_text_compressed"
+            return PromptBuilder._strip_debug_and_leaked_terms(compress_visual_prompt(candidate_prompt)), "candidate_prompt_text_compressed"
 
-        return compress_visual_prompt(plan.prompt_text), "global_plan_prompt_compressed"
+        return PromptBuilder._strip_debug_and_leaked_terms(compress_visual_prompt(plan.prompt_text)), "global_plan_prompt_compressed"

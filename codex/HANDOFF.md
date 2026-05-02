@@ -1,5 +1,13 @@
 # HANDOFF.md
 
+## Stand 2026-05-01 Tagesabschluss
+- Phase F2 Grundlage ist umgesetzt: `agent_core/creative_system/` enthaelt Hook Patterns, Shot Recipes und Anti-Patterns; Morning Reset nutzt feste Shot Recipes und Hook Functions.
+- Backend Prompt Policy ist aktiv: Z-Image bekommt fuer Morning Reset positive-only Prompts; LTX bekommt positive Prosa plus kurze Avoid-Liste.
+- Pro geplantem Run gibt es jetzt `prompt_audit.json` und `model_prompts.json`. Letzteres zeigt `zimage_prompt_sent`, `ltx_prompt_sent`, Prompt-Quellen und Leak Checks.
+- CLI Live Dashboard ist verbessert: TTY-Redraw mit `--live`/`--no-live`, Current Work, Prompt Preview, Pipeline, Szenen und Artefaktstatus; Non-TTY bleibt Append-Ausgabe.
+- Aktueller Dry-Run: `/workspace/agent_runs/phase-f2-creative-os-dry-run` mit gruenem Prompt Audit und Model Prompt Trace. Kein echter Render wurde gestartet.
+- Tagesabschluss-Tests: 70 Unit Tests OK.
+
 ## Stand 2026-04-30
 - `init.sh` ist klein und stabilisiert: normaler HF-Downloader als Default, Xet aus, minimaler Init-Lock, Qwen3-VL optional.
 - LTX/Gemma ist wieder lauffaehig: globale Main-Runtime nutzt `transformers 4.52.4`.
@@ -23,4 +31,4 @@
    - `python3 /workspace/scripts/agent_core_cli.py --inspect-run quality-morning-reset-005`
 
 ## Naechster Schritt
-Rejected-Take-Selection-Bug und Hard Keyframe Visual Gate gegen Text/Phone/Split-Screen fixen. Danach erst neuen Clean-Visual-Run starten.
+Zuerst `/workspace/agent_runs/phase-f2-creative-os-dry-run/prompt_audit.json` und `model_prompts.json` pruefen. Nur wenn die Backend-Prompts sauber sind, `quality-morning-reset-009` manuell starten.

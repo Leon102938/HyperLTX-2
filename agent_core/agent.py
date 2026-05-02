@@ -9,6 +9,7 @@ from agent_core.adapters.base import MusicBackendAdapter, StoryboardAdapter, Vid
 from agent_core.assembler import ResultAssembler
 from agent_core.backend_registry import BackendRegistry, build_default_registry
 from agent_core.planner import ProductionPlanner
+from agent_core.prompt_builder import PromptBuilder
 from agent_core.schemas import (
     ArtifactRef,
     ExecutionResult,
@@ -36,6 +37,7 @@ from agent_core.utils import (
     stable_seed,
     validate_image_candidate,
     validate_video_take,
+    write_json,
 )
 
 
@@ -79,6 +81,8 @@ class VideoAgent:
             self.state_store.save_plan(state, plan)
             self.state_store.save_director_output(state, plan)
             self.state_store.save_scene_plan(state, plan)
+            self._save_prompt_audit(job, plan, state)
+            self._save_model_prompts_trace(job, plan, state)
             if plan.director_output:
                 self.state_store.append_log(
                     state.job_id,
@@ -109,6 +113,8 @@ class VideoAgent:
                         self.state_store.save_plan(state, plan)
                         self.state_store.save_director_output(state, plan)
                         self.state_store.save_scene_plan(state, plan)
+                        self._save_prompt_audit(job, plan, state)
+                        self._save_model_prompts_trace(job, plan, state)
                         self.state_store.append_log(
                             state.job_id,
                             "Plan updated after real voice duration became available.",
@@ -405,6 +411,310 @@ class VideoAgent:
             error=error,
         )
 
+    def _save_prompt_audit(self, job: JobInput, plan: ProductionPlan, state) -> None:
+        path = self.state_store.job_dir(state.job_id) / "prompt_audit.json"
+        scenes = []
+        all_model_prompts: list[str] = []
+        leaked_terms = [
+            "WORLD / SETTING",
+            "SUBJECT / ACTION",
+            "FORBIDDEN VISUALS",
+            "TEXT RISK POLICY",
+            "STORY BEAT",
+            "MOTIF SAFETY",
+            "Vorhang auf",
+            "Stell ein Glas Wasser ab",
+            "Atme ruhig am Fenster",
+            "Morning Reset:",
+            "social clip",
+            "content",
+            "website",
+            "app",
+            "ui",
+            "screen",
+            "phone",
+            "smartphone",
+        ]
+        for scene in plan.scenes:
+            contract = dict(scene.prompt_build_metadata.get("scene_world_contract") or {})
+            model_prompt = str(scene.prompt_build_metadata.get("model_prompt") or contract.get("model_prompt") or scene.prompt_text)
+            positive_model_prompt = str(
+                scene.prompt_build_metadata.get("positive_model_prompt")
+                or contract.get("positive_model_prompt")
+                or model_prompt
+            )
+            negative_model_prompt = str(
+                scene.prompt_build_metadata.get("negative_model_prompt")
+                or contract.get("negative_model_prompt")
+                or ""
+            )
+            storyboard_model_prompts = [
+                str(candidate.render_params.get("effective_model_prompt") or "")
+                for candidate in scene.keyframe_candidates
+                if candidate.render_params.get("effective_model_prompt")
+            ]
+            ltx_model_prompts = [
+                str(take.prompt_build_metadata.get("model_prompt") or take.prompt_text)
+                for take in scene.takes
+            ]
+            prompt_pool = [model_prompt, *storyboard_model_prompts, *ltx_model_prompts]
+            all_model_prompts.extend(prompt_pool)
+            found = sorted(
+                {
+                    term
+                    for term in leaked_terms
+                    for prompt in prompt_pool
+                    if PromptBuilder._term_is_positive_leak(prompt, term)
+                }
+            )
+            positive_risky = [
+                term
+                for term in PromptBuilder.POSITIVE_RISKY_TERMS
+                if PromptBuilder._term_is_positive_leak(positive_model_prompt, term)
+            ]
+            negative_terms = [term.strip() for term in negative_model_prompt.split(",") if term.strip()]
+            repeated_terms = sorted(
+                {
+                    term
+                    for term in negative_terms
+                    if sum(1 for item in negative_terms if item.lower() == term.lower()) > 1
+                }
+            )
+            positive_constraints_in_negative = [
+                term
+                for term in PromptBuilder.POSITIVE_CONSTRAINT_TERMS
+                if any(term in item.lower() for item in negative_terms)
+            ]
+            scenes.append(
+                {
+                    "scene_id": scene.scene_id,
+                    "role": (scene.scene_intent.narrative_role if scene.scene_intent else None),
+                    "motif_id": contract.get("motif_id"),
+                    "shot_recipe_id": contract.get("shot_recipe_id"),
+                    "hook_function": contract.get("hook_function"),
+                    "anti_patterns_checked": contract.get("anti_patterns_checked", []),
+                    "backend_prompt_policy": contract.get("backend_prompt_policy"),
+                    "debug_prompt": scene.prompt_build_metadata.get("debug_prompt") or scene.prompt_text,
+                    "positive_model_prompt": positive_model_prompt,
+                    "negative_model_prompt": negative_model_prompt,
+                    "model_prompt": model_prompt,
+                    "zimage_prompt_sent": scene.prompt_build_metadata.get("zimage_prompt_sent") or contract.get("zimage_prompt_sent"),
+                    "ltx_prompt_sent": scene.prompt_build_metadata.get("ltx_prompt_sent") or contract.get("ltx_prompt_sent"),
+                    "model_prompt_word_count": len(model_prompt.split()),
+                    "positive_risky_terms_detected": positive_risky,
+                    "negative_terms_count": len(negative_terms),
+                    "repeated_terms_detected": repeated_terms,
+                    "positive_constraints_in_negative_prompt": positive_constraints_in_negative,
+                    "storyboard_effective_model_prompt": storyboard_model_prompts[0] if storyboard_model_prompts else None,
+                    "ltx_model_prompt": ltx_model_prompts[0] if ltx_model_prompts else None,
+                    "forbidden_visuals": contract.get("forbidden_props", []),
+                    "allowed_props": contract.get("allowed_props", []),
+                    "warnings": [],
+                    "leaked_terms_detected": found,
+                }
+            )
+        joined = "\n".join(all_model_prompts)
+        all_negative_terms = [
+            [term.strip() for term in str(scene.get("negative_model_prompt") or "").split(",") if term.strip()]
+            for scene in scenes
+        ]
+        checks = {
+            "no_debug_labels_in_model_prompts": not any(term in joined for term in leaked_terms[:6]),
+            "no_script_snippets_in_model_prompts": not any(term in joined for term in leaked_terms[6:10]),
+            "no_forbidden_positive_terms": all(not scene["positive_risky_terms_detected"] for scene in scenes),
+            "no_german_imperatives_in_model_prompts": not any(term in joined for term in leaked_terms[6:9]),
+            "positive_model_prompt_word_count_ok": all(len(str(scene["positive_model_prompt"]).split()) <= 100 for scene in scenes),
+            "positive_model_prompt_no_risky_words": all(not scene["positive_risky_terms_detected"] for scene in scenes),
+            "negative_model_prompt_separate": all(bool(scene["negative_model_prompt"]) for scene in scenes),
+            "no_positive_constraints_in_negative_prompt": all(
+                not scene["positive_constraints_in_negative_prompt"] for scene in scenes
+            ),
+            "model_prompt_not_overlong": all(int(scene["model_prompt_word_count"]) <= 140 for scene in scenes),
+            "no_repeated_forbidden_spam": all(not scene["repeated_terms_detected"] and len(terms) <= 25 for scene, terms in zip(scenes, all_negative_terms)),
+            "scene_has_shot_recipe_id": all(bool(scene.get("shot_recipe_id")) for scene in scenes),
+            "scene_has_hook_function": all(bool(scene.get("hook_function")) for scene in scenes),
+            "anti_patterns_checked": all(bool(scene.get("anti_patterns_checked")) for scene in scenes),
+            "backend_prompt_policy_applied": all(bool(scene.get("backend_prompt_policy")) for scene in scenes),
+            "zimage_positive_only_applied": all(
+                str((scene.get("backend_prompt_policy") or {}).get("zimage")) == "positive_only"
+                and "Avoid:" not in str(scene.get("zimage_prompt_sent") or "")
+                for scene in scenes
+            ),
+            "ltx_short_avoid_applied": all(len(str(scene.get("ltx_prompt_sent") or scene.get("model_prompt") or "").split()) <= 140 for scene in scenes),
+        }
+        payload = {
+            "job_id": plan.job_id,
+            "mode_id": plan.metadata.get("mode_id"),
+            "style_id": plan.metadata.get("style_id"),
+            "user_idea": job.idea,
+            "user_script": job.script,
+            "sanitized_visual_brief": plan.prompt_text,
+            "scenes": scenes,
+            "checks": checks,
+            "leaked_terms_checked": leaked_terms,
+        }
+        write_json(path, payload)
+
+    def _save_model_prompts_trace(self, job: JobInput, plan: ProductionPlan, state) -> None:
+        path = self.state_store.job_dir(state.job_id) / "model_prompts.json"
+        leaked_terms = [
+            *PromptBuilder.DEBUG_LABELS,
+            "Vorhang auf",
+            "Stell ein Glas Wasser ab",
+            "Atme ruhig am Fenster",
+            "Morning Reset:",
+        ]
+        script_snippets = [
+            part.strip()
+            for part in __import__("re").split(r"(?<=[.!?])\s+", str(job.script or ""))
+            if part.strip()
+        ]
+        scenes: list[dict[str, Any]] = []
+
+        for scene in plan.scenes:
+            meta = scene.prompt_build_metadata or {}
+            contract = dict(meta.get("scene_world_contract") or {})
+            policy = (
+                meta.get("backend_prompt_policy")
+                or contract.get("backend_prompt_policy")
+                or PromptBuilder.DEFAULT_BACKEND_PROMPT_POLICY
+            )
+            if not isinstance(policy, dict):
+                policy = dict(PromptBuilder.DEFAULT_BACKEND_PROMPT_POLICY)
+            source = meta.get("prompt_sent_to_backend_source") or contract.get("prompt_sent_to_backend_source") or {}
+            if not isinstance(source, dict):
+                source = {}
+
+            positive_model_prompt = str(meta.get("positive_model_prompt") or contract.get("positive_model_prompt") or "")
+            negative_model_prompt = str(meta.get("negative_model_prompt") or contract.get("negative_model_prompt") or "")
+            combined_model_prompt = str(
+                meta.get("combined_model_prompt")
+                or meta.get("model_prompt")
+                or contract.get("combined_model_prompt")
+                or contract.get("model_prompt")
+                or scene.prompt_text
+            )
+            planned_zimage_prompt = str(meta.get("zimage_prompt_sent") or contract.get("zimage_prompt_sent") or "")
+            planned_ltx_prompt = str(meta.get("ltx_prompt_sent") or contract.get("ltx_prompt_sent") or combined_model_prompt)
+
+            storyboard_prompts = [
+                str(candidate.render_params.get("effective_model_prompt") or "")
+                for candidate in scene.keyframe_candidates
+                if candidate.render_params.get("effective_model_prompt")
+            ]
+            take_ltx_prompts = [
+                str(
+                    take.prompt_build_metadata.get("ltx_prompt_sent")
+                    or take.prompt_build_metadata.get("model_prompt")
+                    or take.prompt_text
+                )
+                for take in scene.takes
+            ]
+            zimage_prompt_sent = storyboard_prompts[0] if storyboard_prompts else planned_zimage_prompt
+            ltx_prompt_sent = take_ltx_prompts[0] if take_ltx_prompts else planned_ltx_prompt
+
+            if not zimage_prompt_sent and str(policy.get("zimage")) == "positive_only":
+                zimage_prompt_sent = positive_model_prompt
+            if not ltx_prompt_sent:
+                ltx_prompt_sent = combined_model_prompt
+
+            source_zimage = str(source.get("zimage") or ("positive_model_prompt" if zimage_prompt_sent == positive_model_prompt else "unknown"))
+            source_ltx = str(source.get("ltx") or ("combined_model_prompt" if ltx_prompt_sent == combined_model_prompt else "unknown"))
+
+            zimage_leaks = [term for term in leaked_terms if term and term in zimage_prompt_sent]
+            ltx_leaks = [term for term in leaked_terms if term and term in ltx_prompt_sent]
+            zimage_script_leaks = [term for term in script_snippets if term and term in zimage_prompt_sent]
+            ltx_script_leaks = [term for term in script_snippets if term and term in ltx_prompt_sent]
+            risky_positive_terms = [
+                term
+                for term in PromptBuilder.POSITIVE_RISKY_TERMS
+                if PromptBuilder._term_is_positive_leak(positive_model_prompt, term)
+            ]
+            warnings: list[str] = []
+            if source_zimage == "debug_prompt" or source_ltx == "debug_prompt":
+                warnings.append("prompt_sent_to_backend_source_debug_prompt")
+            if zimage_leaks or ltx_leaks or zimage_script_leaks or ltx_script_leaks:
+                warnings.append("backend_prompt_leak_detected")
+            if str(policy.get("zimage")) == "positive_only" and "Avoid:" in zimage_prompt_sent:
+                warnings.append("zimage_positive_only_policy_not_applied")
+
+            scenes.append(
+                {
+                    "scene_id": scene.scene_id,
+                    "scene_role": meta.get("scene_role") or contract.get("scene_role"),
+                    "motif_id": contract.get("motif_id"),
+                    "shot_recipe_id": meta.get("shot_recipe_id") or contract.get("shot_recipe_id"),
+                    "hook_function": meta.get("hook_function") or contract.get("hook_function"),
+                    "positive_model_prompt": positive_model_prompt,
+                    "negative_model_prompt": negative_model_prompt,
+                    "combined_model_prompt": combined_model_prompt,
+                    "zimage_prompt_sent": zimage_prompt_sent or None,
+                    "ltx_prompt_sent": ltx_prompt_sent or None,
+                    "prompt_sent_to_backend_source": {
+                        "zimage": source_zimage,
+                        "ltx": source_ltx,
+                    },
+                    "prompt_checks": {
+                        "zimage_no_debug_labels": not any(label in zimage_prompt_sent for label in PromptBuilder.DEBUG_LABELS),
+                        "zimage_no_script_snippets": not zimage_script_leaks,
+                        "ltx_no_debug_labels": not any(label in ltx_prompt_sent for label in PromptBuilder.DEBUG_LABELS),
+                        "ltx_no_script_snippets": not ltx_script_leaks,
+                        "no_risky_positive_terms": not risky_positive_terms,
+                        "zimage_prompt_word_count_ok": len(zimage_prompt_sent.split()) <= 100,
+                        "ltx_prompt_word_count_ok": len(ltx_prompt_sent.split()) <= 140,
+                    },
+                    "warnings": warnings,
+                }
+            )
+
+        first_policy: dict[str, Any] = {}
+        for scene in scenes:
+            source_scene = next((s for s in plan.scenes if s.scene_id == scene["scene_id"]), None)
+            if source_scene:
+                source_meta = source_scene.prompt_build_metadata or {}
+                contract = source_meta.get("scene_world_contract") or {}
+                first_policy = source_meta.get("backend_prompt_policy") or contract.get("backend_prompt_policy") or first_policy
+            if first_policy:
+                break
+        if not isinstance(first_policy, dict):
+            first_policy = dict(PromptBuilder.DEFAULT_BACKEND_PROMPT_POLICY)
+
+        payload = {
+            "job_id": plan.job_id,
+            "mode_id": plan.metadata.get("mode_id"),
+            "style_id": plan.metadata.get("style_id"),
+            "backend_prompt_policy": first_policy or PromptBuilder.DEFAULT_BACKEND_PROMPT_POLICY,
+            "scenes": scenes,
+            "checks": {
+                "backend_prompt_policy_applied": all(
+                    scene["prompt_sent_to_backend_source"]["zimage"] != "debug_prompt"
+                    and scene["prompt_sent_to_backend_source"]["ltx"] != "debug_prompt"
+                    for scene in scenes
+                ),
+                "zimage_positive_only_applied": all(
+                    scene["prompt_sent_to_backend_source"]["zimage"] == "positive_model_prompt"
+                    and "Avoid:" not in str(scene.get("zimage_prompt_sent") or "")
+                    for scene in scenes
+                ),
+                "ltx_short_avoid_applied": all(
+                    len(str(scene.get("ltx_prompt_sent") or "").split()) <= 140
+                    for scene in scenes
+                ),
+                "no_debug_labels_in_backend_prompts": all(
+                    scene["prompt_checks"]["zimage_no_debug_labels"] and scene["prompt_checks"]["ltx_no_debug_labels"]
+                    for scene in scenes
+                ),
+                "no_script_snippets_in_backend_prompts": all(
+                    scene["prompt_checks"]["zimage_no_script_snippets"] and scene["prompt_checks"]["ltx_no_script_snippets"]
+                    for scene in scenes
+                ),
+                "no_risky_positive_terms": all(scene["prompt_checks"]["no_risky_positive_terms"] for scene in scenes),
+                "scene_has_shot_recipe_id": all(bool(scene.get("shot_recipe_id")) for scene in scenes),
+                "scene_has_hook_function": all(bool(scene.get("hook_function")) for scene in scenes),
+            },
+        }
+        write_json(path, payload)
+
     def _run_video_step(
         self,
         job: JobInput,
@@ -573,6 +883,7 @@ class VideoAgent:
                     },
                     error=take_result.error,
                 )
+                self._normalize_take_visual_review_metadata(take_record)
                 take_records.append(take_record)
                 if take_result.success and validation and not validation.passed:
                     self.state_store.append_log(
@@ -1158,6 +1469,33 @@ class VideoAgent:
             counts[status if status in counts else "unknown"] += 1
         return counts
 
+    @staticmethod
+    def _normalize_take_visual_review_metadata(record: TakeResultRecord) -> None:
+        review = dict(record.metadata.get("take_visual_review") or {})
+        status = VideoAgent._take_visual_status(record)
+        warnings = list(review.get("warnings") or [])
+        try:
+            score = float(record.metadata.get("postability_score", review.get("postability_score", 0.5)))
+            score_valid = True
+        except (TypeError, ValueError):
+            score = 0.5
+            score_valid = False
+        parser_warning = any("qwen3_vl_parser_warning" in str(item) for item in warnings)
+        if status == "passed" and (parser_warning or not score_valid):
+            status = "needs_review"
+            if not score_valid:
+                warnings.append("qwen3_vl_parser_warning: invalid or missing postability_score")
+        if status == "passed" and score < 0.7:
+            score = 0.7
+            warnings.append("postability_score normalized to minimum passed threshold")
+        score = round(max(0.0, min(1.0, score)), 3)
+        review["take_visual_review_status"] = status
+        review["postability_score"] = score
+        review["warnings"] = list(dict.fromkeys(str(item) for item in warnings if str(item).strip()))
+        record.metadata["take_visual_review"] = review
+        record.metadata["take_visual_review_status"] = status
+        record.metadata["postability_score"] = score
+
     def _select_take_record(
         self,
         scene: ScenePlan,
@@ -1181,7 +1519,10 @@ class VideoAgent:
             "candidate_take_ids": [record.take_id for record in valid_candidates],
             "candidate_variation_ids": sorted({record.variation_id for record in valid_candidates if record.variation_id}),
             "visual_review_counts": self._take_visual_review_counts(take_records),
-            "selection_reason": "prefer technically valid visually passed takes, then duration and creative fit",
+            "selection_reason": (
+                "hard order: technically valid visual passed, then technically valid visual needs_review, "
+                "then technically valid visual rejected only as last_resort_no_better_candidate"
+            ),
         }
         if not valid_candidates:
             selection_details["technical_selection_status"] = "no_valid_candidates"
@@ -1273,11 +1614,9 @@ class VideoAgent:
         selection_details["rule_hits"] = (selected_take.metadata.get("selection_scores") or {}).get("rule_hits", [])
         selection_details["selected_take_id"] = selected_take.take_id
         selection_details["selected_variation_id"] = selected_take.variation_id
-        if best_visual_rank == 2 and any(self._take_visual_rank(record) < 2 for record in valid_candidates):
-            selection_details["selection_reason"] = "visual review rejected candidates were not selected when safer takes existed"
-        elif best_visual_rank == 2:
+        if best_visual_rank == 2:
             selection_details["fallback_used"] = True
-            selection_details["selection_reason"] = "only technically valid candidates were visually rejected; selected last-resort fallback"
+            selection_details["selection_reason"] = "last_resort_no_better_candidate"
         elif len(best_candidates) > 1 and len(creative_best_candidates) == 1:
             selection_details["selection_reason"] = (
                 "multiple visually acceptable and technically equal takes were resolved by rule-based creative selection"
@@ -1294,7 +1633,8 @@ class VideoAgent:
 
     @staticmethod
     def _take_visual_status(record: TakeResultRecord) -> str:
-        status = str(record.metadata.get("take_visual_review_status") or "needs_review")
+        review = record.metadata.get("take_visual_review") or {}
+        status = str(review.get("take_visual_review_status") or record.metadata.get("take_visual_review_status") or "needs_review")
         return status if status in {"passed", "needs_review", "rejected"} else "needs_review"
 
     @staticmethod
@@ -1304,9 +1644,12 @@ class VideoAgent:
     @staticmethod
     def _take_postability_score(record: TakeResultRecord) -> float:
         try:
-            return float(record.metadata.get("postability_score", 0.5))
+            score = float(record.metadata.get("postability_score", (record.metadata.get("take_visual_review") or {}).get("postability_score", 0.5)))
         except (TypeError, ValueError):
             return 0.5
+        if VideoAgent._take_visual_status(record) == "passed" and score < 0.7:
+            return 0.7
+        return score
 
     @staticmethod
     def _scene_position_label(scene_index: int, total_scene_count: int) -> str:

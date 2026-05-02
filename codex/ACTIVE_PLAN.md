@@ -23,6 +23,21 @@ Eine kleine Director-/Brain-Schicht vor dem bestehenden Planner bauen, die Jobs 
 Den bereits vorbereiteten Director-Layer produktiv an ein echtes lokales Director-Modell anbinden, bevorzugt Qwen3.6-35B-A3B in praktikabler quantisierter Form als GGUF `Q4_K_M`, ohne Fake-Integration, ohne neuen Mega-Stack und mit sauberem Fallback auf den bisherigen regelbasierten Flow.
 
 ## Aktueller Operativer Fokus
+- Tagesabschluss-F2 ist abgeschlossen: CLI Live Dashboard, Prompt Trace `model_prompts.json`, Backend Prompt Policy und F2 Creative OS Grundlage sind implementiert und getestet.
+- Aktueller Dry-Run-Beleg: `/workspace/agent_runs/phase-f2-creative-os-dry-run`. Vor jedem echten Render zuerst `prompt_audit.json` und `model_prompts.json` pruefen.
+- Backend-Prompt-Vertrag fuer Morning Reset: Z-Image positive-only, LTX positive + kurze Avoid-Liste. Keine Debuglabels oder Script-Snippets duerfen Backend-Prompts erreichen.
+- Naechster Schritt morgen ist genau: Prompt-Audit/Model-Prompts des F2-Dry-Runs manuell pruefen; nur wenn sauber, `quality-morning-reset-009` manuell starten.
+- Phase F1.1 Model Prompt Compiler Cleanup ist abgeschlossen. Naechster Pruefpunkt ist `/workspace/agent_runs/phase-f1-1-morning-reset-prompt-clean-dry-run/prompt_audit.json`.
+- Erst wenn der F1.1-Audit manuell sauber wirkt, einen guenstigen echten `quality-morning-reset-009` starten.
+- Phase F1 Creative Operating System + Prompt Audit ist abgeschlossen. Naechster Schritt: zuerst `/workspace/agent_runs/phase-f1-morning-reset-dry-run/prompt_audit.json` manuell anschauen.
+- Erst nach Audit-Review einen echten `quality-morning-reset-009` starten; kein weiterer Mini-Fix ohne Audit-Beleg.
+- Aktueller Architekturvertrag: Mode-/Style-Playbook -> Debug Prompt + Model Prompt -> Prompt Audit -> Z-Image/LTX nur mit model-facing Prompt.
+- `quality-morning-reset-008` ist der naechste echte Testkandidat nach dem Narration-Isolation-Fix: subtitle-mode off, storyboard on, variations-per-scene 1, takes-per-scene 3, Qwen3-VL review.
+- Der Fix nach `quality-morning-reset-007` ist abgeschlossen: deutsche Script-Snippets werden aus visuellen Prompts entfernt, in englische Visual Actions uebersetzt, Take-Review-Metadata vor Selection normalisiert und Device/UI-Risiken strenger bewertet.
+- Dry-Run-Beleg liegt unter `/workspace/agent_runs/quality-morning-reset-008-plan-dry-run`; keine `Vorhang auf`/`Stell ein Glas Wasser ab`/`Atme ruhig am Fenster`/`Morning Reset:`-Leaks in visual prompts oder Storyboard effective prompts.
+- `quality-morning-reset-007` ist der naechste echte Testkandidat nach dem Quality-Gate-Fix: subtitle-mode off, storyboard on, 3 takes per scene, Qwen3-VL review.
+- Der naechste Fix nach `quality-morning-reset-006` ist abgeschlossen: rejected Take Selection verhindert, passed-score Konsistenz gehaertet, Keyframe Visual Gate gegen Text/Phone/Split-Screen erweitert, Qwen3-VL JSON robuster, Morning-Reset-Motive konkreter.
+- Dry-Run-Beleg liegt unter `/workspace/agent_runs/quality-morning-reset-007-plan-dry-run`; alle selected keyframes sind `contract_preserved=true` und `visual_risk_status=passed`.
 - Tagesabschluss/Backup ist der aktuelle Modus. Kein weiterer Feature-, Quality-, CLI-, Runtime- oder Init-Umbau in dieser Session.
 - Morgen genau ein technischer Fokus: rejected selected Take Bug und Hard Keyframe Visual Gate gegen Text/Phone/Split-Screen fixen; danach neuer Clean-Visual-Test.
 - Erster Morning-Reset-Qualitaetsfix nach Phase E2 ist abgeschlossen: Visual Prompt Sanitizer, Safe Morning Reset Motivbibliothek, allowed_props Cleanup, Storyboard-Prompt-Schutz und strengere Device-/UI-Review-Risiken.

@@ -1,6 +1,34 @@
 # MEMORY.md
 
 ## Dauerhafte Erkenntnisse
+- F2-Regel: Backend-Prompt-Policy ist Teil des Creative Systems. Fuer Morning Reset gilt `zimage=positive_only` und `ltx=positive_plus_short_avoid`.
+- `model_prompts.json` ist der wichtigste Prompt-Trace neben `prompt_audit.json`: dort muss sichtbar sein, was Z-Image und LTX tatsaechlich bekommen sollten.
+- Z-Image soll keine Avoid-Spam-Liste bekommen, weil lange Negativlisten riskante Begriffe assoziieren koennen. Positive-only ist fuer saubere Storyboard-Keyframes der Default.
+- LTX darf kurze Avoid-Listen bekommen, aber maximal knapp und backendfreundlich; keine Debuglabels, keine Scriptsaetze, keine Vertragsbloecke.
+- Jede F2-Morning-Reset-Szene braucht `shot_recipe_id` und `hook_function`. Ohne Rezept/Haken driftet der Director wieder in generisches B-Roll oder freie Social-Clip-Interpretation.
+- Hook Patterns, Shot Recipes und Anti-Patterns sind keine Deko: sie sind die naechste Qualitaetssteuerung vor Prompts und Reviews.
+- CLI-TTY-Runs sollen per Live-Redraw ein aktuelles Dashboard zeigen. Non-TTY muss Append-Mode behalten, damit Logs/n8n nicht durch ANSI-Redraw unlesbar werden.
+- Tagesabschluss 2026-05-01: Vor dem naechsten echten Render zuerst `/workspace/agent_runs/phase-f2-creative-os-dry-run/prompt_audit.json` und `model_prompts.json` lesen.
+- Phase F1.1 Prompt-Regel: Model-Prompts duerfen nicht von Negativlisten dominiert werden. Positive Beschreibung und negative Avoid-Liste muessen getrennt bleiben.
+- `positive_model_prompt` darf keine riskanten Woerter wie readable, text-bearing, typography, letters, numbers, subtitles, phone, screen, ui, app, website, browser, social, content, label oder logo enthalten.
+- Positive Constraints sind keine Verbote. `single full-frame shot`, `one continuous scene`, `one clear water glass only`, `plain empty wooden table` duerfen nie als `no ...` im Negative Prompt erscheinen.
+- Combined Backend Prompt bleibt kurz: positive prose + `Avoid: ...`, maximal 140 Woerter; negative Liste maximal 25 Begriffe.
+- Prompt Audit muss nicht nur Leaks suchen, sondern auch Prompt-Qualitaet messen: Wortzahl, riskante positive Woerter, getrennte negative Prompts und Repetition.
+- Phase F1 etabliert den neuen Grundsatz: Nie wieder Debug-/Planungslabels direkt an Bildmodelle. `debug_prompt` und `model_prompt` muessen getrennte Artefakte sein.
+- Z-Image und LTX duerfen nur `model_prompt`/`effective_model_prompt` sehen; `WORLD / SETTING`, `SUBJECT / ACTION`, `FORBIDDEN VISUALS`, `TEXT RISK POLICY`, `STORY BEAT` und `MOTIF SAFETY` gehoeren nur in Debug/Audit.
+- Creative Modes sind kuenftig die erste Qualitaetssteuerung. Morning Reset nutzt explizit `curtain_opening_window_light`, `water_glass_empty_table`, `calm_breathing_open_window`.
+- Jeder echte Qualitaetslauf soll zuerst `prompt_audit.json` pruefen: mode/style, Motive, Model-Prompts, Leakterme und Checks.
+- Platform-/Produktionsbegriffe wie social clip, content, reel, website, app, UI, screen, phone sind Metadaten oder Forbidden Visuals, nicht positive Bildmotive.
+- `quality-morning-reset-007` zeigte: Script-/Narration-Saetze duerfen nie wortwoertlich in Visual Prompts. `Vorhang auf`, `Stell ein Glas Wasser ab`, `Atme ruhig am Fenster` muessen zu englischen visuellen Actions werden.
+- Bild-/Video-Prompts sollen fuer Morning Reset englisch und beschreibend sein: plain fabric curtains, one clear water glass only on a plain empty wooden table, calm person breathing beside an open window. Keine deutschen Imperative, keine Captions, keine `Morning Reset:`-Titel.
+- TakeRecord-Normalisierung muss den verschachtelten `take_visual_review`-Payload als Wahrheit nehmen, weil Top-Level-Felder stale sein koennen. Selection darf erst nach dieser Normalisierung laufen.
+- `passed` + Score 0.0 ist auch in persistierten Metadata-Feldern verboten; missing/invalid score oder Qwen Parser Warning darf nicht `passed` bleiben.
+- Qwen3-VL Device/UI-Hits sind fuer Clean Morning Reset harte Risiken. Wenn sichere Kandidaten existieren, muessen UI/Device-Kandidaten verlieren.
+- 2026-05-01 Fix nach `quality-morning-reset-006`: Ein `rejected` Take darf nie selected werden, wenn ein technically valid `passed` oder `needs_review` Take existiert; nur letzter Ausweg ist `selection_reason=last_resort_no_better_candidate`.
+- `passed` + `postability_score=0.0` ist ungueltig. Passed Reviews werden auf mindestens 0.7 normalisiert; Qwen3-VL Parser-Warnungen oder invalide Scores muessen `needs_review` bleiben.
+- Keyframe-Gating muss schon vor LTX gegen Text/Fake-Text/Typografie, Untertitel, Phone/Smartphone/Black Rectangle, Screen/UI/App/Web, Split-Screen/Collage/Panels, Paper/Document/Notebook und Logo/Label/Sign greifen.
+- Morning Reset harte Motive: Scene 1 plain fabric curtains + blank wall; Scene 2 one clear water glass only auf plain empty wooden table, no second object/no phone/no black rectangle; Scene 3 single full-frame shot, one continuous scene, no split screen/panels/collage/embedded subtitles.
+- Qwen3-VL non-json ist kein Passed-Fall: JSON extrahieren, einmal JSON-only retryen, danach `needs_review` mit `qwen3_vl_parser_warning`.
 - Tagesabschluss 2026-04-30: Nicht weiter an Features arbeiten. Gesicherter Stand ist CLI E2/E2.1/E2.2 + Qwen3-VL-Isolation + erster Morning-Reset-Quality-Fix.
 - `quality-morning-reset-006` ist technisch erfolgreich, aber qualitativ failed. Merken: technische Pipeline-Gruenheit reicht nicht; Selection/Gating muss rejected Takes und schlechte Keyframes haerter verhindern.
 - Offener Morgen-Fokus ist genau: rejected selected Take verhindern, Hard Keyframe Visual Gate gegen Fake-Text/Phone/Split-Screen/Collage, Qwen3-VL JSON-Robustheit, Morning Reset Motive weiter konkretisieren.

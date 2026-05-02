@@ -22,6 +22,7 @@ from agent_core.schemas import (
     TakeValidationReport,
 )
 from agent_core.state_store import StateStore
+import agent_core.utils as utils
 from agent_core.utils import evaluate_take_visual_review, extract_review_frames
 
 
@@ -235,6 +236,217 @@ class TakeVisualReviewTest(unittest.TestCase):
         self.assertIsNotNone(selected_without_passed)
         self.assertEqual(selected_without_passed.take_id, "take_needs")
         self.assertEqual(details_without_passed["visual_selection_status"], "needs_review")
+
+    def test_rejected_take_is_not_selected_when_passed_exists_even_with_higher_score(self) -> None:
+        agent = VideoAgent()
+        scene = ScenePlan(
+            scene_id="scene_01",
+            index=1,
+            title="Scene",
+            description="Scene",
+            target_duration_sec=4.0,
+            num_frames=105,
+            prompt_text="Scene prompt",
+        )
+        selected, details = agent._select_take_record(
+            scene,
+            [
+                self._take_record("take_rejected", 1, "rejected", 1.0),
+                self._take_record("take_passed", 2, "passed", 0.71),
+            ],
+            total_scene_count=1,
+            previous_selected_shot_type=None,
+        )
+
+        self.assertEqual(selected.take_id, "take_passed")
+        self.assertEqual(details["visual_selection_status"], "passed")
+
+    def test_higher_postability_score_wins_within_passed_takes(self) -> None:
+        agent = VideoAgent()
+        scene = ScenePlan(
+            scene_id="scene_01",
+            index=1,
+            title="Scene",
+            description="Scene",
+            target_duration_sec=4.0,
+            num_frames=105,
+            prompt_text="Scene prompt",
+        )
+        selected, details = agent._select_take_record(
+            scene,
+            [
+                self._take_record("take_low", 1, "passed", 0.71),
+                self._take_record("take_high", 2, "passed", 0.95),
+            ],
+            total_scene_count=1,
+            previous_selected_shot_type=None,
+        )
+
+        self.assertEqual(selected.take_id, "take_high")
+        self.assertEqual(details["best_score"]["postability_score"], 0.95)
+
+    def test_reselection_uses_updated_visual_review_before_final_selection(self) -> None:
+        agent = VideoAgent()
+        scene = ScenePlan(
+            scene_id="scene_01",
+            index=1,
+            title="Scene",
+            description="Scene",
+            target_duration_sec=4.0,
+            num_frames=105,
+            prompt_text="Scene prompt",
+        )
+        stale_selected = self._take_record("stale_selected", 1, "passed", 0.95)
+        stale_selected.metadata["take_visual_review"] = {
+            "take_visual_review_status": "rejected",
+            "postability_score": 0.1,
+            "provider": "qwen3_vl",
+        }
+        safe = self._take_record("safe", 2, "passed", 0.8)
+        agent._normalize_take_visual_review_metadata(stale_selected)
+        agent._normalize_take_visual_review_metadata(safe)
+
+        selected, details = agent._select_take_record(
+            scene,
+            [stale_selected, safe],
+            total_scene_count=1,
+            previous_selected_shot_type=None,
+        )
+
+        self.assertEqual(selected.take_id, "safe")
+        self.assertEqual(details["visual_selection_status"], "passed")
+
+    def test_passed_score_zero_is_normalized_to_minimum_passed_score(self) -> None:
+        review = utils._base_take_visual_review(
+            status="passed",
+            score=0.0,
+            issues=[],
+            warnings=[],
+            provider="heuristic",
+            scene_world_contract={},
+            review_frames=[],
+            scene_id="scene_01",
+            take_id="take_01",
+        )
+
+        self.assertEqual(review["take_visual_review_status"], "passed")
+        self.assertGreaterEqual(review["postability_score"], 0.7)
+
+    def test_take_record_passed_score_zero_is_normalized_before_selection(self) -> None:
+        record = self._take_record("take_passed_zero", 1, "passed", 0.0)
+        VideoAgent._normalize_take_visual_review_metadata(record)
+
+        self.assertEqual(record.metadata["take_visual_review_status"], "passed")
+        self.assertGreaterEqual(record.metadata["postability_score"], 0.7)
+        self.assertGreaterEqual(record.metadata["take_visual_review"]["postability_score"], 0.7)
+
+    def test_qwen_parser_warning_never_returns_passed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            model_dir = Path(tmpdir)
+            (model_dir / "config.json").write_text("{}")
+            original = utils._run_qwen3_vl_review_subprocess
+
+            def fake_qwen(**_kwargs):
+                return {
+                    "status": "passed",
+                    "postability_score": 0.9,
+                    "warnings": ["qwen3_vl_parser_warning: returned non-json review"],
+                    "issues": [],
+                    "problem_frames": [],
+                    "real_vlm_inference_used": True,
+                }
+
+            try:
+                utils._run_qwen3_vl_review_subprocess = fake_qwen
+                review = utils._evaluate_take_visual_review_qwen3_vl(
+                    heuristic={
+                        "take_visual_review_status": "passed",
+                        "postability_score": 0.8,
+                        "warnings": [],
+                        "issues": [],
+                        "problem_frames": [],
+                    },
+                    scene_world_contract={},
+                    review_frames=[{"path": "/tmp/frame.png", "exists": True}],
+                    model_dir=str(model_dir),
+                )
+            finally:
+                utils._run_qwen3_vl_review_subprocess = original
+
+        self.assertEqual(review["take_visual_review_status"], "needs_review")
+        self.assertIn("qwen3_vl_parser_warning", " ".join(review["warnings"]))
+
+    def test_qwen_missing_score_never_returns_passed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            model_dir = Path(tmpdir)
+            (model_dir / "config.json").write_text("{}")
+            original = utils._run_qwen3_vl_review_subprocess
+
+            def fake_qwen(**_kwargs):
+                return {
+                    "status": "passed",
+                    "warnings": [],
+                    "issues": [],
+                    "problem_frames": [],
+                    "real_vlm_inference_used": True,
+                }
+
+            try:
+                utils._run_qwen3_vl_review_subprocess = fake_qwen
+                review = utils._evaluate_take_visual_review_qwen3_vl(
+                    heuristic={
+                        "take_visual_review_status": "passed",
+                        "postability_score": 0.8,
+                        "warnings": [],
+                        "issues": [],
+                        "problem_frames": [],
+                    },
+                    scene_world_contract={},
+                    review_frames=[{"path": "/tmp/frame.png", "exists": True}],
+                    model_dir=str(model_dir),
+                )
+            finally:
+                utils._run_qwen3_vl_review_subprocess = original
+
+        self.assertEqual(review["take_visual_review_status"], "needs_review")
+        self.assertIn("qwen3_vl_parser_warning", " ".join(review["warnings"]))
+
+    def test_qwen_device_ui_risk_rejects_clean_morning_reset_take(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            model_dir = Path(tmpdir)
+            (model_dir / "config.json").write_text("{}")
+            original = utils._run_qwen3_vl_review_subprocess
+
+            def fake_qwen(**_kwargs):
+                return {
+                    "status": "passed",
+                    "postability_score": 0.9,
+                    "warnings": ["visible ui element near the glass"],
+                    "issues": [],
+                    "problem_frames": [],
+                    "summary": "visible ui risk",
+                    "real_vlm_inference_used": True,
+                }
+
+            try:
+                utils._run_qwen3_vl_review_subprocess = fake_qwen
+                review = utils._evaluate_take_visual_review_qwen3_vl(
+                    heuristic={
+                        "take_visual_review_status": "passed",
+                        "postability_score": 0.8,
+                        "warnings": [],
+                        "issues": [],
+                        "problem_frames": [],
+                    },
+                    scene_world_contract={"social_tip_visual_guard": True},
+                    review_frames=[{"path": "/tmp/frame.png", "exists": True}],
+                    model_dir=str(model_dir),
+                )
+            finally:
+                utils._run_qwen3_vl_review_subprocess = original
+
+        self.assertEqual(review["take_visual_review_status"], "rejected")
+        self.assertLessEqual(review["postability_score"], 0.2)
 
     @unittest.skipIf(shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None, "ffmpeg/ffprobe not available")
     def test_run_persists_take_visual_review_metadata(self) -> None:

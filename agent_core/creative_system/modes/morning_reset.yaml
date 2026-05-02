@@ -1,0 +1,79 @@
+{
+  "mode_id": "morning_reset",
+  "purpose": "High quality short clean-lifestyle clip about a calm morning start and focus.",
+  "creative_goal": "Make a quiet morning reset feel intentional through one simple physical action per shot, visible light change, tactile detail, and a calm payoff.",
+  "audience_feel": "calm, focused, uncluttered, premium but ordinary enough to feel repeatable",
+  "pacing": {
+    "overall": "three clear beats with gentle motion",
+    "scene_1": "immediate light reveal hook",
+    "scene_2": "tactile close-up detail",
+    "scene_3": "quiet breathing payoff"
+  },
+  "platform_default": "portrait_short",
+  "visual_style": "clean_lifestyle_morning",
+  "scene_count_default": 3,
+  "hook_patterns": ["light_reveal_hook", "tactile_detail_hook", "quiet_payoff_hook"],
+  "shot_roles": {
+    "scene_1": "hook",
+    "scene_2": "tactile_detail",
+    "scene_3": "payoff"
+  },
+  "shot_recipe_order": ["curtain_light_reveal", "water_glass_closeup", "breath_by_window"],
+  "anti_patterns": [
+    "dead_static_scene",
+    "generic_stock_broll",
+    "fake_text_overlay",
+    "phone_next_to_object",
+    "split_screen_layout",
+    "dark_unclear_subject",
+    "too_many_objects",
+    "debug_prompt_visible",
+    "narration_text_visible"
+  ],
+  "quality_targets": {
+    "object_count": "few visible objects, never more than the recipe needs",
+    "motion": "every scene has one visible action or physical change",
+    "clarity": "single full-frame physical scene without graphic layout",
+    "text_policy": "no generated readable text or label-like surfaces"
+  },
+  "backend_prompt_policy": {
+    "zimage": "positive_only",
+    "ltx": "positive_plus_short_avoid"
+  },
+  "scene_arc": {
+    "scene_1": {
+      "role": "hook",
+      "motif": "curtain_opening_window_light",
+      "shot_recipe_id": "curtain_light_reveal",
+      "hook_function": "light_reveal_hook",
+      "visual_energy_level": "gentle motion with visible light change",
+      "why_this_scene": "Opening fabric and morning light create instant movement without needing text.",
+      "visual_action": "person gently opens plain fabric curtains in soft morning light",
+      "safe_props": ["plain curtains", "blank wall", "soft window light", "simple bedding"],
+      "forbidden": ["text", "typography", "phone", "screen", "ui", "app", "website", "split screen", "collage", "paper", "logos"]
+    },
+    "scene_2": {
+      "role": "tactile_detail",
+      "motif": "water_glass_empty_table",
+      "shot_recipe_id": "water_glass_closeup",
+      "hook_function": "tactile_detail_hook",
+      "visual_energy_level": "small hand movement and glass reflections",
+      "why_this_scene": "The single glass gives the reset a concrete tactile anchor and a clean surface.",
+      "visual_action": "one clear water glass is placed on a plain empty wooden table by one hand",
+      "safe_props": ["one clear water glass only", "plain empty wooden table", "soft morning light", "hand"],
+      "hard_rules": ["no second object on the table", "no phone beside the glass", "no black rectangle", "no device", "no paper", "no label"]
+    },
+    "scene_3": {
+      "role": "payoff",
+      "motif": "calm_breathing_open_window",
+      "shot_recipe_id": "breath_by_window",
+      "hook_function": "quiet_payoff_hook",
+      "visual_energy_level": "low motion emotional resolution",
+      "why_this_scene": "Breathing by the open window resolves the routine into calm focus.",
+      "visual_action": "calm person breathes beside an open window in soft light",
+      "safe_props": ["open window", "curtains", "plant", "soft light"],
+      "hard_rules": ["single full-frame shot", "one continuous scene", "no split screen", "no stacked panels", "no collage", "no embedded subtitles", "no graphic layout"]
+    }
+  },
+  "global_forbidden": ["readable text", "fake text", "typography", "letters", "numbers", "subtitles in image", "UI", "screen", "app layout", "website", "browser", "social media frame", "phone", "smartphone", "black rectangular device", "paper", "notebook", "document", "logo", "label", "sign", "split screen", "collage", "multi-panel layout"]
+}

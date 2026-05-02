@@ -171,7 +171,12 @@ VISUAL_RISK_FORBIDDEN_TERMS = (
     "dashboard",
     "social media frame",
     "split screen",
+    "stacked panel",
+    "multi-panel layout",
     "collage",
+    "embedded subtitle",
+    "graphic layout",
+    "black rectangle",
     "logo",
     "label",
     "poster",
@@ -192,7 +197,7 @@ VISUAL_RISK_PROMPT_PATTERNS = (
     r"\bvisible\s+(?:screen|ui|interface|text|logo|label|poster|sign)\b",
     r"\b(?:screen|ui|interface)\s+facing\s+(?:camera|viewer)\b",
     r"\b(?:phone|smartphone|mobile device)\s+(?:beside|next to|on|in|near|facing|visible)\b",
-    r"\b(?:app|website|webpage|browser|dashboard|social media frame|split screen|collage)\b",
+    r"\b(?:app|website|webpage|browser|dashboard|social media frame|split screen|stacked panel|multi-panel layout|collage|embedded subtitle|graphic layout|black rectangle)\b",
     r"\bopen\s+(?:notebook|document|page)\b",
     r"\b(?:paper|notebook|document|page)\s+(?:on|in|across)\s+(?:the\s+)?(?:desk|table|counter)\b",
     r"\bwriting\s+on\s+(?:paper|a\s+notebook|the\s+notebook|a\s+document|the\s+page)\b",
@@ -1288,7 +1293,7 @@ def _positive_visual_risk_hits(value: str) -> list[str]:
     if not lowered:
         return []
     lowered = re.sub(r"\bhidden\s+(?:logos?|labels?|device faces?|displays?|screens?|interfaces?)\b", " ", lowered)
-    risk_terms = r"text|paper|notebooks?|documents?|pages?|screens?|phones?|smartphones?|mobile devices?|ui|interfaces?|apps?|websites?|webpages?|browsers?|dashboards?|logos?|labels?|posters?|signs?|social media frames?|split screens?|collages?"
+    risk_terms = r"(?:readable\s+|visible\s+|overlaid\s+)?text|credits?|name labels?|typography|glyphs?|letters?|numbers?|paper|notebooks?|documents?|pages?|screens?|phones?|smartphones?|mobile devices?|black rectangles?|ui|interfaces?|apps?|websites?|webpages?|browsers?|dashboards?|logos?|labels?|posters?|signs?|social media frames?|split screens?|stacked panels?|multi-panel layouts?|collages?|embedded subtitles?|graphic layouts?"
     lowered = re.sub(rf"\bno\s+(?:readable\s+|visible\s+)?(?:{risk_terms})\b", " ", lowered)
     lowered = re.sub(rf"\bwithout\s+(?:readable\s+|visible\s+)?(?:{risk_terms})\b", " ", lowered)
     return [term for term in VISUAL_RISK_FORBIDDEN_TERMS if re.search(rf"\b{re.escape(term)}s?\b", lowered)]
@@ -1325,6 +1330,12 @@ def _base_take_visual_review(
     checked_contract_fields: list[str] | None = None,
     summary: str | None = None,
 ) -> dict[str, Any]:
+    normalized_status = status if status in {"passed", "needs_review", "rejected"} else "needs_review"
+    normalized_score = round(max(0.0, min(1.0, float(score))), 3)
+    normalized_warnings = list(warnings)
+    if normalized_status == "passed" and normalized_score < 0.7:
+        normalized_score = 0.7
+        normalized_warnings.append("postability_score normalized to minimum passed threshold")
     checked_fields = checked_contract_fields or [
         "visible_subject",
         "environment",
@@ -1345,10 +1356,10 @@ def _base_take_visual_review(
     ]
     contract = scene_world_contract or {}
     return {
-        "take_visual_review_status": status if status in {"passed", "needs_review", "rejected"} else "needs_review",
-        "postability_score": round(max(0.0, min(1.0, float(score))), 3),
+        "take_visual_review_status": normalized_status,
+        "postability_score": normalized_score,
         "issues": _unique_strings(issues),
-        "warnings": _unique_strings(warnings),
+        "warnings": _unique_strings(normalized_warnings),
         "problem_frames": problem_frames,
         "provider": provider,
         "policy_version": TAKE_VISUAL_REVIEW_POLICY_VERSION,
@@ -1395,7 +1406,12 @@ def _evaluate_take_visual_review_qwen3_vl(
 
     max_frame_count = max(1, int(max_frames or os.environ.get("VISION_REVIEW_MAX_FRAMES", "3") or "3"))
     selected_frames = existing_frames[:max_frame_count]
+    reviewer_system = ""
+    reviewer_path = Path("/workspace/agent_core/creative_system/prompts/qwen3_vl_reviewer_system.md")
+    if reviewer_path.exists():
+        reviewer_system = reviewer_path.read_text(encoding="utf-8").strip()
     prompt = (
+        f"{reviewer_system}\n\n"
         "Review these video frames against the scene contract. Detect visible text, glyphs, screens, UI, "
         "paper, notebooks, documents, labels, logos, signs, posters, typography, letters, or numbers. "
         "Return strict JSON with status, postability_score, issues, warnings, problem_frames, summary. "
@@ -1409,14 +1425,29 @@ def _evaluate_take_visual_review_qwen3_vl(
             prompt=prompt,
         )
         status = _normalize_review_status(payload.get("status") or payload.get("take_visual_review_status"))
-        score = float(payload.get("postability_score", heuristic.get("postability_score", 0.5)))
+        warnings = _unique_strings(list(payload.get("warnings") or []))
+        raw_score = payload.get("postability_score")
+        parser_warning = any("qwen3_vl_parser_warning" in str(item) for item in warnings)
+        try:
+            score = float(raw_score)
+            score_valid = True
+        except (TypeError, ValueError):
+            score = float(heuristic.get("postability_score", 0.5))
+            score_valid = False
+            warnings.append("qwen3_vl_parser_warning: invalid or missing postability_score")
+        if parser_warning and status == "passed":
+            status = "needs_review"
+        if not score_valid and status == "passed":
+            status = "needs_review"
+        if status == "passed" and score < 0.7:
+            score = 0.7
         result = dict(heuristic)
         result.update(
             {
                 "take_visual_review_status": status,
                 "postability_score": round(max(0.0, min(1.0, score)), 3),
                 "issues": _unique_strings(list(payload.get("issues") or [])),
-                "warnings": _unique_strings(list(payload.get("warnings") or [])),
+                "warnings": _unique_strings(warnings),
                 "problem_frames": list(payload.get("problem_frames") or result.get("problem_frames") or []),
                 "provider": "qwen3_vl",
                 "real_vlm_inference_used": bool(payload.get("real_vlm_inference_used")),
@@ -1436,9 +1467,13 @@ def _evaluate_take_visual_review_qwen3_vl(
             for hit in qwen_hits
             if hit in {"phone", "smartphone", "mobile device", "screen", "ui", "interface", "app", "website", "webpage", "browser", "dashboard"}
         ]
-        if device_hits and result.get("take_visual_review_status") == "passed":
-            result["take_visual_review_status"] = "needs_review"
-            result["postability_score"] = min(float(result.get("postability_score", 0.5)), 0.62)
+        if device_hits and result.get("take_visual_review_status") in {"passed", "needs_review"}:
+            if scene_world_contract.get("social_tip_visual_guard"):
+                result["take_visual_review_status"] = "rejected"
+                result["postability_score"] = min(float(result.get("postability_score", 0.5)), 0.2)
+            else:
+                result["take_visual_review_status"] = "needs_review"
+                result["postability_score"] = min(float(result.get("postability_score", 0.5)), 0.45)
             result["warnings"] = _unique_strings(
                 list(result.get("warnings") or [])
                 + [f"qwen3_vl reported visible device/UI risk: {', '.join(_unique_strings(device_hits))}"]
@@ -1548,6 +1583,16 @@ def _candidate_positive_prompt_risk_hits(prompt: str) -> list[str]:
                 "no glyphs",
                 "no letters",
                 "no numbers",
+                "no phones",
+                "no phone",
+                "no smartphone",
+                "no black rectangle",
+                "no split screen",
+                "no stacked panels",
+                "no collage",
+                "no multi-panel",
+                "no embedded subtitles",
+                "no graphic layout",
                 "without screens",
                 "without screen",
                 "without labels",

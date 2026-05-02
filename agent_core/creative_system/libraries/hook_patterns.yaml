@@ -1,0 +1,37 @@
+{
+  "light_reveal_hook": {
+    "purpose": "Open with a visible change in light so the first frame has immediate motion and payoff.",
+    "when_to_use": "morning routines, windows, curtains, waking scenes, calm transitions from dim to bright",
+    "visual_energy": "gentle but instantly readable",
+    "example_visual_action": "calm person opens plain curtains and soft morning light enters the room",
+    "anti_patterns": ["dead_static_scene", "fake_text_overlay", "dark_unclear_subject"]
+  },
+  "tactile_detail_hook": {
+    "purpose": "Anchor an abstract routine in one touchable object and a simple hand action.",
+    "when_to_use": "glass, cup, fabric, table, towel, plant, or other safe physical details",
+    "visual_energy": "small close-up movement with texture and reflections",
+    "example_visual_action": "one clear water glass rests on an empty wooden table as a hand gently places it",
+    "anti_patterns": ["phone_next_to_object", "too_many_objects", "generic_stock_broll"]
+  },
+  "motion_first_hook": {
+    "purpose": "Begin with the action already starting so the shot does not feel like static stock footage.",
+    "when_to_use": "hands entering frame, curtains moving, light changing, plant or fabric motion",
+    "visual_energy": "clear physical motion in the first second",
+    "example_visual_action": "a hand enters frame and performs one simple morning action",
+    "anti_patterns": ["dead_static_scene", "generic_stock_broll"]
+  },
+  "quiet_payoff_hook": {
+    "purpose": "Resolve a small routine into calm focus without adding text or explanation.",
+    "when_to_use": "final scene, breathing moment, window light, relaxed posture, simple human presence",
+    "visual_energy": "low motion, emotionally clear",
+    "example_visual_action": "calm person breathes beside an open window in soft morning light",
+    "anti_patterns": ["split_screen_layout", "debug_prompt_visible", "narration_text_visible"]
+  },
+  "contrast_before_after_hook": {
+    "purpose": "Show a simple physical contrast without using graphics, panels, or titles.",
+    "when_to_use": "messy-to-clean or closed-to-open transitions where the contrast is visible in one continuous shot",
+    "visual_energy": "moderate physical transformation",
+    "example_visual_action": "a simple space becomes brighter and cleaner through one visible action",
+    "anti_patterns": ["split_screen_layout", "too_many_objects", "fake_text_overlay"]
+  }
+}

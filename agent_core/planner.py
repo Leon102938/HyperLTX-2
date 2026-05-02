@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from agent_core.backend_registry import BackendRegistry
+from agent_core.creative_system import detect_mode_id, load_creative_system
 from agent_core.director import DirectorEngine
 from agent_core.prompt_builder import PromptBuilder
 from agent_core.schemas import (
@@ -199,6 +200,15 @@ class ProductionPlanner:
             job=job,
             scene_beats=scene_beats,
         )
+        creative_system = load_creative_system()
+        mode_id = detect_mode_id(job.idea, job.script, job.metadata)
+        mode_playbook = creative_system.mode(mode_id)
+        style_id = str(mode_playbook.get("visual_style") or "clean_lifestyle_morning")
+        backend_prompt_policy = mode_playbook.get("backend_prompt_policy") or PromptBuilder.DEFAULT_BACKEND_PROMPT_POLICY
+        director_output.metadata["creative_mode_id"] = mode_id
+        director_output.metadata["creative_style_id"] = style_id
+        director_output.metadata["creative_mode"] = mode_playbook
+        director_output.metadata["creative_style"] = creative_system.style(style_id)
         social_tip_visual_guard = self._is_social_tip_format(job, target_duration)
         social_tip_family = self._social_tip_family(job) if social_tip_visual_guard else None
         if social_tip_visual_guard:
@@ -329,6 +339,7 @@ class ProductionPlanner:
                     "selection_mode": storyboard_selection_mode,
                     "width": width,
                     "height": height,
+                    "backend_prompt_policy": backend_prompt_policy,
                 },
                 notes=["Storyboard keyframes are optional pre-visualization artifacts and do not replace the current video path."],
                 skip_reason=None if storyboard_enabled else "Storyboard disabled or no storyboard backend available.",
@@ -383,6 +394,7 @@ class ProductionPlanner:
                     "height": height,
                     "orientation": job.orientation,
                     "resolution_label": resolution_label,
+                    "backend_prompt_policy": backend_prompt_policy,
                 },
                 notes=["The planned video duration is kept at or above the voice duration to avoid obvious mismatch."],
             ),
@@ -439,6 +451,9 @@ class ProductionPlanner:
                 "prompt_guidance": director_output.prompt_guidance.model_dump(mode="json"),
                 "social_tip_visual_guard": social_tip_visual_guard,
                 "social_tip_visual_guard_family": social_tip_family,
+                "mode_id": mode_id,
+                "style_id": style_id,
+                "backend_prompt_policy": backend_prompt_policy,
                 "subtitle_max_words": subtitle_max_words,
                 "subtitle_max_chars": subtitle_max_chars,
                 "subtitle_min_words": subtitle_min_words,
@@ -574,16 +589,16 @@ class ProductionPlanner:
         motif_library: dict[str, list[dict[str, object]]] = {
             "morning_reset": [
                 {
-                    "hook_focus": "person opens bright curtains at a window, soft morning light, clear silhouette, tidy room",
-                    "visual_goal": "show a clean morning reset through window light, tidy bedding, fabric movement, and one clear human action with no text-bearing props",
-                    "shot_intent": "start with a broad clear wake-up moment, then guide the eye toward the curtain fabric and the subject",
-                    "keywords": ["curtains", "window", "sunlight", "bedding", "plant", "morning"],
+                    "hook_focus": "person opens plain fabric curtains beside a blank wall, soft morning light, clear silhouette, tidy room",
+                    "visual_goal": "show a clean morning reset through plain fabric curtains, blank wall, window light, tidy bedding, and one clear human action with no text-bearing props",
+                    "shot_intent": "start with a broad clear wake-up moment on plain fabric curtains and a blank wall",
+                    "keywords": ["plain fabric curtains", "blank wall", "window", "sunlight", "bedding", "morning"],
                 },
                 {
-                    "hook_focus": "hand sets a single clear water glass on a plain wooden table, natural daylight, empty surrounding surface",
-                    "visual_goal": "make the habit visually clear with clean tabletop b-roll, water, one neutral hand action, and no labels, notes, or device surfaces",
-                    "shot_intent": "favor a close everyday action shot with clear glass, wood grain, hand movement, and a clean unlabeled tabletop",
-                    "keywords": ["water", "glass", "wooden table", "hand", "daylight", "routine"],
+                    "hook_focus": "hand sets one clear water glass only on a plain empty wooden table, natural daylight, empty surrounding surface",
+                    "visual_goal": "make the habit visually clear with one clear water glass only, a plain empty wooden table, water, one neutral hand action, and a completely empty tabletop",
+                    "shot_intent": "favor a close everyday action shot with one clear water glass only, wood grain, and empty surrounding surface",
+                    "keywords": ["one clear water glass only", "plain empty wooden table", "no second object", "daylight", "routine"],
                 },
                 {
                     "hook_focus": "quiet kitchen routine with kettle steam, ceramic mug, fruit bowl, clean counter, soft morning daylight, no packaging front faces",
@@ -592,10 +607,10 @@ class ProductionPlanner:
                     "keywords": ["kitchen", "kettle", "mug", "steam", "counter", "morning"],
                 },
                 {
-                    "hook_focus": "person stands or sits near an open bright window, slow breathing, tidy room, soft light, empty hands",
-                    "visual_goal": "land on the clearest calm payoff through window light, relaxed posture, plant or plain cup, and no text or device surfaces",
-                    "shot_intent": "resolve with a wide clean composition that feels calm and open with one continuous lifestyle frame",
-                    "keywords": ["window", "breathing", "plant", "curtain", "morning", "serene"],
+                    "hook_focus": "person stands near an open bright window, slow breathing, tidy room, soft light, empty hands, single full-frame shot, one continuous scene",
+                    "visual_goal": "land on the clearest calm payoff through window light and relaxed posture with no split screen, no stacked panels, no collage, no embedded subtitles, no graphic layout",
+                    "shot_intent": "resolve with a wide clean single full-frame shot, one continuous scene, no split screen, no stacked panels, no collage, no embedded subtitles",
+                    "keywords": ["window", "breathing", "single full-frame shot", "one continuous scene", "morning", "serene"],
                 },
             ],
             "focus_break": [
@@ -765,6 +780,16 @@ class ProductionPlanner:
                 "director_mode": plan.metadata.get("director_mode"),
                 "director_fallback_reason": plan.metadata.get("director_fallback_reason"),
                 "prompt_build_metadata": take.prompt_build_metadata,
+                "debug_prompt": take.prompt_build_metadata.get("debug_prompt", take.prompt_text),
+                "model_prompt": take.prompt_build_metadata.get("ltx_prompt_sent")
+                or take.prompt_build_metadata.get("model_prompt", take.prompt_text),
+                "combined_model_prompt": take.prompt_build_metadata.get("combined_model_prompt")
+                or take.prompt_build_metadata.get("model_prompt", take.prompt_text),
+                "positive_model_prompt": take.prompt_build_metadata.get("positive_model_prompt"),
+                "negative_model_prompt": take.prompt_build_metadata.get("negative_model_prompt"),
+                "backend_prompt_policy": take.prompt_build_metadata.get("backend_prompt_policy"),
+                "prompt_sent_to_backend_source": take.prompt_build_metadata.get("prompt_sent_to_backend_source"),
+                "prompt_audit": take.prompt_build_metadata.get("prompt_audit"),
                 "seed": take.seed,
                 "width": plan.width,
                 "height": plan.height,
@@ -848,6 +873,13 @@ class ProductionPlanner:
             scene_world_contract=scene_world_contract,
             variation=selected_variation,
         )
+        effective_model_prompt = str(
+            storyboard_prompt_metadata.get("zimage_prompt_sent")
+            or storyboard_prompt_metadata.get("effective_model_prompt")
+            or storyboard_prompt_metadata.get("positive_model_prompt")
+            or storyboard_prompt_metadata.get("model_prompt")
+            or effective_prompt
+        )
         scene_storyboard_step = ProductionStep(
             name="storyboard",
             kind="storyboard",
@@ -872,6 +904,15 @@ class ProductionPlanner:
                 "guidance_scale": candidate.render_params.get("guidance_scale", 0.0),
                 "selection_mode": "preferred_variation_then_first_valid",
                 "effective_prompt": effective_prompt,
+                "effective_prompt_debug": effective_prompt,
+                "effective_model_prompt": effective_model_prompt,
+                "model_prompt": effective_model_prompt,
+                "combined_model_prompt": storyboard_prompt_metadata.get("combined_model_prompt"),
+                "positive_model_prompt": storyboard_prompt_metadata.get("positive_model_prompt"),
+                "negative_model_prompt": storyboard_prompt_metadata.get("negative_model_prompt"),
+                "backend_prompt_policy": storyboard_prompt_metadata.get("backend_prompt_policy"),
+                "prompt_sent_to_backend_source": storyboard_prompt_metadata.get("prompt_sent_to_backend_source"),
+                "prompt_audit": storyboard_prompt_metadata.get("prompt_audit"),
                 "prompt_source": storyboard_prompt_metadata["prompt_source"],
                 "candidate_prompt_text": candidate.prompt_text,
                 "scene_prompt_text": scene.prompt_text,
@@ -1022,6 +1063,8 @@ class ProductionPlanner:
                 scene_count=scene_count,
                 description=description,
                 scene_prompt_text=prompt_text,
+                scene_model_prompt=str(prompt_build_metadata.get("model_prompt") or ""),
+                scene_positive_model_prompt=str(prompt_build_metadata.get("positive_model_prompt") or ""),
                 scene_intent=scene_intent,
                 director_output=director_output,
                 variation_count=variations_per_scene,
@@ -1227,6 +1270,8 @@ class ProductionPlanner:
         scene_count: int,
         description: str,
         scene_prompt_text: str,
+        scene_model_prompt: str,
+        scene_positive_model_prompt: str,
         scene_intent: SceneIntent,
         director_output: DirectorOutput,
         variation_count: int,
@@ -1240,13 +1285,16 @@ class ProductionPlanner:
         variations: list[VariationPlan] = []
         for variation_index, preset in enumerate(selected_presets, start=1):
             variation_id = f"{scene_id}_var_{variation_index:02d}"
+            preset_payload = dict(preset)
+            preset_payload["scene_model_prompt"] = scene_model_prompt
+            preset_payload["scene_positive_model_prompt"] = scene_positive_model_prompt or scene_model_prompt
             prompt_delta = str(preset["prompt_delta"])
             prompt_variant_text, prompt_build_metadata = self.prompt_builder.build_variation_prompt(
                 scene_prompt_text=scene_prompt_text,
                 scene_intent=scene_intent,
                 style_lock=director_output.style_lock,
                 director_output=director_output,
-                variation=preset,
+                variation=preset_payload,
             )
             variations.append(
                 VariationPlan(
@@ -1425,6 +1473,12 @@ class ProductionPlanner:
                 f"{variation.prompt_variant_text} Storyboard keyframe still image. "
                 "One clean representative frame, sharp composition, no motion blur, blank unlabeled surfaces, no text overlay, no signage, no interface, no handwriting, no printed pages."
             )
+            candidate_model_prompt = str(
+                variation.prompt_build_metadata.get("zimage_prompt_sent")
+                or variation.prompt_build_metadata.get("positive_model_prompt")
+                or variation.prompt_build_metadata.get("model_prompt")
+                or prompt_text
+            )
             candidates.append(
                 KeyframeCandidatePlan(
                     candidate_id=candidate_id,
@@ -1442,6 +1496,14 @@ class ProductionPlanner:
                         "seed": seed,
                         "steps": int(zimage_overrides.get("steps", 9)),
                         "guidance_scale": float(zimage_overrides.get("guidance_scale", 0.0)),
+                        "effective_model_prompt": candidate_model_prompt,
+                        "model_prompt": candidate_model_prompt,
+                        "combined_model_prompt": variation.prompt_build_metadata.get("combined_model_prompt"),
+                        "positive_model_prompt": variation.prompt_build_metadata.get("positive_model_prompt"),
+                        "negative_model_prompt": variation.prompt_build_metadata.get("negative_model_prompt"),
+                        "backend_prompt_policy": variation.prompt_build_metadata.get("backend_prompt_policy"),
+                        "prompt_sent_to_backend_source": variation.prompt_build_metadata.get("prompt_sent_to_backend_source"),
+                        "debug_prompt": prompt_text,
                     },
                     notes=[
                         f"Phase 3A storyboard candidate {candidate_index} for {scene_id}.",

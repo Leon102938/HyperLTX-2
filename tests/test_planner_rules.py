@@ -349,6 +349,77 @@ class PlannerRulesTest(unittest.TestCase):
             for term in ["phones", "screens", "user interface", "app layout", "website", "social media frame"]:
                 self.assertIn(term, forbidden_props)
 
+    def test_morning_reset_prompts_pin_water_glass_and_full_frame_no_gos(self) -> None:
+        job = JobInput(
+            idea="Morning Reset social clip without phone distractions.",
+            script="Vorhang auf. Stell ein Glas Wasser ab. Atme ruhig am Fenster.",
+            duration_sec=9,
+            use_voice=True,
+            use_storyboard=True,
+            orientation="portrait",
+            resolution="draft",
+            metadata={"subtitle_mode": "off", "scene_count": 3, "storyboard_candidates_per_scene": 2},
+        )
+
+        plan = self.planner.build_plan(job)
+        scene_2_prompt = plan.scenes[1].prompt_text.lower()
+        scene_3_prompt = plan.scenes[2].prompt_text.lower()
+
+        self.assertIn("one clear water glass only", scene_2_prompt)
+        self.assertIn("plain empty wooden table", scene_2_prompt)
+        self.assertIn("no phones", scene_2_prompt)
+        self.assertIn("no black rectangle", scene_2_prompt)
+        self.assertIn("no second object on the table", scene_2_prompt)
+        self.assertIn("single full-frame shot", scene_3_prompt)
+        self.assertIn("one continuous scene", scene_3_prompt)
+        self.assertIn("no split screen", scene_3_prompt)
+        self.assertIn("no collage", scene_3_prompt)
+        self.assertIn("no stacked panels", scene_3_prompt)
+
+    def test_morning_reset_narration_does_not_leak_into_visual_prompts(self) -> None:
+        job = JobInput(
+            idea="Morning Reset: Vorhang oeffnen, klares Wasserglas auf leerem Holztisch, ruhig atmen.",
+            script="Vorhang auf. Stell ein Glas Wasser ab. Atme ruhig am Fenster.",
+            duration_sec=9,
+            use_voice=True,
+            use_storyboard=True,
+            orientation="portrait",
+            resolution="draft",
+            metadata={"subtitle_mode": "off", "scene_count": 3, "storyboard_candidates_per_scene": 2},
+        )
+
+        plan = self.planner.build_plan(job)
+        forbidden_snippets = ["Vorhang auf", "Stell ein Glas Wasser ab", "Atme ruhig am Fenster", "Morning Reset:"]
+        expected_visual_actions = [
+            "person gently opens plain fabric curtains",
+            "one clear water glass only on a plain empty wooden table",
+            "calm person breathes beside an open window",
+        ]
+
+        visual_prompt_text = []
+        for scene in plan.scenes:
+            contract = scene.prompt_build_metadata["scene_world_contract"]
+            visual_prompt_text.extend(
+                [
+                    scene.prompt_text,
+                    contract["visible_subject"],
+                    contract["visual_anchor"],
+                    contract["environment"],
+                    contract["action"],
+                    " ".join(contract["allowed_props"]),
+                ]
+            )
+            if scene.keyframe_candidates:
+                storyboard_plan = self.planner.build_storyboard_render_plan(plan, scene, scene.keyframe_candidates[0])
+                visual_prompt_text.append(storyboard_plan.steps[0].params["effective_prompt"])
+
+        joined = "\n".join(visual_prompt_text)
+        for snippet in forbidden_snippets:
+            self.assertNotIn(snippet, joined)
+        lowered = joined.lower()
+        for action in expected_visual_actions:
+            self.assertIn(action, lowered)
+
 
 if __name__ == "__main__":
     unittest.main()
