@@ -1,0 +1,205 @@
+{
+  "pipeline_id": "clean_shortform_v1",
+  "mode": "clean_shortform",
+  "required_inputs": ["job.idea_or_script"],
+  "produced_artifacts": [
+    "input_job.json",
+    "director_output.json",
+    "plan.json",
+    "scene_plan.json",
+    "prompt_audit.json",
+    "model_prompts.json",
+    "decision_log.json",
+    "takes.json",
+    "result.json",
+    "final.mp4"
+  ],
+  "required_skills": [
+    "platforms/tiktok_shortform",
+    "stages/creative_strategy",
+    "stages/beat_planning",
+    "stages/visual_direction",
+    "stages/model_prompting",
+    "models/zimage_turbo",
+    "models/ltx_video",
+    "review/visual_quality_review",
+    "review/boring_scene_detection"
+  ],
+  "stage_roles": {
+    "creative_strategy": "Convert user intent into platform, mode, style, motif families, and hard constraints.",
+    "beat_plan": "Select flexible visual beats and shot recipe candidates.",
+    "visual_direction": "Define physical world, style lock, motion, camera, and forbidden visuals.",
+    "model_prompt_compile": "Compile backend-safe prompts and audit policy separation.",
+    "approve_plan": "Allow a human/operator gate after strategy, beat plan, and scene plan artifacts exist.",
+    "quality_review": "Review artifacts, creative fit, boring scene risk, and platform readiness.",
+    "selection": "Select the best valid take with traceable reasoning."
+  },
+  "checkpoints": [
+    "validate_job",
+    "creative_strategy",
+    "approve_plan",
+    "beat_plan",
+    "visual_direction",
+    "model_prompt_compile",
+    "approve_prompts",
+    "storyboard_optional",
+    "video_render",
+    "quality_review",
+    "selection",
+    "assembly",
+    "final_quality_gate"
+  ],
+  "default_policy": {
+    "render_policy": "normal_unless_pipeline_dry_run_metadata_true",
+    "prompt_policy": "backend_specific_positive_separation",
+    "trace_policy": "write_skill_and_decision_trace"
+  },
+  "retry_policy": {
+    "max_attempts": 1,
+    "retryable_statuses": ["failed", "needs_review"],
+    "notes": ["G2 declares retry policy but does not implement a new retry executor."]
+  },
+  "approval_policy": {
+    "mode": "manual_file",
+    "require_files_when_enabled": true,
+    "approval_dir": "approvals",
+    "notes": ["Local approval files are read only when job.metadata.approval_gates_enabled is true."]
+  },
+  "steps": [
+    {
+      "step_id": "validate_job",
+      "stage": "validate_job",
+      "required_inputs": ["input_job"],
+      "produced_artifacts": ["input_job.json", "state.json"],
+      "required_skills": [],
+      "checkpoint_id": "validate_job",
+      "approval_required": false,
+      "blocking": true
+    },
+    {
+      "step_id": "create_plan",
+      "stage": "creative_strategy",
+      "required_inputs": ["input_job"],
+      "produced_artifacts": ["director_output.json", "plan.json"],
+      "required_skills": ["stages/creative_strategy", "platforms/tiktok_shortform"],
+      "checkpoint_id": "creative_strategy",
+      "approval_required": false,
+      "blocking": true
+    },
+    {
+      "step_id": "approve_plan",
+      "stage": "approve_plan",
+      "required_inputs": ["director_output.json", "plan.json", "scene_plan.json", "stage_contracts.json"],
+      "produced_artifacts": ["approvals/approve_plan.json"],
+      "required_skills": ["stages/creative_strategy", "stages/beat_planning", "stages/visual_direction"],
+      "checkpoint_id": "approve_plan",
+      "approval_required": true,
+      "blocking": true
+    },
+    {
+      "step_id": "beat_plan",
+      "stage": "beat_plan",
+      "required_inputs": ["director_output.json"],
+      "produced_artifacts": ["scene_plan.json"],
+      "required_skills": ["stages/beat_planning", "directing/anti_boring_scene"],
+      "checkpoint_id": "beat_plan",
+      "approval_required": false,
+      "blocking": true
+    },
+    {
+      "step_id": "visual_direction",
+      "stage": "visual_direction",
+      "required_inputs": ["scene_plan.json"],
+      "produced_artifacts": ["scene_plan.json"],
+      "required_skills": ["stages/visual_direction", "directing/clean_lifestyle_direction", "directing/motion_and_camera"],
+      "checkpoint_id": "visual_direction",
+      "approval_required": false,
+      "blocking": true
+    },
+    {
+      "step_id": "create_prompts",
+      "stage": "model_prompt_compile",
+      "required_inputs": ["scene_plan.json"],
+      "produced_artifacts": ["prompt_audit.json", "model_prompts.json"],
+      "required_skills": ["stages/model_prompting", "prompting/positive_image_prompting", "prompting/video_prompting", "prompting/negative_prompt_policy", "models/zimage_turbo", "models/ltx_video"],
+      "checkpoint_id": "model_prompt_compile",
+      "approval_required": false,
+      "blocking": true
+    },
+    {
+      "step_id": "approve_prompts",
+      "stage": "approve_prompts",
+      "required_inputs": ["prompt_audit.json", "model_prompts.json"],
+      "produced_artifacts": ["approvals/approve_prompts.json"],
+      "required_skills": ["stages/model_prompting"],
+      "checkpoint_id": "approve_prompts",
+      "approval_required": true,
+      "blocking": true
+    },
+    {
+      "step_id": "storyboard_optional",
+      "stage": "storyboard_optional",
+      "required_inputs": ["model_prompts.json"],
+      "produced_artifacts": ["storyboard_plan.json"],
+      "required_skills": ["models/zimage_turbo", "prompting/positive_image_prompting"],
+      "checkpoint_id": "storyboard_optional",
+      "approval_required": false,
+      "blocking": false,
+      "optional": true
+    },
+    {
+      "step_id": "render_video",
+      "stage": "video_render",
+      "required_inputs": ["model_prompts.json"],
+      "produced_artifacts": ["takes.json"],
+      "required_skills": ["models/ltx_video", "directing/motion_and_camera"],
+      "checkpoint_id": "video_render",
+      "approval_required": false,
+      "blocking": true
+    },
+    {
+      "step_id": "quality_review",
+      "stage": "quality_review",
+      "required_inputs": ["takes.json"],
+      "produced_artifacts": ["takes.json"],
+      "required_skills": ["stages/quality_review", "models/qwen3_vl_review", "review/visual_quality_review", "review/boring_scene_detection", "review/artifact_detection"],
+      "checkpoint_id": "quality_review",
+      "approval_required": false,
+      "blocking": true
+    },
+    {
+      "step_id": "selection",
+      "stage": "selection",
+      "required_inputs": ["takes.json"],
+      "produced_artifacts": ["takes.json"],
+      "required_skills": ["stages/take_selection", "review/postability_review"],
+      "checkpoint_id": "selection",
+      "approval_required": false,
+      "blocking": true
+    },
+    {
+      "step_id": "assemble",
+      "stage": "assembly",
+      "required_inputs": ["takes.json"],
+      "produced_artifacts": ["result.json", "final.mp4"],
+      "required_skills": [],
+      "checkpoint_id": "assembly",
+      "approval_required": false,
+      "blocking": true
+    },
+    {
+      "step_id": "final_quality_gate",
+      "stage": "final_quality_gate",
+      "required_inputs": ["result.json", "final.mp4"],
+      "produced_artifacts": ["result.json"],
+      "required_skills": ["review/postability_review", "review/visual_quality_review", "review/boring_scene_detection"],
+      "checkpoint_id": "final_quality_gate",
+      "approval_required": false,
+      "blocking": true
+    }
+  ],
+  "notes": [
+    "G2 pipeline definition is declarative and skill-aware.",
+    "The current executor still uses the existing agent_core runtime; this definition prepares richer stage contracts without replacing execution."
+  ]
+}

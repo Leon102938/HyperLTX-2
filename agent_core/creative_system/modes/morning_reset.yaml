@@ -4,14 +4,37 @@
   "creative_goal": "Make a quiet morning reset feel intentional through one simple physical action per shot, visible light change, tactile detail, and a calm payoff.",
   "audience_feel": "calm, focused, uncluttered, premium but ordinary enough to feel repeatable",
   "pacing": {
-    "overall": "three clear beats with gentle motion",
-    "scene_1": "immediate light reveal hook",
-    "scene_2": "tactile close-up detail",
-    "scene_3": "quiet breathing payoff"
+    "overall": "two to four clear beats with gentle visible motion",
+    "beat_guidance": "open with a visible micro-change, follow with tactile detail or body reset, end with calm payoff"
   },
   "platform_default": "portrait_short",
   "visual_style": "clean_lifestyle_morning",
   "scene_count_default": 3,
+  "required_skills": [
+    "directing/clean_lifestyle_direction",
+    "directing/anti_boring_scene",
+    "directing/motion_and_camera",
+    "prompting/positive_image_prompting",
+    "prompting/negative_prompt_policy"
+  ],
+  "motif_families": [
+    "light_reveal",
+    "tactile_object_detail",
+    "body_reset_gesture",
+    "breath_window_moment",
+    "fabric_texture",
+    "sunlight_surface",
+    "before_after_micro_change"
+  ],
+  "motif_family_guidance": {
+    "light_reveal": "curtain, door, blind, or angle change that visibly changes soft morning light",
+    "tactile_object_detail": "one simple object handled on a clean surface, never a phone or labeled product",
+    "body_reset_gesture": "hands, shoulders, posture, stretching, or small movement that reads as reset",
+    "breath_window_moment": "person near light or window with subtle breathing or pause",
+    "fabric_texture": "plain bedding, towel, curtain, or clothing texture moved by hand or light",
+    "sunlight_surface": "light crossing a table, floor, wall, or object with minimal props",
+    "before_after_micro_change": "small visible state change such as opening, placing, clearing, or turning toward light"
+  },
   "hook_patterns": ["light_reveal_hook", "tactile_detail_hook", "quiet_payoff_hook"],
   "shot_roles": {
     "scene_1": "hook",
@@ -19,6 +42,8 @@
     "scene_3": "payoff"
   },
   "shot_recipe_order": ["curtain_light_reveal", "water_glass_closeup", "breath_by_window"],
+  "shot_recipe_policy": "recipes are selectable building blocks, not fixed mandatory scenes",
+  "suggested_shot_recipes": ["curtain_light_reveal", "water_glass_closeup", "breath_by_window"],
   "anti_patterns": [
     "dead_static_scene",
     "generic_stock_broll",
@@ -41,6 +66,8 @@
     "ltx": "positive_plus_short_avoid"
   },
   "scene_arc": {
+    "selection_mode": "flexible_from_motif_families",
+    "rigidity": "recommended_sequence_not_required",
     "scene_1": {
       "role": "hook",
       "motif": "curtain_opening_window_light",

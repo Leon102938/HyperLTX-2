@@ -1,6 +1,36 @@
 # MEMORY.md
 
 ## Dauerhafte Erkenntnisse
+- G3 Stage Role Contracts sind jetzt ein echtes Trace-Artefakt: `stage_contracts.json` plus Spiegelung in `prompt_audit.json` und `model_prompts.json`.
+- Die Stage Contracts duerfen noch nicht als neuer Executor verstanden werden. Sie sind der saubere Vertrag, um morgen Skills aktiv in Director/Planner/PromptBuilder zu speisen.
+- G4 Stop-after ist der sichere Operator-Hebel gegen versehentliche Render: `--stop-after scene_plan`, `--stop-after model_prompts`, `--stop-after storyboard`. `storyboard` stoppt bewusst vor einem Storyboard-/Image-Backend.
+- Stop-after-Resultate muessen `render_started=false`, `model_backends_started=false`, `stopped_after`, `produced_artifacts` und `next_action` enthalten.
+- Resume ist weiterhin kein Executor. `agent_core/resume_contract.py` ist nur der Vertrag/Inspector: Approval-Dateien, Reject-Dateien, reusable artifacts und Idempotenzregeln.
+- Reject-Dateien blockieren den Resume-Vertrag logisch. Kein Future-Resume darf nach Reject einfach weiterlaufen.
+- G5 Creative-Quality-Heuristik ist metadata-only. Sie darf keine echte Sichtpruefung behaupten und setzt `real_vlm_inference_used=false`.
+- Final Quality Verdict kann jetzt creative/platform warnings tragen. Technisch gruene, aber langweilige oder plattformschwache Clips duerfen damit `needs_review` werden.
+- Qwen3-VL Reviewer soll kuenftig auch boring scene, weak hook, unclear action, generic stock feel, physical incoherence, bad composition, poor platform fit, no visual change und voice/visual mismatch bewerten.
+- G2 fuehrt Skills als ladbare, tracebare Wissensvertraege ein. Sie ersetzen in dieser Phase noch nicht den Executor, sondern strukturieren Pipeline-, Prompt-, Review- und spaetere Director-/Planner-Entscheidungen.
+- Skill-IDs sind relative Markdown-IDs unter `agent_core/creative_system/skills/`, z. B. `models/zimage_turbo`, `platforms/tiktok_shortform`, `stages/model_prompting`.
+- `resolve_skills_for_pipeline()` kombiniert Skills aus Pipeline Definition, Pipeline Steps, Mode und Style. Fehlende Skills muessen als `missing_skills` sichtbar bleiben.
+- `clean_shortform_v1` ist die erste skill-aware Pipeline fuer kurze Social-Videos. `simple_video_v1` bleibt fuer G1/G1.1 rueckwaertskompatibel.
+- Prompt-/Model-Audits muessen ab G2 `pipeline_id`, `required_skills`, `loaded_skills`, `missing_skills`, `stage_roles` und Backend-Prompt-Policy-Notizen enthalten.
+- Morning Reset darf nicht wieder zu festen Pflichtszenen schrumpfen. Motif Families wie `light_reveal`, `tactile_object_detail`, `body_reset_gesture`, `breath_window_moment`, `fabric_texture`, `sunlight_surface`, `before_after_micro_change` sind flexible kreative Leitplanken.
+- Z-Image Policy bleibt positive-only. Keine Avoid-Listen, Debuglabels oder Script-Saetze an Z-Image.
+- LTX Policy bleibt positive prompt plus kurze negative/avoid Liste. In G2 ist echter Adapter-`negative_prompt` Support nur dokumentiert/tracebar, nicht wild umgebaut.
+- `decision_log.json` ist ab G2 als Run-Artefakt vorbereitet. Es protokolliert initial Pipeline, Mode, Style, Skill Set, Motivfamilien, Shot Recipes und Backend Prompt Policy; echte Take-/Finalentscheidungen bleiben Folgearbeit.
+- Neue CLI-Safety-Flags `--pipeline-dry-run` und `--approval-gates-enabled` setzen nur Metadata. Sie sind die sichere Operator-Schicht gegen versehentliche echte Render in Kontrolllaeufen.
+- Phase G1.1 macht Checkpoints operator-sichtbar: `--inspect-run` zeigt Checkpoints automatisch, `--inspect-checkpoints` ist der direkte Alias.
+- Lokale Gate-Entscheidungen werden per CLI geschrieben: `--approve-checkpoint` setzt `approved=true`, `--reject-checkpoint` setzt `approved=false`; beide schreiben nur `approvals/<checkpoint_id>.json` im Run-Ordner.
+- Approval-Dateien duerfen nicht still ueberschrieben werden. Fuer bewusstes Ueberschreiben ist `--force-approval` noetig.
+- G1.1 ist kein Resume-Executor. Nach angelegter Approval-Datei bleibt die Fortsetzung eines blockierten Runs ein eigener Architektur-/Implementierungsschritt.
+- Phase G1 etabliert `pipeline_defs` als deklarativen Produktionsvertrag, nicht als Ersatz fuer den bestehenden Render-Flow.
+- `simple_video_v1` ist die erste Pipeline-Definition: validate_job, create_plan, approve_plan, create_prompts, approve_prompts, generate_voice_optional, render_video, assemble, final_quality_gate.
+- Checkpoints sind ab G1 kanonisch in `state.json.checkpoints` und zusaetzlich als `checkpoints.json` im Run-Workspace sichtbar.
+- Approval Gates sind in G1 lokal datei-/state-basiert. Default bleibt rueckwaertskompatibel auto-pass; mit `job.metadata.approval_gates_enabled=true` blockieren `approve_plan` und `approve_prompts` bis zur lokalen Freigabedatei.
+- Lokale Freigabedateien liegen unter `/workspace/agent_runs/<job_id>/approvals/<checkpoint_id>.json` und koennen spaeter von CLI, n8n oder Human Review geschrieben werden.
+- `job.metadata.pipeline_dry_run=true` stoppt nach den Prompt-Checkpoints und darf keine Video-/Modell-Backends starten.
+- Die spaetere CLI soll mindestens `pipeline_id`, `current_checkpoint_id`, `blocked_by_checkpoint_id`, Checkpoint-Status, Stage, Reason, Issues, Warnings, Approval-Infos und Related Artifacts anzeigen.
 - F2-Regel: Backend-Prompt-Policy ist Teil des Creative Systems. Fuer Morning Reset gilt `zimage=positive_only` und `ltx=positive_plus_short_avoid`.
 - `model_prompts.json` ist der wichtigste Prompt-Trace neben `prompt_audit.json`: dort muss sichtbar sein, was Z-Image und LTX tatsaechlich bekommen sollten.
 - Z-Image soll keine Avoid-Spam-Liste bekommen, weil lange Negativlisten riskante Begriffe assoziieren koennen. Positive-only ist fuer saubere Storyboard-Keyframes der Default.

@@ -151,6 +151,7 @@ TEXT_PRONE_REPLACEMENTS = (
 KEYFRAME_VISUAL_RISK_POLICY_VERSION = "phaseB2_keyframe_visual_risk_v1"
 TAKE_VISUAL_REVIEW_POLICY_VERSION = "phaseC_take_visual_review_v1"
 FINAL_QUALITY_POLICY_VERSION = "phaseD_final_quality_verdict_v1"
+CREATIVE_QUALITY_REVIEW_POLICY_VERSION = "phaseG5_creative_quality_metadata_v1"
 VISUAL_RISK_FORBIDDEN_TERMS = (
     "readable text",
     "handwriting",
@@ -633,6 +634,63 @@ def evaluate_take_visual_review(
     return qwen_result
 
 
+def evaluate_creative_quality_metadata(
+    *,
+    scene_world_contract: dict[str, Any] | None,
+    prompt_text: str | None = None,
+    prompt_variant_text: str | None = None,
+) -> dict[str, Any]:
+    contract = scene_world_contract or {}
+    visible_subject = str(contract.get("visible_subject") or "")
+    environment = str(contract.get("environment") or "")
+    action = str(contract.get("action") or "")
+    hook_function = str(contract.get("hook_function") or "")
+    motif_id = str(contract.get("motif_id") or "")
+    combined = " ".join([visible_subject, environment, action, prompt_text or "", prompt_variant_text or ""]).lower()
+
+    creative_warnings: list[str] = []
+    platform_warnings: list[str] = []
+    checked = [
+        "boring_scene",
+        "weak_hook",
+        "unclear_action",
+        "generic_stock_feel",
+        "physical_incoherence",
+        "bad_composition",
+        "poor_platform_fit",
+        "no_visual_change",
+        "dead_static_scene",
+        "confusing_subject",
+        "voice_visual_mismatch",
+    ]
+
+    active_verbs = ("open", "place", "move", "turn", "breathe", "reach", "lift", "reveal", "stretch", "walk", "pour", "set")
+    if not action.strip() or not any(verb in action.lower() for verb in active_verbs):
+        creative_warnings.append("unclear_action_or_no_visible_change")
+    if any(term in combined for term in ("static scene", "empty room", "still life only", "ambient room", "no movement")):
+        creative_warnings.append("dead_static_or_boring_scene_risk")
+    if any(term in combined for term in ("generic stock", "stock b-roll", "generic lifestyle", "generic clean interior")):
+        creative_warnings.append("generic_stock_feel_risk")
+    if any(term in combined for term in ("split screen", "collage", "multi-panel", "panels", "graphic layout")):
+        creative_warnings.append("bad_composition_layout_risk")
+    if any(term in combined for term in ("floating object", "impossible hand", "impossible reflection", "warped object")):
+        creative_warnings.append("physical_incoherence_risk")
+    scene_role = str(contract.get("scene_role") or "").lower()
+    if (scene_role in {"hook", "opening", "opening_hook"} or contract.get("opening_emphasis")) and not hook_function and not motif_id:
+        platform_warnings.append("weak_hook_context_missing")
+    if contract.get("platform_requires_mobile_fit") and "social_format_rules" not in contract and "portrait" not in combined and "short" not in combined:
+        platform_warnings.append("platform_fit_context_missing")
+
+    return {
+        "provider": "heuristic_metadata",
+        "real_vlm_inference_used": False,
+        "policy_version": CREATIVE_QUALITY_REVIEW_POLICY_VERSION,
+        "creative_quality_warnings": _unique_strings(creative_warnings),
+        "platform_fit_warnings": _unique_strings(platform_warnings),
+        "checked": checked,
+    }
+
+
 def evaluate_final_quality_verdict(
     *,
     final_output_path: str | Path | None,
@@ -669,6 +727,8 @@ def evaluate_final_quality_verdict(
     score = 0.9
     final_frame_extraction: dict[str, Any] = {"frames": [], "warnings": [], "issues": [], "frame_count": 0}
     final_frame_review: dict[str, Any] | None = None
+    creative_quality_warnings: list[str] = []
+    platform_fit_warnings: list[str] = []
 
     final_path = Path(final_output_path) if final_output_path else None
     if not final_path or not final_path.exists():
@@ -770,9 +830,21 @@ def evaluate_final_quality_verdict(
             issues.append(f"{scene_id} take issue: {issue}")
         for warning in review.get("warnings") or []:
             warnings.append(f"{scene_id} take warning: {warning}")
+        for warning in review.get("creative_quality_warnings") or []:
+            creative_quality_warnings.append(f"{scene_id}: {warning}")
+        for warning in review.get("platform_fit_warnings") or []:
+            platform_fit_warnings.append(f"{scene_id}: {warning}")
 
     if selected_scores:
         score = (score * 0.55) + (sum(selected_scores) / len(selected_scores) * 0.45)
+    if creative_quality_warnings:
+        warnings.append("creative quality review produced warnings")
+        sources.append("creative_quality_metadata_review")
+        score -= min(0.16, 0.04 * len(creative_quality_warnings))
+    if platform_fit_warnings:
+        warnings.append("platform fit review produced warnings")
+        sources.append("platform_fit_metadata_review")
+        score -= min(0.12, 0.04 * len(platform_fit_warnings))
 
     for storyboard in selected_storyboards:
         selected = storyboard.get("selected_keyframe") or {}
@@ -826,6 +898,8 @@ def evaluate_final_quality_verdict(
         "final_postability_score": score,
         "main_issues": _unique_strings(issues),
         "warnings": _unique_strings(warnings),
+        "creative_quality_warnings": _unique_strings(creative_quality_warnings),
+        "platform_fit_warnings": _unique_strings(platform_fit_warnings),
         "problem_scenes": problem_scenes,
         "recommended_next_action": recommended,
         "quality_policy_version": FINAL_QUALITY_POLICY_VERSION,
@@ -917,6 +991,20 @@ def _evaluate_take_visual_review_heuristic(
         warnings.append("no review frames could be extracted")
         score -= 0.2
 
+    creative_review = evaluate_creative_quality_metadata(
+        scene_world_contract=contract,
+        prompt_text=prompt_text,
+        prompt_variant_text=prompt_variant_text,
+    )
+    creative_quality_warnings = list(creative_review.get("creative_quality_warnings") or [])
+    platform_fit_warnings = list(creative_review.get("platform_fit_warnings") or [])
+    if creative_quality_warnings:
+        warnings.extend(f"creative quality warning: {warning}" for warning in creative_quality_warnings)
+        score -= min(0.16, 0.05 * len(creative_quality_warnings))
+    if platform_fit_warnings:
+        warnings.extend(f"platform fit warning: {warning}" for warning in platform_fit_warnings)
+        score -= min(0.1, 0.04 * len(platform_fit_warnings))
+
     score = round(max(0.0, min(1.0, score)), 3)
     severe_issue = any(
         "positive forbidden visual content" in issue
@@ -943,6 +1031,9 @@ def _evaluate_take_visual_review_heuristic(
         scene_id=scene_id,
         take_id=take_id,
         checked_contract_fields=checked_contract_fields,
+        creative_quality_warnings=creative_quality_warnings,
+        platform_fit_warnings=platform_fit_warnings,
+        review_claims={"real_vlm_inference_used": False, "provider": "heuristic_metadata"},
     )
 
 
@@ -1329,6 +1420,9 @@ def _base_take_visual_review(
     take_id: str | None,
     checked_contract_fields: list[str] | None = None,
     summary: str | None = None,
+    creative_quality_warnings: list[str] | None = None,
+    platform_fit_warnings: list[str] | None = None,
+    review_claims: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     normalized_status = status if status in {"passed", "needs_review", "rejected"} else "needs_review"
     normalized_score = round(max(0.0, min(1.0, float(score))), 3)
@@ -1374,6 +1468,9 @@ def _base_take_visual_review(
             "allowed_props": contract.get("allowed_props"),
             "forbidden_props": contract.get("forbidden_props"),
         },
+        "creative_quality_warnings": _unique_strings(creative_quality_warnings or []),
+        "platform_fit_warnings": _unique_strings(platform_fit_warnings or []),
+        "review_claims": review_claims or {"real_vlm_inference_used": provider == "qwen3_vl"},
         "summary": summary or "heuristic take visual review",
     }
 

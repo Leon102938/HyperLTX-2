@@ -8,10 +8,24 @@ from typing import Any
 from agent_core.adapters.base import MusicBackendAdapter, StoryboardAdapter, VideoAdapter, VoiceAdapter
 from agent_core.assembler import ResultAssembler
 from agent_core.backend_registry import BackendRegistry, build_default_registry
+from agent_core.creative_system import build_stage_role_contracts, load_creative_system, resolve_skills_for_pipeline
+from agent_core.decision_log import build_initial_decision_log
+from agent_core.pipeline import (
+    DEFAULT_PIPELINE_ID,
+    approval_file_path,
+    approval_gates_enabled,
+    checkpoint_for_step,
+    load_pipeline_definition,
+    pipeline_dry_run_enabled,
+    read_approval_file,
+    normalize_stop_after,
+    stop_after_reached,
+)
 from agent_core.planner import ProductionPlanner
 from agent_core.prompt_builder import PromptBuilder
 from agent_core.schemas import (
     ArtifactRef,
+    CheckpointRecord,
     ExecutionResult,
     ImageValidationReport,
     JobInput,
@@ -35,6 +49,7 @@ from agent_core.utils import (
     mirror_media_file,
     read_json,
     stable_seed,
+    utc_now_iso,
     validate_image_candidate,
     validate_video_take,
     write_json,
@@ -67,9 +82,206 @@ class VideoAgent:
             job.job_id = build_job_id(job.idea or job.script or "job")
         return job
 
+    def _checkpoint_artifacts(self, state, artifact_keys: list[str] | None = None) -> list[dict[str, Any]]:
+        if not artifact_keys:
+            return []
+        wanted = set(artifact_keys)
+        return [
+            artifact.model_dump(mode="json")
+            for artifact in state.artifacts
+            if artifact.key in wanted
+        ]
+
+    def _pass_checkpoint(
+        self,
+        state,
+        pipeline,
+        step_id: str,
+        *,
+        reason: str,
+        related_artifact_keys: list[str] | None = None,
+        warnings: list[str] | None = None,
+    ) -> CheckpointRecord:
+        checkpoint = checkpoint_for_step(pipeline, step_id)
+        checkpoint.status = "passed"
+        checkpoint.reason = reason
+        checkpoint.warnings = list(warnings or [])
+        checkpoint.related_artifacts = self._checkpoint_artifacts(state, related_artifact_keys)
+        return self.state_store.record_checkpoint(state, checkpoint)
+
+    def _skip_checkpoint(self, state, pipeline, step_id: str, *, reason: str) -> CheckpointRecord:
+        checkpoint = checkpoint_for_step(pipeline, step_id)
+        checkpoint.status = "skipped"
+        checkpoint.reason = reason
+        checkpoint.blocking = False
+        return self.state_store.record_checkpoint(state, checkpoint)
+
+    def _fail_checkpoint(
+        self,
+        state,
+        pipeline,
+        step_id: str,
+        *,
+        reason: str,
+        issues: list[str] | None = None,
+    ) -> CheckpointRecord:
+        checkpoint = checkpoint_for_step(pipeline, step_id)
+        checkpoint.status = "failed"
+        checkpoint.reason = reason
+        checkpoint.issues = list(issues or [])
+        return self.state_store.record_checkpoint(state, checkpoint)
+
+    def _evaluate_approval_gate(self, state, pipeline, step_id: str, job: JobInput) -> CheckpointRecord | None:
+        checkpoint = checkpoint_for_step(pipeline, step_id)
+        approval_path = approval_file_path(self.state_store.job_dir(state.job_id), pipeline, checkpoint.checkpoint_id)
+        approval_payload = read_approval_file(approval_path)
+        manual_enabled = approval_gates_enabled(job.metadata)
+        checkpoint.metadata["approval_path"] = str(approval_path)
+        checkpoint.metadata["approval_gates_enabled"] = manual_enabled
+        if approval_payload:
+            checkpoint.status = "passed"
+            checkpoint.reason = "approval file accepted"
+            checkpoint.approved_by = str(approval_payload.get("approved_by") or "local_file")
+            checkpoint.approved_at = str(approval_payload.get("approved_at") or utc_now_iso())
+            checkpoint.metadata["approval_payload"] = approval_payload
+            self.state_store.record_checkpoint(state, checkpoint)
+            return None
+        if checkpoint.approval_required and manual_enabled and checkpoint.blocking:
+            checkpoint.status = "needs_review"
+            checkpoint.reason = "blocking approval gate requires local approval file"
+            checkpoint.warnings = [
+                f"create {approval_path} with approved=true to continue this checkpoint in a future runner"
+            ]
+            self.state_store.record_checkpoint(state, checkpoint)
+            self.state_store.append_log(state.job_id, f"approval gate blocked at {checkpoint.checkpoint_id}")
+            return checkpoint
+        checkpoint.status = "passed"
+        checkpoint.reason = "approval gate auto-passed because manual approvals are not enabled"
+        self.state_store.record_checkpoint(state, checkpoint)
+        return None
+
+    def _pipeline_result_metadata(self, state, pipeline) -> dict[str, Any]:
+        return {
+            "pipeline_id": pipeline.pipeline_id,
+            "mode": pipeline.mode,
+            "current_checkpoint_id": state.current_checkpoint_id,
+            "blocked_by_checkpoint_id": state.blocked_by_checkpoint_id,
+            "approval_policy": pipeline.approval_policy.model_dump(mode="json"),
+            "default_policy": pipeline.default_policy,
+            "checkpoints": {
+                key: checkpoint.model_dump(mode="json")
+                for key, checkpoint in state.checkpoints.items()
+            },
+        }
+
+    def _blocked_result(self, job: JobInput, plan: ProductionPlan | None, state, checkpoint: CheckpointRecord) -> ResultSummary:
+        if state.current_phase in {"received", "validated"}:
+            self.state_store.transition(state, "planned", "Job paused at blocking approval gate.")
+        result = ResultSummary(
+            job_id=job.job_id or "",
+            success=False,
+            final_phase="planned",
+            message=f"Job is waiting for approval at checkpoint {checkpoint.checkpoint_id}.",
+            planned_duration_sec=plan.target_duration_sec if plan else None,
+            artifacts=list(state.artifacts),
+            backend_runs={},
+            metadata={
+                "approval_blocked": True,
+                "blocked_checkpoint_id": checkpoint.checkpoint_id,
+                "blocked_stage": checkpoint.stage,
+                "approval_required": checkpoint.approval_required,
+                "approval_path": checkpoint.metadata.get("approval_path"),
+                "pipeline": self._pipeline_result_metadata(state, load_pipeline_definition(state.pipeline_id or DEFAULT_PIPELINE_ID)),
+            },
+        )
+        self.state_store.save_result(state, result)
+        return result
+
+    def _dry_run_result(self, job: JobInput, plan: ProductionPlan, state) -> ResultSummary:
+        self.state_store.append_log(state.job_id, "pipeline dry-run stopped before model backends")
+        result = ResultSummary(
+            job_id=job.job_id or "",
+            success=True,
+            final_phase="planned",
+            message="Pipeline dry-run completed before voice/video/storyboard/model backends.",
+            planned_duration_sec=plan.target_duration_sec,
+            artifacts=list(state.artifacts),
+            backend_runs={},
+            metadata={
+                "pipeline_dry_run": True,
+                "render_started": False,
+                "model_backends_started": False,
+                "pipeline": self._pipeline_result_metadata(state, load_pipeline_definition(state.pipeline_id or DEFAULT_PIPELINE_ID)),
+            },
+        )
+        return result
+
+    def _stop_after_result(
+        self,
+        job: JobInput,
+        plan: ProductionPlan,
+        state,
+        stopped_after: str,
+        *,
+        message: str | None = None,
+    ) -> ResultSummary:
+        if state.current_phase in {"received", "validated"}:
+            self.state_store.transition(state, "planned", f"Job stopped after {stopped_after}.")
+        self.state_store.append_log(state.job_id, f"stop-after reached: {stopped_after}")
+        normalized_stop = normalize_stop_after(job.metadata) or stopped_after
+        next_action = (
+            "inspect produced JSON artifacts and rerun with an explicit policy when ready; "
+            "executor resume is future work"
+        )
+        result = ResultSummary(
+            job_id=job.job_id or "",
+            success=True,
+            final_phase="planned",
+            message=message or f"Job stopped after {stopped_after} before model/render backends.",
+            planned_duration_sec=plan.target_duration_sec,
+            artifacts=list(state.artifacts),
+            backend_runs={},
+            metadata={
+                "stopped_after": stopped_after,
+                "stop_after_requested": normalized_stop,
+                "pipeline_dry_run": pipeline_dry_run_enabled(job.metadata),
+                "render_started": False,
+                "model_backends_started": False,
+                "current_checkpoint_id": state.current_checkpoint_id,
+                "blocked_by_checkpoint_id": state.blocked_by_checkpoint_id,
+                "produced_artifacts": [artifact.key for artifact in state.artifacts if artifact.exists],
+                "next_action": next_action,
+                "pipeline": self._pipeline_result_metadata(state, load_pipeline_definition(state.pipeline_id or DEFAULT_PIPELINE_ID)),
+            },
+        )
+        self.state_store.save_result(state, result)
+        return result
+
+    def _record_final_quality_checkpoint(self, state, pipeline, result: ResultSummary) -> CheckpointRecord:
+        verdict = (result.metadata.get("final_quality_verdict") or (result.metadata.get("assembly") or {}).get("final_quality_verdict") or {})
+        status = str(verdict.get("final_quality_status") or "")
+        if status == "passed":
+            return self._pass_checkpoint(
+                state,
+                pipeline,
+                "final_quality_gate",
+                reason="final quality verdict passed",
+                related_artifact_keys=["final_output_mp4", "result_file"],
+            )
+        checkpoint = checkpoint_for_step(pipeline, "final_quality_gate")
+        checkpoint.status = "needs_review" if status == "needs_review" else "failed"
+        checkpoint.reason = f"final quality verdict status={status or 'unknown'}"
+        checkpoint.issues = list(verdict.get("main_issues") or [])
+        checkpoint.warnings = list(verdict.get("warnings") or [])
+        checkpoint.related_artifacts = self._checkpoint_artifacts(state, ["final_output_mp4", "result_file"])
+        return self.state_store.record_checkpoint(state, checkpoint)
+
     def run_job(self, source: str | Path | dict[str, Any] | JobInput, *, raise_on_error: bool = False) -> ResultSummary:
         job = self.load_job(source)
         state = self.state_store.initialize(job)
+        pipeline = load_pipeline_definition(str(job.metadata.get("pipeline_id") or DEFAULT_PIPELINE_ID))
+        state.pipeline_id = pipeline.pipeline_id
+        self.state_store.save_state(state)
         plan: ProductionPlan | None = None
         voice_result = None
         music_result = None
@@ -77,12 +289,59 @@ class VideoAgent:
 
         try:
             self.state_store.transition(state, "validated", "Job schema validated.")
+            self._pass_checkpoint(
+                state,
+                pipeline,
+                "validate_job",
+                reason="job schema validated",
+                related_artifact_keys=["input_job", "state_file"],
+            )
             plan = self.planner.build_plan(job)
+            plan.metadata["pipeline_id"] = pipeline.pipeline_id
+            self._attach_skill_trace(job, plan, pipeline)
             self.state_store.save_plan(state, plan)
             self.state_store.save_director_output(state, plan)
             self.state_store.save_scene_plan(state, plan)
+            self.state_store.save_stage_contracts(state, plan.metadata.get("stage_contracts") or {})
+            self._save_decision_log(job, plan, state, pipeline)
+            self._pass_checkpoint(
+                state,
+                pipeline,
+                "create_plan",
+                reason="production plan created",
+                related_artifact_keys=["plan_file", "director_output_file", "scene_plan_file"],
+            )
+            if stop_after_reached(job.metadata, "scene_plan"):
+                return self._stop_after_result(job, plan, state, "scene_plan")
+            blocked = self._evaluate_approval_gate(state, pipeline, "approve_plan", job)
+            if blocked:
+                return self._blocked_result(job, plan, state, blocked)
             self._save_prompt_audit(job, plan, state)
             self._save_model_prompts_trace(job, plan, state)
+            self._pass_checkpoint(
+                state,
+                pipeline,
+                "create_prompts",
+                reason="prompt audit and model prompt trace created",
+                related_artifact_keys=["prompt_audit_file", "model_prompts_file"],
+            )
+            if stop_after_reached(job.metadata, "model_prompts"):
+                return self._stop_after_result(job, plan, state, "model_prompts")
+            blocked = self._evaluate_approval_gate(state, pipeline, "approve_prompts", job)
+            if blocked:
+                return self._blocked_result(job, plan, state, blocked)
+            if stop_after_reached(job.metadata, "storyboard"):
+                return self._stop_after_result(
+                    job,
+                    plan,
+                    state,
+                    "storyboard",
+                    message="Stop-after storyboard is prepared; safe stop occurs before storyboard/image backend execution.",
+                )
+            if pipeline_dry_run_enabled(job.metadata):
+                result = self._dry_run_result(job, plan, state)
+                self.state_store.save_result(state, result)
+                return result
             if plan.director_output:
                 self.state_store.append_log(
                     state.job_id,
@@ -110,15 +369,47 @@ class VideoAgent:
                     revised_plan = self.planner.build_plan(job, actual_voice_duration_sec=voice_result.duration_sec)
                     if revised_plan.model_dump() != plan.model_dump():
                         plan = revised_plan
+                        plan.metadata["pipeline_id"] = pipeline.pipeline_id
+                        self._attach_skill_trace(job, plan, pipeline)
                         self.state_store.save_plan(state, plan)
                         self.state_store.save_director_output(state, plan)
                         self.state_store.save_scene_plan(state, plan)
+                        self.state_store.save_stage_contracts(state, plan.metadata.get("stage_contracts") or {})
+                        self._save_decision_log(job, plan, state, pipeline)
                         self._save_prompt_audit(job, plan, state)
                         self._save_model_prompts_trace(job, plan, state)
+                        self._pass_checkpoint(
+                            state,
+                            pipeline,
+                            "create_plan",
+                            reason="production plan refreshed after voice duration",
+                            related_artifact_keys=["plan_file", "director_output_file", "scene_plan_file"],
+                        )
+                        self._pass_checkpoint(
+                            state,
+                            pipeline,
+                            "create_prompts",
+                            reason="prompt audit and model prompt trace refreshed after voice duration",
+                            related_artifact_keys=["prompt_audit_file", "model_prompts_file"],
+                        )
                         self.state_store.append_log(
                             state.job_id,
                             "Plan updated after real voice duration became available.",
                         )
+                self._pass_checkpoint(
+                    state,
+                    pipeline,
+                    "generate_voice_optional",
+                    reason="voice generation completed",
+                    related_artifact_keys=["voice_audio"],
+                )
+            else:
+                self._skip_checkpoint(
+                    state,
+                    pipeline,
+                    "generate_voice_optional",
+                    reason="voice generation disabled",
+                )
 
             music_step = next(step for step in plan.steps if step.name == "music")
             if music_step.enabled:
@@ -164,7 +455,21 @@ class VideoAgent:
             if "scene_outputs" in video_result.metadata:
                 self.state_store.save_take_report(state, self._build_take_report_payload(job, video_result))
             if not video_result.success:
+                self._fail_checkpoint(
+                    state,
+                    pipeline,
+                    "render_video",
+                    reason=video_result.error or "video generation failed",
+                    issues=[video_result.error or "video generation failed"],
+                )
                 raise RuntimeError(video_result.error or "video generation failed")
+            self._pass_checkpoint(
+                state,
+                pipeline,
+                "render_video",
+                reason="video generation completed",
+                related_artifact_keys=["take_report_file", "final_video"],
+            )
             self.state_store.transition(state, "video_generated", "Video generation completed.")
 
             result = self.assembler.assemble(
@@ -177,9 +482,19 @@ class VideoAgent:
                 storyboard_result,
                 music_result=music_result,
             )
+            self._pass_checkpoint(
+                state,
+                pipeline,
+                "assemble",
+                reason="result assembled",
+                related_artifact_keys=["final_output_mp4", "result_file"],
+            )
+            self._record_final_quality_checkpoint(state, pipeline, result)
             self.state_store.transition(state, "assembled", "Result assembled.")
+            result.metadata["pipeline"] = self._pipeline_result_metadata(state, pipeline)
             self.state_store.save_result(state, result)
             self.state_store.transition(state, "done", "Job finished successfully.")
+            result.metadata["pipeline"] = self._pipeline_result_metadata(state, pipeline)
             self.state_store.save_result(state, result)
             return result
         except Exception as exc:
@@ -198,6 +513,59 @@ class VideoAgent:
             if raise_on_error:
                 raise
             return failed_result
+
+    def _attach_skill_trace(self, job: JobInput, plan: ProductionPlan, pipeline) -> None:
+        mode_id = str(plan.metadata.get("mode_id") or "")
+        style_id = str(plan.metadata.get("style_id") or "")
+        try:
+            creative_system = load_creative_system()
+            mode = creative_system.mode(mode_id) if mode_id else {}
+            style = creative_system.style(style_id) if style_id else {}
+        except Exception as exc:  # pragma: no cover - defensive trace fallback
+            plan.metadata["required_skills"] = list(getattr(pipeline, "required_skills", []) or [])
+            plan.metadata["loaded_skills"] = []
+            plan.metadata["missing_skills"] = [f"creative_system_load_failed:{exc}"]
+            plan.metadata["stage_roles"] = dict(getattr(pipeline, "stage_roles", {}) or {})
+            return
+        skill_result = resolve_skills_for_pipeline(pipeline, mode, style)
+        trace = skill_result.to_trace()
+        plan.metadata["required_skills"] = trace["required_skills"]
+        plan.metadata["loaded_skills"] = trace["loaded_skills"]
+        plan.metadata["missing_skills"] = trace["missing_skills"]
+        plan.metadata["stage_roles"] = dict(getattr(pipeline, "stage_roles", {}) or {})
+        plan.metadata["skill_trace_source"] = "pipeline_def_plus_mode_style"
+        if isinstance(mode, dict):
+            plan.metadata["motif_families"] = list(mode.get("motif_families") or [])
+        plan.metadata["stage_contracts"] = build_stage_role_contracts(
+            job=job,
+            plan=plan,
+            mode=mode if isinstance(mode, dict) else {},
+            style=style if isinstance(style, dict) else {},
+            loaded_skills=trace["loaded_skills"],
+        )
+
+    def _save_decision_log(self, job: JobInput, plan: ProductionPlan, state, pipeline) -> None:
+        skill_trace = {
+            "required_skills": plan.metadata.get("required_skills", []),
+            "loaded_skills": plan.metadata.get("loaded_skills", []),
+            "missing_skills": plan.metadata.get("missing_skills", []),
+        }
+        checkpoint_trace = {
+            "current_checkpoint_id": state.current_checkpoint_id,
+            "blocked_by_checkpoint_id": state.blocked_by_checkpoint_id,
+            "checkpoints": {
+                key: checkpoint.model_dump(mode="json")
+                for key, checkpoint in state.checkpoints.items()
+            },
+        }
+        decision_log = build_initial_decision_log(
+            job,
+            plan,
+            pipeline_id=pipeline.pipeline_id,
+            skill_trace=skill_trace,
+            checkpoint_trace=checkpoint_trace,
+        )
+        self.state_store.save_decision_log(state, decision_log.model_dump(mode="json"))
 
     def _run_storyboard_step(
         self,
@@ -500,6 +868,9 @@ class VideoAgent:
                     "model_prompt": model_prompt,
                     "zimage_prompt_sent": scene.prompt_build_metadata.get("zimage_prompt_sent") or contract.get("zimage_prompt_sent"),
                     "ltx_prompt_sent": scene.prompt_build_metadata.get("ltx_prompt_sent") or contract.get("ltx_prompt_sent"),
+                    "ltx_positive_prompt_sent": positive_model_prompt,
+                    "ltx_negative_prompt_sent": negative_model_prompt or None,
+                    "ltx_negative_prompt_supported": False,
                     "model_prompt_word_count": len(model_prompt.split()),
                     "positive_risky_terms_detected": positive_risky,
                     "negative_terms_count": len(negative_terms),
@@ -544,8 +915,20 @@ class VideoAgent:
         }
         payload = {
             "job_id": plan.job_id,
+            "pipeline_id": plan.metadata.get("pipeline_id"),
             "mode_id": plan.metadata.get("mode_id"),
             "style_id": plan.metadata.get("style_id"),
+            "required_skills": plan.metadata.get("required_skills", []),
+            "loaded_skills": plan.metadata.get("loaded_skills", []),
+            "missing_skills": plan.metadata.get("missing_skills", []),
+            "stage_roles": plan.metadata.get("stage_roles", {}),
+            "stage_contracts": plan.metadata.get("stage_contracts", {}),
+            "backend_prompt_policy": plan.metadata.get("backend_prompt_policy"),
+            "backend_prompt_policy_notes": {
+                "zimage": "positive_only; no avoid list is sent to Z-Image",
+                "ltx": "positive prompt plus short avoid policy is planned; adapter-level separate negative_prompt support is not wired in G2",
+                "ltx_negative_prompt_supported": False,
+            },
             "user_idea": job.idea,
             "user_script": job.script,
             "sanitized_visual_brief": plan.prompt_text,
@@ -554,6 +937,17 @@ class VideoAgent:
             "leaked_terms_checked": leaked_terms,
         }
         write_json(path, payload)
+        self.state_store._upsert_artifact(
+            state,
+            ArtifactRef(
+                key="prompt_audit_file",
+                kind="json",
+                path=str(path),
+                origin="agent_core.pipeline",
+                exists=path.exists(),
+            ),
+        )
+        self.state_store.save_state(state)
 
     def _save_model_prompts_trace(self, job: JobInput, plan: ProductionPlan, state) -> None:
         path = self.state_store.job_dir(state.job_id) / "model_prompts.json"
@@ -650,6 +1044,9 @@ class VideoAgent:
                     "combined_model_prompt": combined_model_prompt,
                     "zimage_prompt_sent": zimage_prompt_sent or None,
                     "ltx_prompt_sent": ltx_prompt_sent or None,
+                    "ltx_positive_prompt_sent": positive_model_prompt or None,
+                    "ltx_negative_prompt_sent": negative_model_prompt or None,
+                    "ltx_negative_prompt_supported": False,
                     "prompt_sent_to_backend_source": {
                         "zimage": source_zimage,
                         "ltx": source_ltx,
@@ -681,9 +1078,20 @@ class VideoAgent:
 
         payload = {
             "job_id": plan.job_id,
+            "pipeline_id": plan.metadata.get("pipeline_id"),
             "mode_id": plan.metadata.get("mode_id"),
             "style_id": plan.metadata.get("style_id"),
+            "required_skills": plan.metadata.get("required_skills", []),
+            "loaded_skills": plan.metadata.get("loaded_skills", []),
+            "missing_skills": plan.metadata.get("missing_skills", []),
+            "stage_roles": plan.metadata.get("stage_roles", {}),
+            "stage_contracts": plan.metadata.get("stage_contracts", {}),
             "backend_prompt_policy": first_policy or PromptBuilder.DEFAULT_BACKEND_PROMPT_POLICY,
+            "backend_prompt_policy_notes": {
+                "zimage": "positive_only; zimage_prompt_sent must stay free of Avoid/debug/script content",
+                "ltx": "positive_plus_short_avoid; G2 records ltx_positive_prompt_sent and ltx_negative_prompt_sent for future adapter separation",
+                "ltx_negative_prompt_supported": False,
+            },
             "scenes": scenes,
             "checks": {
                 "backend_prompt_policy_applied": all(
@@ -714,6 +1122,17 @@ class VideoAgent:
             },
         }
         write_json(path, payload)
+        self.state_store._upsert_artifact(
+            state,
+            ArtifactRef(
+                key="model_prompts_file",
+                kind="json",
+                path=str(path),
+                origin="agent_core.pipeline",
+                exists=path.exists(),
+            ),
+        )
+        self.state_store.save_state(state)
 
     def _run_video_step(
         self,

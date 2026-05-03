@@ -25,6 +25,191 @@ TakeReviewStatus = Literal["passed", "failed", "rejected", "selected"]
 TakeValidationStatus = Literal["passed", "failed", "rejected"]
 KeyframeReviewStatus = Literal["passed", "needs_review", "failed", "rejected", "selected"]
 ImageValidationStatus = Literal["passed", "failed", "rejected"]
+CheckpointStatus = Literal["pending", "passed", "failed", "needs_review", "skipped"]
+ApprovalMode = Literal["auto", "manual_file", "disabled"]
+
+
+class PipelineStepDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    step_id: str
+    stage: str
+    required_inputs: list[str] = Field(default_factory=list)
+    produced_artifacts: list[str] = Field(default_factory=list)
+    required_skills: list[str] = Field(default_factory=list)
+    checkpoint_id: str | None = None
+    approval_required: bool = False
+    blocking: bool = True
+    optional: bool = False
+    notes: list[str] = Field(default_factory=list)
+
+
+class PipelineRetryPolicy(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    max_attempts: int = 1
+    retryable_statuses: list[str] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+
+
+class PipelineApprovalPolicy(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mode: ApprovalMode = "auto"
+    require_files_when_enabled: bool = True
+    approval_dir: str = "approvals"
+    notes: list[str] = Field(default_factory=list)
+
+
+class PipelineDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    pipeline_id: str
+    mode: str = "default"
+    steps: list[PipelineStepDefinition]
+    required_inputs: list[str] = Field(default_factory=list)
+    produced_artifacts: list[str] = Field(default_factory=list)
+    required_skills: list[str] = Field(default_factory=list)
+    stage_roles: dict[str, str] = Field(default_factory=dict)
+    checkpoints: list[str] = Field(default_factory=list)
+    default_policy: dict[str, Any] = Field(default_factory=dict)
+    retry_policy: PipelineRetryPolicy = Field(default_factory=PipelineRetryPolicy)
+    approval_policy: PipelineApprovalPolicy = Field(default_factory=PipelineApprovalPolicy)
+    notes: list[str] = Field(default_factory=list)
+
+
+class CreativeStrategy(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    strategy_id: str
+    mode_id: str
+    style_id: str | None = None
+    user_intent: str
+    creative_goal: str
+    platform: str | None = None
+    target_platform: str | None = None
+    hook_pattern: str | None = None
+    pacing: dict[str, Any] = Field(default_factory=dict)
+    creative_freedom: str | None = None
+    continuity_mode: str | None = None
+    audience_intent: str | None = None
+    audience_feel: str | None = None
+    success_criteria: list[str] = Field(default_factory=list)
+    anti_goals: list[str] = Field(default_factory=list)
+    motif_families: list[str] = Field(default_factory=list)
+    constraints: list[str] = Field(default_factory=list)
+    skill_ids: list[str] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class BeatPlan(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    beat_plan_id: str
+    beats: list[dict[str, Any]] = Field(default_factory=list)
+    scene_roles: dict[str, str] = Field(default_factory=dict)
+    timing_intent: str | None = None
+    escalation_logic: str | None = None
+    payoff: str | None = None
+    selected_motif_families: list[str] = Field(default_factory=list)
+    selected_shot_recipes: list[str] = Field(default_factory=list)
+    transition_notes: list[str] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class VisualDirection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    direction_id: str
+    visual_identity: str
+    motif_family: str | None = None
+    shot_recipe: str | None = None
+    lighting: str | None = None
+    camera_language: str | None = None
+    motion_language: str | None = None
+    movement: str | None = None
+    composition_rules: list[str] = Field(default_factory=list)
+    object_count_policy: str | None = None
+    human_action_policy: str | None = None
+    avoid_risks: list[str] = Field(default_factory=list)
+    allowed_visuals: list[str] = Field(default_factory=list)
+    forbidden_visuals: list[str] = Field(default_factory=list)
+    skill_ids: list[str] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ModelPromptPlan(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    prompt_plan_id: str
+    backend_prompt_policy: dict[str, str] = Field(default_factory=dict)
+    positive_model_prompt: str | None = None
+    negative_model_prompt: str | None = None
+    zimage_prompt_sent: str | None = None
+    ltx_positive_prompt_sent: str | None = None
+    ltx_negative_prompt_sent: str | None = None
+    warnings: list[str] = Field(default_factory=list)
+    skill_ids: list[str] = Field(default_factory=list)
+    loaded_model_skills: list[str] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ReviewPlan(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    review_plan_id: str
+    provider: str | None = None
+    technical_checks: list[str] = Field(default_factory=list)
+    checks: list[str] = Field(default_factory=list)
+    creative_quality_checks: list[str] = Field(default_factory=list)
+    platform_fit_checks: list[str] = Field(default_factory=list)
+    artifact_checks: list[str] = Field(default_factory=list)
+    rejection_rules: list[str] = Field(default_factory=list)
+    selection_policy: str | None = None
+    skill_ids: list[str] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class DecisionLogEntry(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    decision_id: str
+    stage: str
+    decision: str
+    reason: str | None = None
+    inputs: dict[str, Any] = Field(default_factory=dict)
+    outputs: dict[str, Any] = Field(default_factory=dict)
+    created_at: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class DecisionLog(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    job_id: str
+    pipeline_id: str | None = None
+    version: str = "g2_decision_log_v1"
+    decisions: list[DecisionLogEntry] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class CheckpointRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    checkpoint_id: str
+    stage: str
+    status: CheckpointStatus = "pending"
+    blocking: bool = False
+    reason: str | None = None
+    issues: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    related_artifacts: list[dict[str, Any]] = Field(default_factory=list)
+    approval_required: bool = False
+    approved_by: str | None = None
+    approved_at: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class ArtifactRef(BaseModel):
@@ -577,6 +762,10 @@ class JobState(BaseModel):
     updated_at: str
     plan_version: int = 0
     steps: dict[str, StepRunRecord] = Field(default_factory=dict)
+    pipeline_id: str | None = None
+    checkpoints: dict[str, CheckpointRecord] = Field(default_factory=dict)
+    current_checkpoint_id: str | None = None
+    blocked_by_checkpoint_id: str | None = None
     artifacts: list[ArtifactRef] = Field(default_factory=list)
     errors: list[str] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)

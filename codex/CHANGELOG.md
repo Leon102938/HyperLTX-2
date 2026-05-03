@@ -1,5 +1,58 @@
 # CHANGELOG.md
 
+## 2026-05-02 Final Mega Task G3/G4/G5 Architecture + Archive Prep
+- G2 wurde auditiert: Skills, Loader, `simple_video_v1`, `clean_shortform_v1`, Skill Trace, Prompt Policies und CLI Safety Flags sind vorhanden und getestet.
+- G3 umgesetzt: `agent_core/creative_system/contracts.py` erzeugt Stage Role Contracts fuer `CreativeStrategy`, `BeatPlan`, `VisualDirection`, `ModelPromptPlan` und `ReviewPlan`.
+- `stage_contracts.json` wird pro Run geschrieben und in `prompt_audit.json`/`model_prompts.json` gespiegelt.
+- G4 umgesetzt: CLI/Core akzeptieren `--stop-after scene_plan|model_prompts|storyboard` bzw. `job.metadata.stop_after`; Stop-after-Resultate markieren `stopped_after`, `produced_artifacts`, `next_action`, `render_started=false` und `model_backends_started=false`.
+- G4 Resume bleibt bewusst Future Work als Executor; `agent_core/resume_contract.py` beschreibt und prueft den Resume-Vertrag, Rejections und wiederverwendbare Artefakte.
+- G5 umgesetzt: `evaluate_creative_quality_metadata()` liefert metadata-basierte Warnungen fuer boring/no-action/static/generic-stock/composition/platform-fit Risiken ohne Fake-VLM-Behauptung.
+- `evaluate_final_quality_verdict()` akzeptiert jetzt `creative_quality_warnings` und `platform_fit_warnings` aus Take Reviews.
+- Qwen3-VL Reviewer-Systemprompt wurde um kreative Qualitaetskriterien erweitert, ohne den JSON-only Vertrag aufzugeben.
+- Decision Log erweitert um `approval_gate_status`, `stop_after` und `quality_decision`-Contract.
+- Sicherer In-Process-Smoke ohne Render: `/workspace/agent_runs/g5-final-stop-after-model-prompts-smoke`.
+- Keine Render, keine Modellladung, keine Downloads, keine Runtime-/Dependency-/Docker-/init.sh-/Backend-/n8n-/API-/GUI-Aenderungen.
+
+## 2026-05-02 Phase G2 Skill Layer + Pipeline Modes + Creative Roles
+- Neue Skill-Struktur unter `agent_core/creative_system/skills/` fuer Models, Platforms, Stages, Directing, Prompting und Review.
+- Jede Skill-Datei ist Markdown mit `title`, `purpose`, `when_to_use`, `rules`, `do`, `dont`, `output_contract`, `common_failures` und `audit_hints`.
+- Neuer Loader `agent_core/creative_system/skill_loader.py`: `load_skill`, `load_required_skills`, `resolve_skills_for_pipeline`; fehlende Skills werden als `missing_skills` gemeldet statt hart zu crashen.
+- `PipelineDefinition` und `PipelineStepDefinition` koennen jetzt `required_skills` deklarieren; `PipelineDefinition` kann `stage_roles` dokumentieren.
+- Neue Pipeline `agent_core/pipeline_defs/clean_shortform_v1.json` fuer kurze Social-Videos mit Skill-Anforderungen fuer Creative Strategy, Beat Planning, Visual Direction, Model Prompting, Z-Image, LTX und Review.
+- Neue Creative Role Contracts in `agent_core/schemas.py`: `CreativeStrategy`, `BeatPlan`, `VisualDirection`, `ModelPromptPlan`, `ReviewPlan`; zusaetzlich `DecisionLog`/`DecisionLogEntry`.
+- `VideoAgent` resolved Pipeline-/Mode-/Style-Skills nach dem Planaufbau und schreibt `required_skills`, `loaded_skills`, `missing_skills`, `stage_roles` und `motif_families` in Plan-Metadata.
+- `prompt_audit.json` und `model_prompts.json` enthalten jetzt Skill Trace, Pipeline-ID, Backend-Prompt-Policy-Notizen sowie `ltx_positive_prompt_sent`/`ltx_negative_prompt_sent`-Tracefelder.
+- `decision_log.json` wird als neues Run-Artefakt vorbereitet und nach dem Planen geschrieben.
+- Morning Reset Mode fuehrt flexible `motif_families` und `motif_family_guidance` ein; bestehende Scene-Arc-Rezepte bleiben als kompatible empfohlene Bausteine.
+- CLI-Safety-Flags ergaenzt: `--pipeline-dry-run` und `--approval-gates-enabled` setzen nur Job-Metadata.
+- Tests: G2-Tests, G1/G1.1-Tests, Creative/Planner-Tests und Compileall wurden verifiziert.
+- Kein Render, keine Modellladung, keine Downloads, keine Runtime-/Docker-/init.sh-/Backend-/n8n-/API-/GUI-Aenderungen.
+
+## 2026-05-02 Phase G1.1 CLI Checkpoint Inspect + Approval/Reject UX
+- `scripts/agent_core_cli.py --inspect-run <job>` zeigt jetzt zusaetzlich Checkpoints an, gelesen aus `checkpoints.json` oder fallback aus `state.json.checkpoints`.
+- Neuer Checkpoint-Inspect-Modus: `--inspect-checkpoints <job_id_or_path>`.
+- Neue lokale Gate-Befehle:
+  - `--approve-checkpoint <job_id_or_path> <checkpoint_id> --approved-by "human" --approval-note "..."`
+  - `--reject-checkpoint <job_id_or_path> <checkpoint_id> --rejected-by "human" --approval-note "..."`
+- Die CLI schreibt `approvals/<checkpoint_id>.json` im Run-Ordner mit `approved`, `approved_by`, `approved_at` und `note`.
+- Sicherheitsregeln: Checkpoint muss existieren; Approval-Dateien werden nicht ueberschrieben ausser mit `--force-approval`; Pfad-Escape aus dem Run-Ordner wird abgelehnt.
+- Live-/Append-Dashboard zeigt einen kleinen `CHECKPOINT`-Block mit current/blocked Checkpoint, Status, Approval-Pflicht und Next-Action-Hinweis.
+- Resume ist bewusst nur vorbereitet: Die CLI zeigt fehlende Approval-Datei und Befehl, aber ein echter Resume-Executor bleibt Future Work.
+- Tests: `python -m unittest tests/test_cli_checkpoints.py -v` -> 6 Tests OK; `python -m unittest tests/test_pipeline_g1.py tests/test_cli_checkpoints.py -v` -> 12 Tests OK.
+- Kein Render, keine Modellladung, keine Runtime-/Docker-/init.sh-/Backend-/n8n-/API-/GUI- oder Prompt-/Creative-System-Aenderungen.
+
+## 2026-05-02 Phase G1 Pipeline Definitions, Checkpoints, Approval Gates
+- Phase G1 umgesetzt: neuer declarativer Pipeline-Layer unter `agent_core/pipeline.py` und `agent_core/pipeline_defs/simple_video_v1.json`.
+- `simple_video_v1` beschreibt den bestehenden Core-Flow mit `validate_job`, `create_plan`, `approve_plan`, `create_prompts`, `approve_prompts`, `generate_voice_optional`, `render_video`, `assemble` und `final_quality_gate`.
+- Neue Schemas in `agent_core/schemas.py`: `PipelineDefinition`, `PipelineStepDefinition`, `PipelineRetryPolicy`, `PipelineApprovalPolicy`, `CheckpointRecord`, `CheckpointStatus`, `ApprovalMode`.
+- `JobState` speichert jetzt `pipeline_id`, `checkpoints`, `current_checkpoint_id` und `blocked_by_checkpoint_id`; `StateStore` schreibt `checkpoints.json`.
+- `VideoAgent.run_job()` setzt Checkpoints an den bestehenden Agent-Core-Phasen, ohne den Render-/Backend-Vertrag zu ersetzen.
+- Approval-Gates sind lokal dateibasiert vorbereitet: bei `job.metadata.approval_gates_enabled=true` blockiert ein Gate wie `approve_plan` bis `/workspace/agent_runs/<job_id>/approvals/<checkpoint_id>.json` mit `approved=true` existiert.
+- Fuer Tests und spaetere Operator-Checks gibt es `job.metadata.pipeline_dry_run=true`; der Lauf stoppt nach Plan-/Prompt-Checkpoints und startet keine Voice-/Storyboard-/Video-Backends.
+- G1-Tests: `python -m unittest tests/test_pipeline_g1.py -v` -> 6 Tests OK.
+- Zusaetzlich verifiziert: `python -m compileall -q agent_core tests/test_pipeline_g1.py` und `python -m unittest tests/test_planner_rules.py tests/test_creative_system.py -v` -> 19 Tests OK.
+- Kein Render, keine Modellladung, keine Runtime-/Docker-/init.sh-/Backend-/n8n-/GUI-Aenderungen.
+
 ## 2026-05-01 Final Day Closeout: F2 Creative OS, Prompt Trace, CLI Live
 - F2 Creative Operating System Grundlage umgesetzt: Hook Patterns, Shot Recipes und Anti-Patterns liegen als Playbook-Libraries unter `agent_core/creative_system/libraries/`.
 - `morning_reset` Mode erweitert um Creative Goal, Audience Feel, Pacing, Hook Patterns, Shot Roles, Shot Recipe Order, Anti-Patterns, Quality Targets und Backend Prompt Policy.

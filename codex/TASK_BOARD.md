@@ -1,6 +1,12 @@
 # TASK_BOARD.md
 
 ## TODO
+- G5-Folge: Skills und Stage Contracts aktiv in Director/Planner/PromptBuilder einspeisen und nicht nur laden/tracen.
+- G2-Folge: Decision Log um echte selected_take- und final_quality_decision-Eintraege nach Selection/Assembly erweitern.
+- G2-Folge: Adapter-seitigen LTX-`negative_prompt` Support pruefen und bei echter Backend-Unterstuetzung sauber getrennt verdrahten.
+- G1.2-Folge: Resume-Vertrag definieren und implementieren, damit ein nach Approval freigegebener blockierter Run kontrolliert weiterlaufen kann.
+- G1-Folge: vorhandenen FastAPI-Polling-Vertrag spaeter um Checkpoint-/Gate-Felder erweitern, aber erst nach separater API-Entscheidung.
+- G1-Folge: Pipeline-Definitionen fuer storyboard-heavy und social-review-heavy Varianten entwerfen, nachdem `simple_video_v1` stabil ist.
 - Character-/Voice-/World-Lock in spaeterem Phase-5A+-Schritt tiefer ausbauen
 - Director-Live-Validation fuer Multi-Scene-, Multi-Take- und Storyboard-Jobs gegen reale Backends erweitern
 - zweiten produktiven Backend-Pfad nur nach klarer Priorisierung waehlen
@@ -14,12 +20,38 @@
 - optional spaeter das Qwen-Serve-Profil weiter auf Latenz gegenueber LTX-Koexistenz optimieren
 
 ## IN PROGRESS
-- naechsten sinnvollen Multi-Scene-/Storyboard-Validierungsschritt fuer den bereits verifizierten Qwen-Director-Pfad festlegen
+- naechsten sinnvollen Schritt nach G2 festlegen: Skill-Vertraege aktiv in kreative Entscheidungen einspeisen
 
 ## BLOCKED
 - noch leer
 
 ## DONE
+- Final Mega Task G3/G4/G5 umgesetzt: Stage Role Contracts, Stop-after, Resume Contract, Creative Quality Review Warnings und staerkerer Decision Log.
+- `stage_contracts.json` als Run-Artefakt eingefuehrt und in Prompt-/Model-Audits gespiegelt.
+- `--stop-after scene_plan|model_prompts|storyboard` als CLI/Core-Metadata-Vertrag eingefuehrt; sichere Stops starten keine Render-/Modell-Backends.
+- Resume Contract Utility `agent_core/resume_contract.py` eingefuehrt; erkennt Rejections, Approval-Dateien und wiederverwendbare Artefakte.
+- Metadata-basierte Creative-Quality-Review-Warnungen und Final-Quality-Warnfelder eingefuehrt, ohne echte VLM-Inferenz zu behaupten.
+- Sicherer Stop-after-Smoke geschrieben unter `/workspace/agent_runs/g5-final-stop-after-model-prompts-smoke`.
+- Phase G2 umgesetzt: Skill Layer, skill-aware Pipeline Modes, Creative Role Contracts, Prompt-/Skill-Trace und Decision-Log-Grundlage.
+- Skill-Dateien unter `agent_core/creative_system/skills/` fuer Models, Platforms, Stages, Directing, Prompting und Review angelegt.
+- `agent_core/creative_system/skill_loader.py` eingefuehrt; fehlende Skills werden robust gemeldet.
+- Neue Pipeline `clean_shortform_v1` angelegt; `simple_video_v1` bleibt rueckwaertskompatibel.
+- `prompt_audit.json` und `model_prompts.json` enthalten Skill Trace, Pipeline/Mode/Style, Stage Roles und Backend Prompt Policy Notes.
+- Morning Reset Mode auf flexible Motivfamilien erweitert; Shot Recipes bleiben Bausteine statt starre Pflichtszenen.
+- `decision_log.json` als Run-Artefakt vorbereitet und initial geschrieben.
+- CLI-Safety-Flags `--pipeline-dry-run` und `--approval-gates-enabled` eingefuehrt.
+- Phase G1.1 umgesetzt: CLI Inspect fuer Checkpoints aus `checkpoints.json` oder fallback `state.json.checkpoints`.
+- `--inspect-checkpoints <job_id_or_path>` als Checkpoint-Inspect-Modus eingefuehrt; `--inspect-run` zeigt Checkpoints automatisch mit.
+- `--approve-checkpoint <job> <checkpoint_id>` und `--reject-checkpoint <job> <checkpoint_id>` schreiben lokale `approvals/<checkpoint_id>.json` mit Actor, Timestamp und Note.
+- Approval-Dateien werden nicht blind ueberschrieben; `--force-approval` ist fuer bewusstes Ueberschreiben noetig.
+- CLI-Live-/Append-Status zeigt current/blocked Checkpoint, Status, Approval-Pflicht und Next-Action-Hinweis.
+- G1.1-Tests gruen: `python -m unittest tests/test_cli_checkpoints.py -v`; zusammen mit G1 `python -m unittest tests/test_pipeline_g1.py tests/test_cli_checkpoints.py -v`.
+- Phase G1 umgesetzt: declarative Pipeline-Definitionen, generisches Checkpoint-Modell, lokale dateibasierte Approval-Gates und State-/Result-Persistenz.
+- Erste Pipeline `simple_video_v1` angelegt mit Validate, Plan, Plan Approval, Prompt Compile, Prompt Approval, optional Voice, Render, Assemble und Final Quality Gate.
+- `checkpoints.json` als neues Run-Artefakt eingefuehrt; `state.json` enthaelt jetzt `pipeline_id`, `checkpoints`, `current_checkpoint_id` und `blocked_by_checkpoint_id`.
+- Pipeline-Dry-Run-Modus ueber `job.metadata.pipeline_dry_run=true` verifiziert, ohne echte Modelle oder Render zu starten.
+- Blocking Approval Gate ueber `job.metadata.approval_gates_enabled=true` verifiziert; fehlende lokale Approval-Datei stoppt vor Backend-Ausfuehrung.
+- G1-Tests gruen: `python -m unittest tests/test_pipeline_g1.py -v`, `python -m compileall -q agent_core tests/test_pipeline_g1.py`, `python -m unittest tests/test_planner_rules.py tests/test_creative_system.py -v`.
 - frischen engen Startup-Recheck am 2026-04-21 erfolgreich gefahren: `bash /workspace/init.sh` brachte den Director ohne manuelles `serve_director_llm.sh` selbst hoch
 - echter Produktivcheck `startup-recheck-20260421` danach erfolgreich mit `director_mode=llm_augmented`, `director_llm_active=true` und `final.mp4`
 - `llama.cpp`-Runtime-/Build-Stand unter `/workspace/tools/llama.cpp/build/bin` am 2026-04-20 ohne Rebuild erneut verifiziert

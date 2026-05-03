@@ -1,5 +1,89 @@
 # DECISIONS.md
 
+## D-G3-001
+Datum: 2026-05-02
+
+Entscheidung:
+Stage Role Contracts werden als tracebares Artefakt (`stage_contracts.json`) eingefuehrt, nicht als neuer Executor.
+
+Begruendung:
+Der bestehende Agent-Core soll stabil bleiben, waehrend kreative Rollen sauber voneinander getrennt und morgen aktiv in Director/Planner/PromptBuilder eingespeist werden koennen.
+
+Auswirkung:
+Runs enthalten `CreativeStrategy`, `BeatPlan`, `VisualDirection`, `ModelPromptPlan` und `ReviewPlan` als JSON-Vertraege in Plan-Metadata und Audit-Artefakten.
+
+## D-G4-001
+Datum: 2026-05-02
+
+Entscheidung:
+Stop-after wird als kontrollierter Metadata-/Checkpoint-Vertrag umgesetzt; Resume bleibt vorerst ein dokumentierter Contract, kein Executor.
+
+Begruendung:
+Ein halber Resume-Executor waere riskant und koennte alte Prompts/Takes mischen. Der sichere Nutzen liegt heute in klaren Stopps vor Backends und nachvollziehbaren Approval-/Reject-Dateien.
+
+Auswirkung:
+CLI/Core unterstuetzen `--stop-after scene_plan|model_prompts|storyboard`; `agent_core/resume_contract.py` prueft wiederverwendbare Artefakte und Rejections.
+
+## D-G5-001
+Datum: 2026-05-02
+
+Entscheidung:
+Creative-Quality-Review startet als metadata-only Heuristik und behauptet keine echte VLM-Sichtpruefung.
+
+Begruendung:
+Der Auftrag verbietet Modellladung/Render. Kreative Warnungen sind nuetzlich, duerfen aber nicht als echte Bildanalyse verkauft werden.
+
+Auswirkung:
+Take Reviews und Final Quality Verdict koennen boring/static/generic/platform warnings tragen; echte Qwen3-VL-Inferenz bleibt ein vorhandener optionaler Runtime-Pfad und wird in diesem Task nicht gestartet.
+
+## D-G2-001
+Datum: 2026-05-02
+
+Entscheidung:
+G2 baut Skills als Markdown-basierte, ladbare Wissensvertraege unter `agent_core/creative_system/skills/`.
+
+Begruendung:
+Die Content-Maschine braucht nachvollziehbare kreative Produktionsregeln, ohne den bestehenden Executor oder die Backends riskant umzubauen.
+
+Auswirkung:
+Pipeline Definitions, Prompt Audit und spaetere Director-/Planner-/PromptBuilder-Phasen koennen Skills referenzieren und tracen.
+
+## D-G2-002
+Datum: 2026-05-02
+
+Entscheidung:
+`clean_shortform_v1` wird als neue skill-aware Pipeline eingefuehrt, waehrend `simple_video_v1` unveraendert kompatibel bleibt.
+
+Begruendung:
+G2 soll Pipeline Modes vorbereiten, aber den stabilen G1/G1.1-Vertrag nicht brechen.
+
+Auswirkung:
+Neue Shortform-Flows koennen Skills und Stage Roles deklarieren; bestehende Runs und Tests bleiben auf `simple_video_v1` lauffaehig.
+
+## D-G2-003
+Datum: 2026-05-02
+
+Entscheidung:
+Morning Reset wird von festen Pflichtszenen zu flexiblen Motivfamilien erweitert.
+
+Begruendung:
+Die starre Vorhang/Wasserglas/Fenster-Sequenz half kurzfristig gegen Drift, fuehrte aber zu Wiederholung und Mini-Fix-Denken.
+
+Auswirkung:
+`motif_families` und `motif_family_guidance` sind die neuen kreativen Leitplanken; alte Shot Recipes bleiben als kompatible Bausteine erhalten.
+
+## D-G2-004
+Datum: 2026-05-02
+
+Entscheidung:
+G2 dokumentiert LTX-Negative-Prompt-Trennung tracebar, baut aber keinen Adapter-/Backend-Umbau fuer ein separates `negative_prompt` Feld.
+
+Begruendung:
+Der Auftrag verbietet Runtime-/Backend-Umbauten. Ein unvalidierter Adapter-Eingriff waere riskanter als ein sauberer Trace mit TODO.
+
+Auswirkung:
+`model_prompts.json` enthaelt `ltx_positive_prompt_sent`, `ltx_negative_prompt_sent` und `ltx_negative_prompt_supported=false`; echte Backend-Trennung ist Folgearbeit.
+
 ## D-001
 Datum: 2026-04-11
 
@@ -328,3 +412,35 @@ Auswirkung:
 - produktiver Modellpfad: `/workspace/models/director/qwen3.6-35b-a3b/gguf/Qwen_Qwen3.6-35B-A3B-Q4_K_M.gguf`
 - `init.sh` bereitet das Modell jetzt idempotent vor und kann den lokalen Director-Serve optional automatisch starten
 - der bestehende `scene_map`-Vertrag und der `rule_based_fallback` bleiben erhalten; nur das echte Director-Modell wurde ausgetauscht
+
+## D-025
+Datum: 2026-05-02
+
+Entscheidung:
+Phase G1 fuehrt deklarative Pipeline-Definitionen, generische Checkpoints und lokale Approval Gates im bestehenden `agent_core` ein, ohne n8n/API/GUI oder Medien-Backends umzubauen.
+
+Begruendung:
+Der Core soll als kontrollierbare Produktionsmaschine nachvollziehbar werden. Grosse Schritte brauchen Status, Artefakte und Freigabepunkte, bevor teure oder riskante Backend-Schritte starten. Die kleinste stabile Form ist ein datei-/state-basierter Vertrag im Run-Workspace.
+
+Auswirkung:
+- `agent_core/pipeline_defs/simple_video_v1.json` beschreibt den ersten Pipeline-Vertrag
+- `CheckpointRecord` und Pipeline-Schemas erweitern den bestehenden Datenvertrag
+- `state.json`, `checkpoints.json` und `result.json.metadata.pipeline` zeigen Pipeline- und Gate-Status
+- `approval_gates_enabled=true` macht Plan-/Prompt-Gates blocking; lokale Approval-Dateien koennen spaeter von CLI, n8n oder Human Review geschrieben werden
+- `pipeline_dry_run=true` erlaubt G1-Tests ohne Render- oder Modellstart
+- der bestehende Render-/Assembler-/Backend-Flow bleibt kompatibel und wird nicht durch einen neuen Executor ersetzt
+
+## D-026
+Datum: 2026-05-02
+
+Entscheidung:
+Phase G1.1 behandelt Approval/Reject in der CLI als kontrollierte lokale Dateientscheidung und baut noch keinen Resume-Executor.
+
+Begruendung:
+Die Checkpoints muessen fuer den Operator sofort sichtbar und bedienbar sein, ohne den stabilen Run-/Render-Pfad, die FastAPI, n8n oder Backend-Runtimes umzubauen. Ein echter Resume-Executor braucht einen separaten Vertrag, weil er bestehende Run-Artefakte wiederaufnehmen und Idempotenz sauber definieren muss.
+
+Auswirkung:
+- `--inspect-run` und `--inspect-checkpoints` lesen Checkpoints aus `checkpoints.json` oder `state.json`
+- `--approve-checkpoint` und `--reject-checkpoint` schreiben lokale `approvals/<checkpoint_id>.json` im Run-Ordner
+- vorhandene Approval-Dateien werden nur mit explizitem `--force-approval` ueberschrieben
+- die CLI zeigt nach Approval klar, dass Resume vorbereitet ist, aber die eigentliche Executor-Fortsetzung Future Work bleibt

@@ -1,75 +1,102 @@
 # SESSION_SUMMARY.md
 
-## Datum UTC
-- Erstprecheck: 2026-05-01T10:41:10Z
-- Archivzeit: 2026-05-01T10:58:47Z
+## Date
+2026-05-02T14:17:04Z
 
-## Finaler Projektstand
-- Phase F1.1 Prompt Compiler Cleanup war bereits abgeschlossen: positive, negative und kombinierte Model-Prompts sind getrennt.
-- Heute abgeschlossen: F2 Creative Operating System Grundlage, Backend Prompt Trace, Backend Prompt Policy und produktiveres CLI Live Dashboard.
-- Kein echter Render, kein GPU-Render, kein Model-Download, kein Runtime-/Dependency-Upgrade und kein `init.sh`-Umbau wurden gestartet.
+## Final Status
+Final Mega Task completed defensively. G2 was audited and smoked; G3, G4, and G5 architecture layers were implemented as safe, traceable contracts without rendering, model loading, downloads, runtime changes, Docker changes, init.sh changes, backend changes, n8n/API/GUI work, or prompt mini-fixes.
 
-## Heutige Phasen
-- F1.1 Prompt Compiler Cleanup: bestehender sauberer Audit-Stand beibehalten.
-- F2 Creative OS Grundlage: Hook Patterns, Shot Recipes und Anti-Patterns ergänzt.
-- CLI Live Dashboard Verbesserung: TTY-Redraw mit `--live`/`--no-live`, Current Work, Prompt Preview, Pipeline, Szenen und Artefakte.
-- Prompt Trace/model_prompts: `model_prompts.json` pro geplantem Run mit Z-Image-/LTX-Prompts und Leak Checks.
-- Backend Prompt Policy: Z-Image positive-only, LTX positive-plus-short-avoid.
+## G1 / G1.1
+G1 provides declarative pipeline definitions, CheckpointRecord state, `checkpoints.json`, pipeline dry-run metadata, and local file-based approval gates.
 
-## Precheck
-- `python3 --version`: Python 3.12.13.
-- Global Transformers: 4.52.4 unter `/usr/local/lib/python3.12/dist-packages/transformers/__init__.py`.
-- Qwen-Venv Transformers: 5.7.0 unter `/workspace/venvs/qwen3-vl-review/lib/python3.12/site-packages/transformers/__init__.py`.
-- Qwen3-VL Import: `qwen3vl import ok`.
-- FastAPI `/health`: `{"status":"ok","init_ready":true,"ltx_backend":"ltx-2.3"}`.
-- Director `/v1/models`: Qwen GGUF Director Modell wurde gelistet.
-- Git-Status war vor Beginn bereits dirty; bestehende fremde/alte Änderungen wurden nicht revertet.
+G1.1 provides CLI checkpoint inspection plus local approval/reject file writing:
+- `--inspect-run`
+- `--inspect-checkpoints`
+- `--approve-checkpoint`
+- `--reject-checkpoint`
 
-## Dry-Runs
-- Neuer Dry-Run: `/workspace/agent_runs/phase-f2-creative-os-dry-run`.
-- Enthalten: `plan.json`, `scene_plan.json`, `storyboard_plan.json`, `prompt_audit.json`, `model_prompts.json`, `state.json`, `director_output.json`, `logs/agent.log`.
-- `prompt_audit.json`: alle F2-/F1.1-Checks true.
-- `model_prompts.json`: `zimage_positive_only_applied=true`, `ltx_short_avoid_applied=true`, keine Debuglabels oder Script-Snippets in Backend-Prompts.
-- Z-Image Prompt Word Counts: Scene 1 61, Scene 2 29, Scene 3 57.
-- LTX Prompt Word Counts: Scene 1 77, Scene 2 45, Scene 3 73.
+## G2
+G2 provides the Skill Layer under `agent_core/creative_system/skills/`, the Markdown skill loader, `clean_shortform_v1`, skill trace in prompt/model audits, backend prompt policy trace, flexible Morning Reset motif families, and initial `decision_log.json`.
+
+## G3
+G3 adds Stage Role Contracts:
+- `CreativeStrategy`
+- `BeatPlan`
+- `VisualDirection`
+- `ModelPromptPlan`
+- `ReviewPlan`
+
+Contracts are written to `stage_contracts.json` and mirrored in `prompt_audit.json` and `model_prompts.json`.
+
+## G4
+G4 adds safe stop-after control:
+- `--stop-after scene_plan`
+- `--stop-after model_prompts`
+- `--stop-after storyboard`
+- `--pipeline-dry-run`
+- `--approval-gates-enabled`
+
+Stop-after result metadata records `stopped_after`, `produced_artifacts`, `next_action`, `render_started=false`, and `model_backends_started=false`.
+
+Resume is not implemented as an executor. `agent_core/resume_contract.py` documents and inspects reusable artifacts, approvals, rejections, and idempotency rules.
+
+## G5
+G5 adds metadata-only creative quality review support for:
+- boring scene
+- weak hook
+- unclear action
+- generic stock feel
+- physical incoherence
+- bad composition
+- poor platform fit
+- no visual change
+- dead/static scene
+- confusing subject
+- voice/script visual mismatch
+
+`evaluate_final_quality_verdict()` now accepts `creative_quality_warnings` and `platform_fit_warnings`. The Qwen3-VL reviewer prompt remains JSON-only and includes creative quality checks. No real VLM inference was started.
+
+## Safe Smoke
+Created safe in-process smoke run:
+- `/workspace/agent_runs/g5-final-stop-after-model-prompts-smoke`
+
+It contains:
+- `input_job.json`
+- `state.json`
+- `checkpoints.json`
+- `stage_contracts.json`
+- `decision_log.json`
+- `prompt_audit.json`
+- `model_prompts.json`
+- `result.json`
+- `logs/agent.log`
+
+It does not contain `final.mp4`.
 
 ## Tests
-- Ausgeführt: `python3 -m unittest tests/test_creative_system.py tests/test_cli_live_dashboard.py tests/test_planner_rules.py tests/test_scene_planner.py tests/test_storyboard_pipeline.py tests/test_take_visual_review.py tests/test_output_quality_utils.py tests/test_final_quality_verdict.py`.
-- Ergebnis: 70 Tests OK.
-- Zusätzlich: `python3 -m py_compile` für geänderte Kernmodule und CLI OK.
+Green:
+- `python -m compileall -q agent_core scripts tests`
+- `python -m unittest tests/test_pipeline_g1.py tests/test_cli_checkpoints.py -v`
+- `python -m unittest tests/test_creative_system.py tests/test_planner_rules.py -v`
+- `python -m unittest tests/test_g2_skill_layer.py tests/test_g3_g4_g5_architecture.py -v`
+- `python -m unittest tests/test_final_quality_verdict.py tests/test_take_visual_review.py -v`
 
-## Wichtigste Offene Probleme
-- Der nächste echte visuelle Beleg fehlt absichtlich noch, weil heute kein Render gestartet wurde.
-- Morgen muss zuerst der F2-Dry-Run-Audit manuell gelesen werden, damit kein Prompt-Trace-Fehler in einen echten Render geht.
-- Falls ein echter `quality-morning-reset-009` erneut fehlschlägt, ist zuerst `model_prompts.json` gegen tatsächliche Backend-Prompts und danach das sichtbare Video zu prüfen.
+## Known Open Points
+- Skills are loaded and traced, but not yet actively used as Director/Planner prompt context.
+- Resume is a contract/inspector, not an executor.
+- Decision Log still needs append-only entries after real take selection and final quality verdict.
+- LTX separate `negative_prompt` adapter support is documented but not implemented.
+- Provider/tool selector remains future work.
 
-## Morgen Als Nächstes
-1. `/workspace/agent_runs/phase-f2-creative-os-dry-run/prompt_audit.json` und `model_prompts.json` prüfen.
-2. Nur wenn Backend-Prompts sauber sind, `quality-morning-reset-009` manuell starten.
+## Next Step Tomorrow
+Implement G6: feed loaded Skills and Stage Contracts into Director/Planner/PromptBuilder so `clean_shortform_v1` makes actual skill-driven creative decisions.
 
-## Restore-Anleitung
-1. Archiv nach `/workspace` entpacken.
-2. `bash /workspace/init.sh`
-3. `bash /workspace/scripts/ensure_qwen3_vl_review_runtime.sh`
-4. Services prüfen:
-   - `curl -sS http://127.0.0.1:8000/health`
-   - `curl -sS http://127.0.0.1:8011/v1/models`
-5. Vor Render: `python3 /workspace/scripts/agent_core_cli.py --inspect-run phase-f2-creative-os-dry-run`
+## Archive Content
+The final archive includes project code, scripts, tests, codex docs, config, startup files, and small JSON/MD/LOG/TXT dry-run artifacts. It intentionally excludes models, venvs, caches, safetensors, GGUF files, incomplete downloads, node_modules, and large checkpoint folders.
 
-## Enthaltene Dateien
-- Root/config: `init.sh` und vorhandene kleine Root-Konfigurationsdateien.
-- `agent_core/` inklusive Adapter und `creative_system/`.
-- Relevante `scripts/`.
-- `tests/`.
-- `codex/*.md`.
-- Kleine Run-Artefakte aus F1/F1.1/F2 und optional kleine JSON-/Log-Artefakte aus Quality-Runs, ohne große Medienordner.
-
-## Bewusst Nicht Enthalten
-- `/workspace/models`
-- `/workspace/venvs`
-- `/workspace/LTX-2/checkpoints`
-- Caches und HF cache
-- `node_modules`
-- `*.safetensors`, `*.gguf`, `*.incomplete`
-- komplette `/workspace/jobs` Output-Ordner
-- große Videos und Backend-Checkpoint-Ordner
+## Restore Notes
+After restore:
+1. Unpack archive into `/workspace`.
+2. Run the project’s normal startup/init path as appropriate for the pod.
+3. Recreate model/venv assets through existing project setup; they are intentionally not included.
+4. Inspect `/workspace/codex/PROJECT_STATE.md`, `/workspace/codex/ACTIVE_PLAN.md`, and this summary before continuing.

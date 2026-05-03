@@ -14,6 +14,9 @@ Phase 4B: minimale asynchrone Job-Bridge mit Polling-Vertrag
 Phase 4C: kleine n8n-friendly Polling-Haertung
 Phase 5A: Director-/Brain-Schicht fuer bessere Regie, Planung und Prompts
 Phase 5B: echter lokaler Director-LLM-Pfad
+Phase G1: Pipeline Definitions, Checkpoints und lokale Approval Gates
+Phase G1.1: CLI Checkpoint Inspect und lokale Approval/Reject UX
+Phase G2: Skill Layer, Pipeline Modes und Creative Roles
 Phase 6: Ausbau, Optimierung, Spezialisierung
 
 ## Phase 5A Ziel
@@ -23,6 +26,21 @@ Eine kleine Director-/Brain-Schicht vor dem bestehenden Planner bauen, die Jobs 
 Den bereits vorbereiteten Director-Layer produktiv an ein echtes lokales Director-Modell anbinden, bevorzugt Qwen3.6-35B-A3B in praktikabler quantisierter Form als GGUF `Q4_K_M`, ohne Fake-Integration, ohne neuen Mega-Stack und mit sauberem Fallback auf den bisherigen regelbasierten Flow.
 
 ## Aktueller Operativer Fokus
+- Phase G2 ist umgesetzt: Die Content-Maschine hat jetzt eine Skill-Schicht unter `agent_core/creative_system/skills/`, eine skill-aware Pipeline `clean_shortform_v1`, Creative Role Contracts und initialen Decision-Log-Trace.
+- Skills sind in G2 noch keine neue Executor-Engine. Sie sind ladbare, tracebare Wissensvertraege, die Pipeline Definitions, Prompt Audit und spaetere Director-/Planner-/Prompt-Builder-Entscheidungen strukturieren.
+- Morning Reset nutzt jetzt flexible `motif_families` statt nur starrer Pflichtszenen. Die alten Shot Recipes bleiben als kompatible Bausteine erhalten.
+- Neue CLI-Safety-Flags: `--pipeline-dry-run` und `--approval-gates-enabled` setzen nur Metadata, damit Operatoren Kontrolllaeufe explizit trocken starten koennen.
+- G3/G4/G5 Final-Mega-Task ist umgesetzt: Stage Role Contracts sind tracebar, Stop-after ist im Core/CLI vorbereitet, Resume Contract ist dokumentiert/prüfbar, Creative-Quality-Warnungen und Decision Log sind erweitert.
+- Aktueller sicherer Kontrollbefehl fuer morgen: `python3 scripts/agent_core_cli.py --idea "..." --script "..." --no-voice --pipeline-dry-run --stop-after model_prompts --approval-gates-enabled --print-payload`.
+- Naechster sinnvoller Schritt nach G5: Skills und Stage Contracts aktiv in den Director/Planner einspeisen, sodass `clean_shortform_v1` echte Skill-gesteuerte kreative Entscheidungen trifft.
+- Phase G1.1 ist umgesetzt: `--inspect-run` und `--inspect-checkpoints` zeigen Checkpoints; `--approve-checkpoint` und `--reject-checkpoint` schreiben lokale Gate-Dateien im Run-Ordner.
+- G1.1 baut keinen Resume-Executor. Nach Freigabe zeigt die CLI klar, dass Resume vorbereitet ist, aber die eigentliche Fortsetzung des blockierten Executors als naechster Schritt definiert werden muss.
+- Live-/Append-Ausgabe zeigt jetzt einen kleinen `CHECKPOINT`-Block, wenn `state.json` current/blocked Checkpoint-Felder enthaelt.
+- Phase G1 ist umgesetzt: `simple_video_v1` beschreibt den bestehenden Video-Flow declarativ, `JobState` und `checkpoints.json` enthalten Checkpoints, und lokale Approval-Dateien koennen Plan-/Prompt-Gates blockierend freigeben.
+- G1 bleibt bewusst ohne n8n-Integration, externe API-Erweiterung, GUI, Runtime-/Model-/Backend- oder `init.sh`-Aenderung.
+- Fuer kontrollierte Trockenlaeufe: `job.metadata.pipeline_dry_run=true` verwenden. Dieser Modus stoppt nach Plan-/Prompt-Checkpoints und startet keine Voice-, Storyboard- oder Video-Backends.
+- Fuer manuelle Gate-Pruefung: `job.metadata.approval_gates_enabled=true` setzen; dann wartet der Core an `approve_plan` bzw. spaeter `approve_prompts` auf `/workspace/agent_runs/<job_id>/approvals/<checkpoint_id>.json` mit `approved=true`.
+- Naechster sinnvoller Schritt nach G1.1: Resume-Vertrag definieren und klein implementieren, sodass ein freigegebener blockierter Run kontrolliert weiterlaufen kann, weiterhin ohne n8n/API/GUI-Umbau.
 - Tagesabschluss-F2 ist abgeschlossen: CLI Live Dashboard, Prompt Trace `model_prompts.json`, Backend Prompt Policy und F2 Creative OS Grundlage sind implementiert und getestet.
 - Aktueller Dry-Run-Beleg: `/workspace/agent_runs/phase-f2-creative-os-dry-run`. Vor jedem echten Render zuerst `prompt_audit.json` und `model_prompts.json` pruefen.
 - Backend-Prompt-Vertrag fuer Morning Reset: Z-Image positive-only, LTX positive + kurze Avoid-Liste. Keine Debuglabels oder Script-Snippets duerfen Backend-Prompts erreichen.

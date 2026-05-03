@@ -2,7 +2,17 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from agent_core.schemas import ArtifactRef, ExecutionResult, JobInput, JobPhase, JobState, ProductionPlan, ResultSummary, StepRunRecord
+from agent_core.schemas import (
+    ArtifactRef,
+    CheckpointRecord,
+    ExecutionResult,
+    JobInput,
+    JobPhase,
+    JobState,
+    ProductionPlan,
+    ResultSummary,
+    StepRunRecord,
+)
 from agent_core.utils import ensure_dir, utc_now_iso, write_json
 
 
@@ -21,6 +31,9 @@ class StateStore:
             "scene_plan": self.job_dir(job_id) / "scene_plan.json",
             "storyboard_plan": self.job_dir(job_id) / "storyboard_plan.json",
             "takes": self.job_dir(job_id) / "takes.json",
+            "checkpoints": self.job_dir(job_id) / "checkpoints.json",
+            "decision_log": self.job_dir(job_id) / "decision_log.json",
+            "stage_contracts": self.job_dir(job_id) / "stage_contracts.json",
             "state": self.job_dir(job_id) / "state.json",
             "result": self.job_dir(job_id) / "result.json",
             "log": self.job_dir(job_id) / "logs" / "agent.log",
@@ -113,6 +126,81 @@ class StateStore:
                 state.steps[step.name] = existing
         self.save_state(state)
         return path
+
+    def save_checkpoints(self, state: JobState) -> Path:
+        payload = {
+            "job_id": state.job_id,
+            "pipeline_id": state.pipeline_id,
+            "current_checkpoint_id": state.current_checkpoint_id,
+            "blocked_by_checkpoint_id": state.blocked_by_checkpoint_id,
+            "checkpoints": {
+                key: checkpoint.model_dump(mode="json")
+                for key, checkpoint in state.checkpoints.items()
+            },
+        }
+        path = write_json(self.path_for(state.job_id, "checkpoints"), payload)
+        self._upsert_artifact(
+            state,
+            ArtifactRef(
+                key="checkpoints_file",
+                kind="json",
+                path=str(path),
+                origin="agent_core.pipeline",
+                exists=True,
+                metadata={
+                    "pipeline_id": state.pipeline_id,
+                    "checkpoint_count": len(state.checkpoints),
+                    "blocked_by_checkpoint_id": state.blocked_by_checkpoint_id,
+                },
+            ),
+        )
+        return path
+
+    def save_decision_log(self, state: JobState, payload: dict) -> Path:
+        path = write_json(self.path_for(state.job_id, "decision_log"), payload)
+        self._upsert_artifact(
+            state,
+            ArtifactRef(
+                key="decision_log_file",
+                kind="json",
+                path=str(path),
+                origin="agent_core.decision_log",
+                exists=True,
+                metadata={"pipeline_id": state.pipeline_id},
+            ),
+        )
+        self.save_state(state)
+        return path
+
+    def save_stage_contracts(self, state: JobState, payload: dict) -> Path:
+        path = write_json(self.path_for(state.job_id, "stage_contracts"), payload)
+        self._upsert_artifact(
+            state,
+            ArtifactRef(
+                key="stage_contracts_file",
+                kind="json",
+                path=str(path),
+                origin="agent_core.creative_system.contracts",
+                exists=True,
+                metadata={"contract_version": payload.get("contract_version")},
+            ),
+        )
+        self.save_state(state)
+        return path
+
+    def record_checkpoint(self, state: JobState, checkpoint: CheckpointRecord) -> CheckpointRecord:
+        checkpoint.updated_at = utc_now_iso()
+        if checkpoint.created_at is None:
+            checkpoint.created_at = checkpoint.updated_at
+        state.checkpoints[checkpoint.checkpoint_id] = checkpoint
+        state.current_checkpoint_id = checkpoint.checkpoint_id
+        if checkpoint.status == "needs_review" and checkpoint.blocking:
+            state.blocked_by_checkpoint_id = checkpoint.checkpoint_id
+        elif state.blocked_by_checkpoint_id == checkpoint.checkpoint_id and checkpoint.status in {"passed", "skipped"}:
+            state.blocked_by_checkpoint_id = None
+        self.save_checkpoints(state)
+        self.save_state(state)
+        return checkpoint
 
     def save_result(self, state: JobState, result: ResultSummary) -> Path:
         path = write_json(self.path_for(state.job_id, "result"), result.model_dump(mode="json"))

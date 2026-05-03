@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Any
 from urllib import error, parse, request
 
+from agent_core.resume_contract import inspect_resume_contract
+
 
 DEFAULT_BASE_URL = os.environ.get("AGENT_CORE_BASE_URL", "http://127.0.0.1:8000")
 
@@ -112,6 +114,21 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Optional visual review provider override sent in job metadata.",
     )
     parser.add_argument(
+        "--pipeline-dry-run",
+        action="store_true",
+        help="Set job.metadata.pipeline_dry_run=true so agent-core stops after planning, prompt audit, and gates.",
+    )
+    parser.add_argument(
+        "--approval-gates-enabled",
+        action="store_true",
+        help="Set job.metadata.approval_gates_enabled=true so local approval files can block configured gates.",
+    )
+    parser.add_argument(
+        "--stop-after",
+        choices=("scene_plan", "model_prompts", "storyboard"),
+        help="Set job.metadata.stop_after for a controlled run that stops before later backend execution.",
+    )
+    parser.add_argument(
         "--vision-review-enabled",
         dest="vision_review_enabled",
         action="store_true",
@@ -135,6 +152,23 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--live", action="store_true", help="Force the TTY live dashboard redraw mode.")
     parser.add_argument("--no-live", action="store_true", help="Disable the TTY live dashboard and append progress updates instead.")
     parser.add_argument("--inspect-run", help="Summarize an existing local run id or /workspace/agent_runs path without submitting a new job.")
+    parser.add_argument("--inspect-checkpoints", help="Show checkpoints for an existing local run id or /workspace/agent_runs path.")
+    parser.add_argument(
+        "--approve-checkpoint",
+        nargs=2,
+        metavar=("JOB_ID_OR_PATH", "CHECKPOINT_ID"),
+        help="Write a local approval file for a checkpoint.",
+    )
+    parser.add_argument(
+        "--reject-checkpoint",
+        nargs=2,
+        metavar=("JOB_ID_OR_PATH", "CHECKPOINT_ID"),
+        help="Write a local rejection file for a checkpoint.",
+    )
+    parser.add_argument("--approved-by", default="human", help="Approver name for --approve-checkpoint. Default: %(default)s")
+    parser.add_argument("--rejected-by", default="human", help="Reviewer name for --reject-checkpoint. Default: %(default)s")
+    parser.add_argument("--approval-note", default="", help="Optional note written into approval/rejection files.")
+    parser.add_argument("--force-approval", action="store_true", help="Overwrite an existing approval/rejection file.")
     parser.add_argument(
         "--print-payload",
         action="store_true",
@@ -301,6 +335,202 @@ def _resolve_inspect_run(value: str) -> Path:
     if path.is_absolute() or path.exists():
         return path
     return Path("/workspace/agent_runs") / value
+
+
+def _path_is_relative_to(path: Path, parent: Path) -> bool:
+    try:
+        path.resolve().relative_to(parent.resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def _load_checkpoint_payload(run_dir: Path) -> tuple[dict[str, Any], str]:
+    checkpoint_payload = load_json_safe(run_dir / "checkpoints.json")
+    if isinstance(checkpoint_payload.get("checkpoints"), dict):
+        return checkpoint_payload, "checkpoints.json"
+    state = load_json_safe(run_dir / "state.json")
+    checkpoints = state.get("checkpoints")
+    if isinstance(checkpoints, dict):
+        return {
+            "job_id": state.get("job_id"),
+            "pipeline_id": state.get("pipeline_id"),
+            "current_checkpoint_id": state.get("current_checkpoint_id"),
+            "blocked_by_checkpoint_id": state.get("blocked_by_checkpoint_id"),
+            "checkpoints": checkpoints,
+        }, "state.json"
+    return {}, "none"
+
+
+def _checkpoint_approval_path(run_dir: Path, checkpoint_id: str, checkpoint: dict[str, Any]) -> Path:
+    metadata = checkpoint.get("metadata") if isinstance(checkpoint.get("metadata"), dict) else {}
+    raw_path = metadata.get("approval_path")
+    if raw_path:
+        path = Path(str(raw_path))
+        if path.is_absolute() and _path_is_relative_to(path, run_dir):
+            return path
+        if not path.is_absolute():
+            candidate = run_dir / path
+            if _path_is_relative_to(candidate, run_dir):
+                return candidate
+    return run_dir / "approvals" / f"{checkpoint_id}.json"
+
+
+def _compact_list(values: Any, *, limit: int = 3, text_limit: int = 96) -> str:
+    if not values:
+        return "-"
+    if not isinstance(values, list):
+        return short_prompt(values, text_limit)
+    rendered = [short_prompt(item, text_limit) for item in values[:limit]]
+    if len(values) > limit:
+        rendered.append(f"+{len(values) - limit} more")
+    return "; ".join(rendered) if rendered else "-"
+
+
+def _checkpoint_artifact_text(artifacts: Any) -> str:
+    if not isinstance(artifacts, list) or not artifacts:
+        return "-"
+    parts: list[str] = []
+    for artifact in artifacts[:3]:
+        if not isinstance(artifact, dict):
+            continue
+        key = artifact.get("key") or artifact.get("kind") or "artifact"
+        path = artifact.get("path")
+        parts.append(f"{key}={path}" if path else str(key))
+    if len(artifacts) > 3:
+        parts.append(f"+{len(artifacts) - 3} more")
+    return "; ".join(parts) if parts else "-"
+
+
+def _checkpoint_next_action(run_dir: Path, checkpoint_id: str, checkpoint: dict[str, Any]) -> str | None:
+    if checkpoint.get("status") != "needs_review" or not checkpoint.get("approval_required"):
+        return None
+    approval_path = _checkpoint_approval_path(run_dir, checkpoint_id, checkpoint)
+    return (
+        "python3 /workspace/scripts/agent_core_cli.py "
+        f"--approve-checkpoint {run_dir} {checkpoint_id} "
+        '--approved-by "human" --approval-note "reviewed plan/prompts"'
+        f"  # writes {approval_path}; executor resume is future work"
+    )
+
+
+def render_checkpoint_summary(run_dir: Path, *, verbose: bool = False) -> bool:
+    payload, source = _load_checkpoint_payload(run_dir)
+    checkpoints = payload.get("checkpoints") if isinstance(payload.get("checkpoints"), dict) else {}
+    if not checkpoints:
+        return False
+    print("CHECKPOINTS")
+    print(_line("Source", source, width=20))
+    print(_line("Pipeline", payload.get("pipeline_id"), width=20))
+    print(_line("Current checkpoint", payload.get("current_checkpoint_id"), width=20))
+    print(_line("Blocked by", payload.get("blocked_by_checkpoint_id"), width=20))
+    print()
+    for checkpoint_id, checkpoint in checkpoints.items():
+        if not isinstance(checkpoint, dict):
+            continue
+        status = checkpoint.get("status")
+        print(f"  {format_status_icon(status)} {checkpoint_id}")
+        print(_line("stage", checkpoint.get("stage"), width=22))
+        print(_line("status", status, width=22))
+        print(_line("blocking", "yes" if checkpoint.get("blocking") else "no", width=22))
+        print(_line("approval_required", "yes" if checkpoint.get("approval_required") else "no", width=22))
+        print(_line("reason", short_prompt(checkpoint.get("reason"), 110), width=22))
+        print(_line("issues", _compact_list(checkpoint.get("issues")), width=22))
+        print(_line("warnings", _compact_list(checkpoint.get("warnings")), width=22))
+        print(_line("related_artifacts", _checkpoint_artifact_text(checkpoint.get("related_artifacts")), width=22))
+        if checkpoint.get("approval_required") or checkpoint.get("status") == "needs_review" or verbose:
+            approval_path = _checkpoint_approval_path(run_dir, str(checkpoint_id), checkpoint)
+            print(_line("approval_file", approval_path, width=22))
+            if approval_path.exists():
+                decision = load_json_safe(approval_path)
+                print(_line("approval_decision", f"approved={decision.get('approved')} by={decision.get('approved_by')}", width=22))
+        next_action = _checkpoint_next_action(run_dir, str(checkpoint_id), checkpoint)
+        if next_action:
+            print(_line("next_action", next_action, width=22))
+        print()
+    blocked = payload.get("blocked_by_checkpoint_id")
+    if blocked:
+        checkpoint = checkpoints.get(blocked) if isinstance(checkpoints.get(blocked), dict) else {}
+        missing = _checkpoint_approval_path(run_dir, str(blocked), checkpoint)
+        resume_contract = inspect_resume_contract(run_dir)
+        print("RESUME")
+        print(_line("Blocked", f"yes · {blocked}", width=18))
+        print(_line("Missing file", missing, width=18))
+        print(_line("Rejected", "yes" if resume_contract.get("has_rejection") else "no", width=18))
+        print(_line("Approve", f"python3 /workspace/scripts/agent_core_cli.py --approve-checkpoint {run_dir} {blocked} --approved-by \"human\" --approval-note \"...\"", width=18))
+        print(_line("Resume", "prepared, but executor resume is future work; rerun/start behavior must be defined next", width=18))
+        print()
+    return True
+
+
+def _inspect_checkpoints(path: Path, *, verbose: bool = False) -> int:
+    run_dir = path
+    payload, _source = _load_checkpoint_payload(run_dir)
+    if not payload:
+        print(f"ERROR: no checkpoints.json/state.json checkpoints found under {run_dir}", file=sys.stderr)
+        return 1
+    print_box_header("INSPECT CHECKPOINTS", [("Run", run_dir)])
+    print()
+    render_checkpoint_summary(run_dir, verbose=verbose)
+    return 0
+
+
+def write_checkpoint_decision(
+    run_dir: Path,
+    checkpoint_id: str,
+    *,
+    approved: bool,
+    actor: str,
+    note: str = "",
+    force: bool = False,
+) -> Path:
+    payload, _source = _load_checkpoint_payload(run_dir)
+    checkpoints = payload.get("checkpoints") if isinstance(payload.get("checkpoints"), dict) else {}
+    if checkpoint_id not in checkpoints:
+        raise RuntimeError(f"Checkpoint {checkpoint_id!r} does not exist under {run_dir}")
+    if not run_dir.exists() or not run_dir.is_dir():
+        raise RuntimeError(f"Run directory does not exist: {run_dir}")
+    approval_path = run_dir / "approvals" / f"{checkpoint_id}.json"
+    if not _path_is_relative_to(approval_path, run_dir):
+        raise RuntimeError(f"Refusing to write outside run directory: {approval_path}")
+    if approval_path.exists() and not force:
+        raise RuntimeError(f"Approval file already exists: {approval_path}. Use --force-approval to overwrite.")
+    approval_path.parent.mkdir(parents=True, exist_ok=True)
+    payload_to_write = {
+        "approved": bool(approved),
+        "approved_by": actor,
+        "approved_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "note": note,
+    }
+    approval_path.write_text(json.dumps(payload_to_write, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
+    return approval_path
+
+
+def _write_checkpoint_decision_from_cli(
+    values: list[str],
+    *,
+    approved: bool,
+    actor: str,
+    note: str,
+    force: bool,
+) -> int:
+    run_dir = _resolve_inspect_run(values[0])
+    checkpoint_id = values[1]
+    path = write_checkpoint_decision(
+        run_dir,
+        checkpoint_id,
+        approved=approved,
+        actor=actor,
+        note=note,
+        force=force,
+    )
+    print("CHECKPOINT DECISION WRITTEN")
+    print(_line("Run", run_dir, width=14))
+    print(_line("Checkpoint", checkpoint_id, width=14))
+    print(_line("Approved", str(approved).lower(), width=14))
+    print(_line("File", path, width=14))
+    print(_line("Resume", "prepared, but executor resume is future work", width=14))
+    return 0
 
 
 def _artifact_path(result: dict[str, Any], key: str) -> str | None:
@@ -619,6 +849,17 @@ def render_progress_block(status: dict[str, Any], state: dict[str, Any], takes: 
     print(_line("Backend", current.get("backend")))
     print(_line("Mode", current.get("mode") or "running"))
     print(_line("Prompt", short_prompt(current.get("prompt"), 84)))
+    checkpoint_id = state.get("current_checkpoint_id")
+    blocked_id = state.get("blocked_by_checkpoint_id")
+    checkpoints = state.get("checkpoints") or {}
+    checkpoint = checkpoints.get(blocked_id or checkpoint_id) if isinstance(checkpoints, dict) else {}
+    if checkpoint_id or blocked_id:
+        print()
+        print("CHECKPOINT")
+        print(_line("Current", checkpoint_id))
+        print(_line("Blocked by", blocked_id or "-"))
+        print(_line("Status", checkpoint.get("status") if isinstance(checkpoint, dict) else "-"))
+        print(_line("Approval", "required" if isinstance(checkpoint, dict) and checkpoint.get("approval_required") else "not required"))
 
 
 def render_scene_summary(state: dict[str, Any], takes: dict[str, Any], result: dict[str, Any], *, verbose: bool = False) -> None:
@@ -748,6 +989,20 @@ def _format_live_lines(
     lines.append("PIPELINE")
     for label, step_status, detail in _live_pipeline_status(state, result, payload):
         lines.append(f"  {format_status_icon(step_status)} {label:<18} {detail or step_status}")
+    checkpoint_id = state.get("current_checkpoint_id")
+    blocked_id = state.get("blocked_by_checkpoint_id")
+    checkpoints = state.get("checkpoints") or {}
+    checkpoint = checkpoints.get(blocked_id or checkpoint_id) if isinstance(checkpoints, dict) else {}
+    if checkpoint_id or blocked_id:
+        lines.append("")
+        lines.append("CHECKPOINT")
+        lines.append(_line("Current", checkpoint_id or "-", width=14))
+        lines.append(_line("Blocked", blocked_id or "no", width=14))
+        if isinstance(checkpoint, dict):
+            lines.append(_line("Status", checkpoint.get("status") or "-", width=14))
+            lines.append(_line("Approval", "required" if checkpoint.get("approval_required") else "not required", width=14))
+            if blocked_id and run_dir:
+                lines.append(_line("Next action", f"approve {blocked_id} via --approve-checkpoint", width=14))
     if quiet:
         return lines
     lines.append("")
@@ -1093,6 +1348,8 @@ def render_success_dashboard(result: dict[str, Any], state: dict[str, Any], take
     print(_line("Render", f"✓ {progress.get('scene_count') or 0} scenes · {progress.get('take_count') or 0} takes"))
     print(_line("Assembly", "✓ final.mp4 created" if final_path else "unknown"))
     print()
+    if run_dir:
+        render_checkpoint_summary(run_dir, verbose=verbose)
     render_quality_summary(result, state, takes, live=False, verbose=verbose)
     scene_lines = _scene_result_lines(state, takes, result)
     if scene_lines:
@@ -1282,6 +1539,9 @@ def print_failure_summary(result: dict[str, Any], state: dict[str, Any], takes: 
         print(_line("State", run_dir / "state.json"))
         if (run_dir / "takes.json").exists():
             print(_line("Takes", run_dir / "takes.json"))
+    if run_dir:
+        print()
+        render_checkpoint_summary(run_dir, verbose=False)
     render_quality_summary(result, state, takes, live=False, verbose=False)
     if show_tail and tail:
         print("LOG TAIL")
@@ -1299,10 +1559,19 @@ def _status_signature(payload: dict[str, Any], state: dict[str, Any], takes: dic
     steps = state.get("steps") or {}
     step_sig = tuple((name, (steps.get(name) or {}).get("status"), (steps.get(name) or {}).get("backend_job_id")) for name in ("voice", "storyboard", "music", "video"))
     director = _extract_director_summary(payload.get("result") or {}, state, takes)
+    checkpoints = state.get("checkpoints") or {}
+    checkpoint_sig = tuple(
+        (key, value.get("status"), value.get("approval_required"))
+        for key, value in checkpoints.items()
+        if isinstance(value, dict)
+    )
     return (
         payload.get("status"),
         payload.get("current_phase"),
         payload.get("status_summary"),
+        state.get("current_checkpoint_id"),
+        state.get("blocked_by_checkpoint_id"),
+        checkpoint_sig,
         step_sig,
         tuple(_take_lines(takes, state, payload.get("result") or {}, failures_only=False)[:8]),
         tuple(sorted(director.items())),
@@ -1352,6 +1621,12 @@ def _build_payload(args: argparse.Namespace) -> dict[str, Any]:
         job["metadata"]["vision_review_model_dir"] = args.vision_review_model_dir
     if args.vision_review_max_frames is not None:
         job["metadata"]["vision_review_max_frames"] = args.vision_review_max_frames
+    if args.pipeline_dry_run:
+        job["metadata"]["pipeline_dry_run"] = True
+    if args.approval_gates_enabled:
+        job["metadata"]["approval_gates_enabled"] = True
+    if args.stop_after:
+        job["metadata"]["stop_after"] = args.stop_after
 
     return {"job": job}
 
@@ -1521,6 +1796,24 @@ def main() -> int:
                 tail_lines=args.tail_error_log_lines,
                 show_log_tail=not args.no_log_tail,
                 verbose=args.verbose,
+            )
+        if args.inspect_checkpoints:
+            return _inspect_checkpoints(_resolve_inspect_run(args.inspect_checkpoints), verbose=args.verbose)
+        if args.approve_checkpoint:
+            return _write_checkpoint_decision_from_cli(
+                args.approve_checkpoint,
+                approved=True,
+                actor=args.approved_by,
+                note=args.approval_note,
+                force=args.force_approval,
+            )
+        if args.reject_checkpoint:
+            return _write_checkpoint_decision_from_cli(
+                args.reject_checkpoint,
+                approved=False,
+                actor=args.rejected_by,
+                note=args.approval_note,
+                force=args.force_approval,
             )
 
         payload = _build_payload(args)
