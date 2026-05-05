@@ -916,3 +916,44 @@
   - daraufhin minimaler Nachfix in `agent_core/planner.py`: Social-Tipp-Familien ueberschreiben jetzt auch `style_lock.visual_identity`
   - `demo-social-focus-break-002` lief danach real mit display-fernem Style-Lock und `final.mp4`
   - ehrlicher Sichtbefund: leicht entschärft, aber weiterhin klar ungenuegend; Office-/Papier-/Screen-/Glyph-Artefakte bleiben fuer diese Familie offen
+# 2026-05-03 G6 Skill Injection
+- `agent_core/creative_system/skill_injection.py` eingefuehrt.
+- Model-Skills fuer Z-Image, LTX und Qwen3-VL Review ergaenzt.
+- Agent-Skill-Trace auf zentralen SkillInjectionContext umgestellt.
+- Stage Contracts um SkillInjectionContext, aktivere Skill-IDs und Review-Kriterien erweitert.
+- PromptBuilder-Trace um `ltx_positive_prompt_sent` und `ltx_negative_prompt_sent` erweitert.
+- `prompt_audit.json`, `model_prompts.json`, `stage_contracts.json` und `decision_log.json` enthalten jetzt skill-/contract-basierte G6-Daten.
+- Qwen3-VL Reviewer-Systemprompt um low phone-size readability und stabilen JSON-Vertragshinweis erweitert.
+- Neue Tests: `tests/test_g6_skill_injection.py`, `tests/test_g6_promptbuilder_skill_policy.py`, `tests/test_g6_review_skill_policy.py`.
+- Sicherer Smoke: `/workspace/agent_runs/g6-skill-injection-stop-after-model-prompts-smoke`, kein `final.mp4`.
+
+# 2026-05-03 G7 Creative Beat Planner
+- `agent_core/creative_system/strategy_planner.py` eingefuehrt.
+- `clean_shortform_v1` erzeugt jetzt `CreativeIntent`, mindestens drei `BeatPlanCandidate`-Varianten, Score-Breakdowns und eine selected Candidate Decision.
+- Planner nutzt den selected Candidate fuer ScenePlan und per-scene VisualDirection.
+- PromptBuilder nutzt per-scene Direction, selected motif/shot recipe und Candidate-Kontext fuer model-facing Prompts.
+- Stage Contracts, Prompt Audit, Model Prompts und DecisionLog enthalten G7-Trace: Intent, Candidates, Scores, selected Candidate und per-scene Direction.
+- G6-Polish: Script-Literal-Leakage in visual_goal/model prompts wird systemisch ueber Sanitizing und semantische per-scene Actions vermieden; alte Morning-Reset-Motive bleiben Kandidaten, aber nicht Pflichtsequenz im G7-Pfad.
+- `agent_core/feedback_policy.py` als G8 Scaffold eingefuehrt; Review-Issues werden zu FeedbackAction-Vorschlaegen gemappt, noch ohne Executor.
+- Neue Tests: `tests/test_g7_creative_intent.py`, `tests/test_g7_beat_plan_candidates.py`, `tests/test_g7_planner_integration.py`, `tests/test_g8_feedback_policy.py`.
+- Sicherer Smoke: `/workspace/agent_runs/g7-beat-planner-stop-after-model-prompts-smoke`, gestoppt bei `model_prompts`, kein `final.mp4`.
+
+# 2026-05-03 G8 Feedback Loop / Retry Policy Scaffold
+- `agent_core/feedback_policy.py` erweitert um `FeedbackAction`, `RetryBudget`, `RetryPlan`, `evaluate_feedback_actions`, `build_retry_plan` und checkpoint-kompatible State-Ausgabe.
+- Issue-Mapping deckt sichtbaren Text, Fake-Text, UI/Device, boring/dead/static, weak hook, unclear action, generic stock feel, physical incoherence, low phone-size readability, voice/visual mismatch und bad composition ab.
+- DecisionLog kann `feedback_action_created`, `retry_plan_created`, `blocked_by_feedback`, `human_review_required` und `artifact_invalidated` speichern.
+- CLI `--inspect-run` zeigt vorhandene `feedback_actions.json` und `retry_plan.json` inklusive Top Action, Suggested Fix, Blockierung und Invalidations an.
+- Sicheres Fixture: `/workspace/agent_runs/g8-feedback-policy-smoke`, kein `final.mp4`.
+- Neue Tests: `tests/test_g8_feedback_actions.py`, `tests/test_g8_retry_plan.py`, `tests/test_g8_cli_feedback_inspect.py`.
+- Kein echter Retry Executor, kein Render, keine Modelle, keine Downloads, keine Runtime-/Docker-/`init.sh`-/Backend-/n8n/API/GUI-Aenderungen.
+
+# 2026-05-03 G9 First V1 Run
+- Preflight-Tests fuer G6/G7/G8/G1 waren gruen.
+- Dry-Run `g9-v1-morning-reset-dryrun-001` stoppte sauber bei `model_prompts`; kein `final.mp4`.
+- Dry-Run zeigte `creative_intent`, 3 BeatPlanCandidates, selected Candidate `tactile_first`, per-scene VisualDirection, Z-Image positive-only und LTX positive/negative Trace.
+- Genau ein echter Render wurde gestartet: `g9-v1-morning-reset-render-001`.
+- Render-Konfiguration: `clean_shortform_v1`, portrait `512x768`, 3 Szenen, Storyboard true, LTX, no voice, no music, subtitles off, 1 Variation, 1 Take, heuristic review.
+- Resultat: technischer Success, `final.mp4` vorhanden, Final Quality Verdict `needs_review`, `real_vlm_inference_used=false`.
+- Manueller Frame-Befund: Szene 2 enthaelt sichtbare text-/UI-/Papierartefakte; Clip ist interner Systembeweis, aber nicht demo-wuerdig.
+- G8 FeedbackPolicy erzeugte `feedback_actions.json` und `retry_plan.json`; Top Action `visible_text -> regenerate_keyframe`, blocking true.
+- Kein Retry-Render gestartet.

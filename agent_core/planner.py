@@ -6,7 +6,14 @@ from pathlib import Path
 from typing import Any
 
 from agent_core.backend_registry import BackendRegistry
-from agent_core.creative_system import detect_mode_id, load_creative_system
+from agent_core.creative_system import (
+    analyze_creative_intent,
+    apply_selected_candidate_to_director_output,
+    detect_mode_id,
+    generate_beat_plan_candidates,
+    load_creative_system,
+    select_best_beat_plan_candidate,
+)
 from agent_core.director import DirectorEngine
 from agent_core.prompt_builder import PromptBuilder
 from agent_core.schemas import (
@@ -204,11 +211,44 @@ class ProductionPlanner:
         mode_id = detect_mode_id(job.idea, job.script, job.metadata)
         mode_playbook = creative_system.mode(mode_id)
         style_id = str(mode_playbook.get("visual_style") or "clean_lifestyle_morning")
+        style_playbook = creative_system.style(style_id)
         backend_prompt_policy = mode_playbook.get("backend_prompt_policy") or PromptBuilder.DEFAULT_BACKEND_PROMPT_POLICY
         director_output.metadata["creative_mode_id"] = mode_id
         director_output.metadata["creative_style_id"] = style_id
         director_output.metadata["creative_mode"] = mode_playbook
-        director_output.metadata["creative_style"] = creative_system.style(style_id)
+        director_output.metadata["creative_style"] = style_playbook
+        g7_enabled = self._g7_candidate_planning_enabled(job, mode_id)
+        creative_intent = None
+        beat_plan_candidates = []
+        beat_plan_candidate_scores = []
+        selected_beat_plan_candidate = None
+        if g7_enabled:
+            creative_intent = analyze_creative_intent(
+                job=job,
+                mode=mode_playbook,
+                style=style_playbook,
+                mode_id=mode_id,
+                style_id=style_id,
+            )
+            beat_plan_candidates = generate_beat_plan_candidates(
+                creative_intent=creative_intent,
+                mode=mode_playbook,
+                style=style_playbook,
+                skill_context={},
+                scene_count=scene_count,
+            )
+            selected_beat_plan_candidate, beat_plan_candidate_scores = select_best_beat_plan_candidate(
+                beat_plan_candidates,
+                creative_intent,
+                {},
+            )
+            director_output = apply_selected_candidate_to_director_output(
+                director_output=director_output,
+                selected_candidate=selected_beat_plan_candidate,
+            )
+            rules_applied.append(
+                f"G7 beat planner selected candidate {selected_beat_plan_candidate.candidate_id if selected_beat_plan_candidate else 'none'} from {len(beat_plan_candidates)} candidates."
+            )
         social_tip_visual_guard = self._is_social_tip_format(job, target_duration)
         social_tip_family = self._social_tip_family(job) if social_tip_visual_guard else None
         if social_tip_visual_guard:
@@ -468,8 +508,23 @@ class ProductionPlanner:
                 "vision_review_provider": job.metadata.get("vision_review_provider"),
                 "vision_review_model_dir": job.metadata.get("vision_review_model_dir"),
                 "vision_review_max_frames": job.metadata.get("vision_review_max_frames"),
+                "g7_candidate_planning_enabled": g7_enabled,
+                "creative_intent": creative_intent.to_dict() if creative_intent else None,
+                "beat_plan_candidates": [candidate.to_dict() for candidate in beat_plan_candidates],
+                "beat_plan_candidate_scores": beat_plan_candidate_scores,
+                "selected_beat_plan_candidate": selected_beat_plan_candidate.to_dict() if selected_beat_plan_candidate else None,
+                "selected_candidate_id": selected_beat_plan_candidate.candidate_id if selected_beat_plan_candidate else None,
+                "selected_hook_pattern": selected_beat_plan_candidate.hook_pattern if selected_beat_plan_candidate else None,
+                "selected_motif_sequence": selected_beat_plan_candidate.motif_families if selected_beat_plan_candidate else [],
+                "selected_shot_recipe_sequence": selected_beat_plan_candidate.shot_recipes if selected_beat_plan_candidate else [],
+                "per_scene_visual_direction": director_output.metadata.get("g7_per_scene_visual_direction", {}),
             },
         )
+
+    def _g7_candidate_planning_enabled(self, job: JobInput, mode_id: str) -> bool:
+        if job.metadata.get("disable_g7_beat_planner"):
+            return False
+        return bool(job.metadata.get("pipeline_id") == "clean_shortform_v1" or job.metadata.get("enable_g7_beat_planner"))
 
     def _resolve_render_profile(self, pipeline_preference: str) -> str:
         if pipeline_preference in {"fast", "balanced", "quality"}:

@@ -217,6 +217,8 @@ class PromptBuilder:
         scene_world_contract["backend_prompt_policy"] = prompt_parts["backend_prompt_policy"]
         scene_world_contract["zimage_prompt_sent"] = prompt_parts["zimage_prompt_sent"]
         scene_world_contract["ltx_prompt_sent"] = prompt_parts["ltx_prompt_sent"]
+        scene_world_contract["ltx_positive_prompt_sent"] = prompt_parts["ltx_positive_prompt_sent"]
+        scene_world_contract["ltx_negative_prompt_sent"] = prompt_parts["ltx_negative_prompt_sent"]
         scene_world_contract["prompt_sent_to_backend_source"] = prompt_parts["prompt_sent_to_backend_source"]
         scene_world_contract["mode_id"] = director_output.metadata.get("creative_mode_id")
         scene_world_contract["style_id"] = director_output.metadata.get("creative_style_id")
@@ -231,6 +233,8 @@ class PromptBuilder:
             "backend_prompt_policy": prompt_parts["backend_prompt_policy"],
             "zimage_prompt_sent": prompt_parts["zimage_prompt_sent"],
             "ltx_prompt_sent": prompt_parts["ltx_prompt_sent"],
+            "ltx_positive_prompt_sent": prompt_parts["ltx_positive_prompt_sent"],
+            "ltx_negative_prompt_sent": prompt_parts["ltx_negative_prompt_sent"],
             "prompt_sent_to_backend_source": prompt_parts["prompt_sent_to_backend_source"],
             "prompt_audit": self.audit_model_prompt(model_prompt, script_text=job.script, extra_terms=[scene_text]),
             "mode_id": director_output.metadata.get("creative_mode_id"),
@@ -239,6 +243,8 @@ class PromptBuilder:
             "scene_world_contract": scene_world_contract,
             "opening_emphasis": scene_intent.opening_emphasis,
             "scene_role": scene_intent.narrative_role,
+            "selected_candidate_id": scene_world_contract.get("selected_candidate_id"),
+            "per_scene_visual_direction": scene_world_contract.get("per_scene_visual_direction"),
             "shot_recipe_id": scene_world_contract.get("shot_recipe_id"),
             "hook_function": scene_world_contract.get("hook_function"),
             "why_this_scene": scene_world_contract.get("why_this_scene"),
@@ -315,6 +321,8 @@ class PromptBuilder:
             "backend_prompt_policy": prompt_parts["backend_prompt_policy"],
             "zimage_prompt_sent": prompt_parts["zimage_prompt_sent"],
             "ltx_prompt_sent": prompt_parts["ltx_prompt_sent"],
+            "ltx_positive_prompt_sent": prompt_parts["ltx_positive_prompt_sent"],
+            "ltx_negative_prompt_sent": prompt_parts["ltx_negative_prompt_sent"],
             "prompt_sent_to_backend_source": prompt_parts["prompt_sent_to_backend_source"],
             "prompt_audit": self.audit_model_prompt(model_prompt),
             "mode_id": director_output.metadata.get("creative_mode_id"),
@@ -428,6 +436,8 @@ class PromptBuilder:
             "backend_prompt_policy": prompt_parts["backend_prompt_policy"],
             "zimage_prompt_sent": prompt_parts["zimage_prompt_sent"],
             "ltx_prompt_sent": prompt_parts["ltx_prompt_sent"],
+            "ltx_positive_prompt_sent": prompt_parts["ltx_positive_prompt_sent"],
+            "ltx_negative_prompt_sent": prompt_parts["ltx_negative_prompt_sent"],
             "prompt_sent_to_backend_source": prompt_parts["prompt_sent_to_backend_source"],
             "effective_model_prompt": prompt_parts["zimage_prompt_sent"],
             "prompt_audit": self.audit_model_prompt(model_prompt),
@@ -486,6 +496,8 @@ class PromptBuilder:
             "backend_prompt_policy": backend_prompts["backend_prompt_policy"],
             "zimage_prompt_sent": backend_prompts["zimage_prompt_sent"],
             "ltx_prompt_sent": combined,
+            "ltx_positive_prompt_sent": positive,
+            "ltx_negative_prompt_sent": negative_prompt,
             "ltx_short_avoid_terms": backend_prompts["ltx_short_avoid_terms"],
             "prompt_sent_to_backend_source": backend_prompts["prompt_sent_to_backend_source"],
             "model_prompt_word_count": len(combined.split()),
@@ -848,6 +860,12 @@ class PromptBuilder:
         mode = director_output.metadata.get("creative_mode") or {}
         scene_key = f"scene_{scene_intent.scene_index}"
         mode_scene = ((mode.get("scene_arc") or {}).get(scene_key) or {}) if isinstance(mode, dict) else {}
+        per_scene_directions = director_output.metadata.get("g7_per_scene_visual_direction") or {}
+        per_scene_direction = (
+            dict(per_scene_directions.get(scene_intent.scene_id) or {})
+            if isinstance(per_scene_directions, dict)
+            else {}
+        )
         backend_prompt_policy = mode.get("backend_prompt_policy") if isinstance(mode, dict) else None
         payload = {
             "visible_subject": self._sanitize_visual_text(self._short_clause(scene_intent.hook_focus or description)),
@@ -901,6 +919,30 @@ class PromptBuilder:
                 ],
                 limit=80,
             )
+        if per_scene_direction:
+            payload["scene_role"] = per_scene_direction.get("role") or payload.get("scene_role") or scene_intent.narrative_role
+            payload["motif_family"] = per_scene_direction.get("motif_family")
+            payload["motif_id"] = per_scene_direction.get("motif_id") or payload.get("motif_id")
+            payload["shot_recipe_id"] = per_scene_direction.get("shot_recipe_id") or per_scene_direction.get("shot_recipe") or payload.get("shot_recipe_id")
+            payload["hook_function"] = director_output.metadata.get("g7_selected_beat_plan_candidate", {}).get("hook_pattern") or payload.get("hook_function")
+            payload["why_this_scene"] = per_scene_direction.get("rationale") or payload.get("why_this_scene")
+            payload["visual_energy_level"] = per_scene_direction.get("expected_visual_change") or payload.get("visual_energy_level")
+            payload["visible_subject"] = self._sanitize_visual_text(per_scene_direction.get("action") or payload.get("visible_subject"))
+            payload["visual_anchor"] = self._sanitize_visual_text(per_scene_direction.get("expected_visual_change") or payload.get("visual_anchor"))
+            payload["environment"] = self._sanitize_visual_text(per_scene_direction.get("expected_visual_change") or payload.get("environment"))
+            payload["action"] = self._sanitize_visual_text(per_scene_direction.get("action") or payload.get("action"))
+            payload["camera"] = self._short_clause(per_scene_direction.get("camera_language") or payload.get("camera"))
+            payload["lighting"] = self._short_clause(per_scene_direction.get("lighting") or payload.get("lighting"))
+            payload["allowed_props"] = self._sanitize_allowed_props(list(per_scene_direction.get("allowed_visuals") or payload.get("allowed_props") or []))
+            payload["forbidden_props"] = self._unique_terms(
+                [
+                    *list(per_scene_direction.get("avoid_risks") or []),
+                    *list(payload.get("forbidden_props") or []),
+                ],
+                limit=80,
+            )
+            payload["per_scene_visual_direction"] = per_scene_direction
+            payload["selected_candidate_id"] = (director_output.metadata.get("g7_selected_beat_plan_candidate") or {}).get("candidate_id")
         return payload
 
     @staticmethod

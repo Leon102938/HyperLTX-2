@@ -1,6 +1,13 @@
 # MEMORY.md
 
 ## Dauerhafte Erkenntnisse
+- G6 aktiviert Skills als zentralen `SkillInjectionContext`: Pipeline Definition + Mode + Style + Job-Metadata werden vor Stage Contracts zusammengefuehrt.
+- Fehlende Skills duerfen den Run nicht hart abbrechen; sie muessen in `missing_skills` und Context-Warnungen sichtbar bleiben.
+- `stage_contracts.json`, `prompt_audit.json`, `model_prompts.json` und `decision_log.json` muessen ab G6 `skill_injection_context` enthalten.
+- Z-Image bleibt strikt positive-only; `zimage_prompt_sent` darf keine Avoid-Liste, Debuglabels oder Script-Saetze enthalten.
+- LTX bleibt in G6 ohne Backend-Umbau: positive und negative Prompts werden getrennt getraced, der Adapter-Vertrag wird nicht riskant erweitert.
+- ReviewPlan muss kreative Qualitaet und Plattformfit abdecken, aber Heuristik darf nie `real_vlm_inference_used=true` behaupten.
+- G6-Smoke: `/workspace/agent_runs/g6-skill-injection-stop-after-model-prompts-smoke`, kein `final.mp4`.
 - G3 Stage Role Contracts sind jetzt ein echtes Trace-Artefakt: `stage_contracts.json` plus Spiegelung in `prompt_audit.json` und `model_prompts.json`.
 - Die Stage Contracts duerfen noch nicht als neuer Executor verstanden werden. Sie sind der saubere Vertrag, um morgen Skills aktiv in Director/Planner/PromptBuilder zu speisen.
 - G4 Stop-after ist der sichere Operator-Hebel gegen versehentliche Render: `--stop-after scene_plan`, `--stop-after model_prompts`, `--stop-after storyboard`. `storyboard` stoppt bewusst vor einem Storyboard-/Image-Backend.
@@ -270,6 +277,20 @@
 - Phase 3B nutzt selektierte Keyframes jetzt produktiv fuer First-Frame-Conditioning, aber noch nicht fuer Multi-Keyframe-Interpolation, Retake oder einen separaten Keyframe-Interpolations-Backend-Vertrag.
 - Commit-wuerdig sind primaer `agent_core/`, `tests/`, `examples/`, `.gitignore` und der kanonische Projekt-Memory unter `/workspace/codex`.
 - Laufzeit- und Artefaktordner wie `agent_runs/`, `exports/`, `jobs/`, `status/`, `venvs/`, Checkpoints und lokale Pod-Logs sollen nicht Teil eines normalen Code-Commits sein.
+- G7 ist fuer `clean_shortform_v1` opt-in ueber die Pipeline, nicht global fuer jeden Morning-Reset-aehnlichen Job. Das schuetzt alte Planner-/Social-Tip-Tests und laesst `simple_video_v1` rueckwaertskompatibel.
+- G7 ersetzt die alte feste Morning-Reset-Sequenz nicht im gesamten System; alte Motive bleiben fuer Legacy-Pfade gueltig, waehrend `clean_shortform_v1` sie als Kandidaten/Recipes behandelt.
+- `CreativeIntent.sanitized_visual_intent`, Candidate-Beats, per-scene VisualDirection und model-facing Prompts duerfen keine literal uebernommenen Script-Imperative wie "Open soft light", "Place one clear glass" oder "Breathe by the window" enthalten.
+- Der G7-Smoke `g7-beat-planner-stop-after-model-prompts-smoke` ist ein trockener Stop-after-Beleg: `stage_contracts.json`, `prompt_audit.json`, `model_prompts.json`, `decision_log.json` existieren, aber kein `final.mp4`.
+- G8 Feedback Policy ist nur Scaffold. `FeedbackAction` darf dokumentiert und geloggt werden, aber es gibt noch keinen automatischen Retry-Executor.
+- G8 hat jetzt einen sicheren RetryPlan-Vertrag, aber weiter keinen echten Render-Retry. `blocked=true` bedeutet Human Review/Approval, nicht automatische Ausfuehrung.
+- Feedback-Prioritaet: technische Fehler zuerst, dann sichtbarer Text/UI/Device, dann kreative Warnungen wie boring/weak_hook.
+- Wenn Prompt geaendert wird, muessen alte Keyframes/Takes der Szene als invalidiert gelten. Wenn BeatPlan geaendert wird, sind scene_plan/model_prompts/storyboard/takes der Szene stale. `choose_alternate_take` darf Prompts nicht invalidieren.
+- Das Smoke-Fixture `g8-feedback-policy-smoke` ist absichtlich ein blockierter Failure-/Review-Run und hat deshalb beim CLI-Inspect Exitcode 1, obwohl die Feedback-Artefakte korrekt gelesen werden.
+- G9 realer V1-Beweis: `g9-v1-morning-reset-render-001` lief genau einmal durch Storyboard + LTX + Assembly und erzeugte `final.mp4`.
+- G9 ist technisch erfolgreich, aber qualitativ `needs_review`; `real_vlm_inference_used=false`, weil bewusst heuristic review genutzt wurde.
+- Wichtigster G9-Qualitaetsfehler: Szene 2 driftet sichtbar in Papier/UI/Text-Gibberish. G8 Top Action ist deshalb `visible_text -> regenerate_keyframe`, blocking.
+- G9 bestaetigt: Der Steuer-/Trace-Apparat funktioniert end-to-end, aber die kreative Motivbibliothek braucht G10-Tuning weg von dokument-/karten-/paper-aehnlichen taktilen Hooks.
+- Der G9-Render darf nicht als publishable Demo verkauft werden; er ist ein interner V1-Systembeweis.
 - Der Single-Flow bleibt als `single_scene`-Fallback explizit erhalten.
 - Beim naechsten Abschluss oder Backup muss der Director-/Startup-Pfad vollstaendig erfasst werden; besonders `tools/llama.cpp`, `config/director_llm.env`, neue Director-Skripte sowie Fixes in `start.sh`, `init.sh` und `app/main.py` duerfen nicht vergessen werden.
 - Rohe LTX2-MP4s koennen bereits einen Audio-Stream enthalten; der Assembler soll fuer Phase 1 trotzdem immer die eigene Voice-Spur bevorzugen.

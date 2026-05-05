@@ -444,3 +444,81 @@ Auswirkung:
 - `--approve-checkpoint` und `--reject-checkpoint` schreiben lokale `approvals/<checkpoint_id>.json` im Run-Ordner
 - vorhandene Approval-Dateien werden nur mit explizitem `--force-approval` ueberschrieben
 - die CLI zeigt nach Approval klar, dass Resume vorbereitet ist, aber die eigentliche Executor-Fortsetzung Future Work bleibt
+
+## D-027
+Datum: 2026-05-03
+
+Entscheidung:
+Phase G6 fuehrt einen zentralen `SkillInjectionContext` ein und speist ihn in Stage Contracts, Prompt-Audit, Model-Prompts und DecisionLog ein, ohne den Render-/Backend-/Runtime-Pfad umzubauen.
+
+Begruendung:
+G2/G3 hatten Skills und Contracts vorbereitet, aber sie mussten als aktive kreative Steuerdaten sichtbar werden. Der kleinste sichere Schritt ist ein serialisierbarer Context vor den bestehenden Planner-/Prompt-/Review-Artefakten statt ein riskanter neuer Executor.
+
+Auswirkung:
+- `clean_shortform_v1` laedt jetzt Pipeline-, Mode-, Style- und Model-Skills inklusive fehlender-Skill-Trace.
+- CreativeStrategy, BeatPlan, VisualDirection, ModelPromptPlan und ReviewPlan enthalten Skill-/Policy-Kontext.
+- `decision_log.json` protokolliert Hook Pattern, Skill Set, CreativeStrategy, BeatPlan und ReviewPlan.
+- Z-Image bleibt positive-only; LTX Positive/Negative werden getrennt getraced.
+- G7 soll als naechster Schritt Creative Strategy / Beat Planner 2.0 bauen.
+
+## D-028
+Datum: 2026-05-03
+
+Entscheidung:
+Phase G7 aktiviert fuer `clean_shortform_v1` einen runtimefreien Creative Beat Planner mit CreativeIntent, mehreren BeatPlanCandidates, Score-Breakdown, selected Candidate und per-scene VisualDirection.
+
+Begruendung:
+G6 machte Skills und Contracts sichtbar, aber noch nicht kreativ entscheidend genug. Der kleinste sichere Schritt ist eine deterministische Kandidaten- und Scoring-Schicht vor ScenePlan und PromptBuilder, ohne Director-/Backend-/Runtime-Umbau und ohne echte Render.
+
+Auswirkung:
+- `agent_core/creative_system/strategy_planner.py` erzeugt Intent, Kandidaten, Scores und selected Candidate.
+- Planner nutzt G7 nur fuer `clean_shortform_v1` oder explizites Opt-in, damit Legacy- und `simple_video_v1`-Pfade kompatibel bleiben.
+- Stage Contracts, Prompt Audit, Model Prompts und DecisionLog enthalten G7-Trace.
+- Per-scene VisualDirection steuert PromptBuilder und verhindert starre Morning-Reset-Pflichtsequenzen im G7-Pfad.
+- Script-Literal-Leakage wird in visual-facing Feldern defensiv sanitisiert.
+
+## D-029
+Datum: 2026-05-03
+
+Entscheidung:
+G8 wird zunaechst nur als Feedback Policy Scaffold implementiert, nicht als automatischer Retry Executor.
+
+Begruendung:
+Review-Warnings sollen systemisch nutzbar werden, aber automatische Replans, Keyframe-Regeneration oder Take-Retries koennen Render-/Backend-Pfade beruehren. Das waere ohne separaten Vertrag zu riskant.
+
+Auswirkung:
+- `agent_core/feedback_policy.py` mappt Review-Probleme wie `boring_scene`, `weak_hook`, `visible_text`, `generic_stock_feel` und `low_phone_size_readability` auf serialisierbare `FeedbackAction`.
+- DecisionLog kann vorgeschlagene FeedbackActions speichern, wenn sie in Plan-Metadaten vorhanden sind.
+- Ein echter Retry-/Replan-Executor bleibt G8 Future Work.
+
+## D-030
+Datum: 2026-05-03
+
+Entscheidung:
+G8 haertet den Feedback-Vertrag zu einem sicheren Retry Policy Executor Scaffold: Policy, Evaluation, Budget, Plan, DecisionLog und Inspect, aber keine automatische Retry-Ausfuehrung.
+
+Begruendung:
+Review-Ergebnisse sollen handlungsfaehig werden, ohne versehentlich echte Keyframe-/Take-/Render-Jobs zu starten. Der sichere Zwischenschritt ist ein vollstaendiger, serialisierbarer Entscheidungsvertrag mit Human-Approval-Blockierung.
+
+Auswirkung:
+- `FeedbackAction` enthaelt Action-ID, Issue-Type, Action-Type, Zielstage, Szene/Take, Suggested Fix, Blocking, Retry-Budget-Impact, Confidence und Review-Quelle.
+- `RetryBudget` und `RetryPlan` definieren erlaubte Aktionen, invalidierte Artefakte und Approval-Pflicht.
+- DecisionLog schreibt Feedback- und Retry-Entscheidungen sowie Artifact-Invalidations.
+- CLI Inspect zeigt FeedbackActions und RetryPlan aus Run-Artefakten.
+- G9 soll als naechster Schritt einen kontrollierten echten V1-Run mit manueller Feedback-Auswertung fahren.
+
+## D-031
+Datum: 2026-05-03
+
+Entscheidung:
+G9 startet nach sauberem Dry-Run genau einen echten kleinen V1-Render und stoppt danach bei Analyse/FeedbackPolicy, ohne Retry-Render.
+
+Begruendung:
+Nach G1-G8 musste der gesamte V1-Pfad einmal real beweisen, dass Planung, Skills, Candidates, Prompts, Storyboard, LTX, Quality Verdict, DecisionLog und FeedbackPolicy zusammenarbeiten. Gleichzeitig duerfen Qualitaetsprobleme nicht zu unkontrollierten Render-Loops fuehren.
+
+Auswirkung:
+- Dry-Run `g9-v1-morning-reset-dryrun-001` belegt saubere G6/G7-Artefakte ohne Render.
+- Real-Run `g9-v1-morning-reset-render-001` erzeugt ein technisch valides `final.mp4`.
+- Final Quality Verdict bleibt `needs_review`; Review war heuristic, keine echte VLM-Inferenz.
+- FeedbackPolicy blockiert wegen sichtbarer Text-/UI-/Papierartefakte in Szene 2.
+- G10 soll gezielt die V1-Seele/Motivbibliothek tunen, nicht den Runtime- oder Backend-Stack umbauen.

@@ -23,10 +23,13 @@ def build_stage_role_contracts(
     mode: dict[str, Any] | None = None,
     style: dict[str, Any] | None = None,
     loaded_skills: list[dict[str, Any]] | None = None,
+    skill_injection_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     mode = dict(mode or {})
     style = dict(style or {})
     loaded_skill_ids = [str(skill.get("skill_id")) for skill in loaded_skills or [] if isinstance(skill, dict)]
+    skill_context = dict(skill_injection_context or {})
+    selected_skill_ids = list(skill_context.get("required_skills") or loaded_skill_ids or plan.metadata.get("required_skills") or [])
     model_skill_ids = [skill_id for skill_id in loaded_skill_ids if skill_id.startswith("models/")]
 
     scene_roles = {
@@ -46,6 +49,7 @@ def build_stage_role_contracts(
     first_scene = plan.scenes[0] if plan.scenes else None
     first_meta = first_scene.prompt_build_metadata if first_scene else {}
     first_contract = dict((first_meta or {}).get("scene_world_contract") or {})
+    per_scene_visual_direction = dict(plan.metadata.get("per_scene_visual_direction") or {})
 
     strategy = CreativeStrategy(
         strategy_id=f"{plan.job_id}:creative_strategy",
@@ -65,8 +69,12 @@ def build_stage_role_contracts(
         anti_goals=list(mode.get("anti_patterns") or []),
         motif_families=list(plan.metadata.get("motif_families") or mode.get("motif_families") or []),
         constraints=list(mode.get("global_forbidden") or []),
-        skill_ids=list(plan.metadata.get("required_skills") or []),
-        metadata={"contract_version": CONTRACT_VERSION},
+        skill_ids=selected_skill_ids,
+        metadata={
+            "contract_version": CONTRACT_VERSION,
+            "selected_skill_ids": selected_skill_ids,
+            "skill_injection_warnings": list(skill_context.get("warnings") or []),
+        },
     )
 
     beat_plan = BeatPlan(
@@ -89,7 +97,13 @@ def build_stage_role_contracts(
         selected_motif_families=list(plan.metadata.get("motif_families") or []),
         selected_shot_recipes=selected_shot_recipes,
         transition_notes=[scene.scene_intent.transition_note for scene in plan.scenes if scene.scene_intent and scene.scene_intent.transition_note],
-        metadata={"selected_motifs": selected_motifs, "contract_version": CONTRACT_VERSION},
+        metadata={
+            "selected_motifs": selected_motifs,
+            "contract_version": CONTRACT_VERSION,
+            "hook_pattern": str((mode.get("hook_patterns") or [""])[0] or ""),
+            "skill_injection_context_used": bool(skill_context),
+            "selected_candidate_id": plan.metadata.get("selected_candidate_id"),
+        },
     )
 
     visual_direction = VisualDirection(
@@ -107,8 +121,8 @@ def build_stage_role_contracts(
         avoid_risks=list(first_contract.get("forbidden_props") or mode.get("global_forbidden") or []),
         allowed_visuals=list(first_contract.get("allowed_props") or []),
         forbidden_visuals=list(first_contract.get("forbidden_props") or mode.get("global_forbidden") or []),
-        skill_ids=[skill_id for skill_id in loaded_skill_ids if skill_id.startswith(("directing/", "stages/visual_direction"))],
-        metadata={"contract_version": CONTRACT_VERSION},
+        skill_ids=list(skill_context.get("directing_skills") or [skill_id for skill_id in loaded_skill_ids if skill_id.startswith(("directing/", "stages/visual_direction"))]),
+        metadata={"contract_version": CONTRACT_VERSION, "skill_injection_context_used": bool(skill_context)},
     )
 
     model_prompt_plan = ModelPromptPlan(
@@ -121,8 +135,13 @@ def build_stage_role_contracts(
         ltx_negative_prompt_sent=str(first_meta.get("negative_model_prompt") or first_contract.get("negative_model_prompt") or ""),
         warnings=[],
         skill_ids=[skill_id for skill_id in loaded_skill_ids if skill_id.startswith(("prompting/", "models/"))],
-        loaded_model_skills=model_skill_ids,
-        metadata={"contract_version": CONTRACT_VERSION, "ltx_negative_prompt_supported": False},
+        loaded_model_skills=list(skill_context.get("model_skills") or model_skill_ids),
+        metadata={
+            "contract_version": CONTRACT_VERSION,
+            "ltx_negative_prompt_supported": False,
+            "prompt_risk_warnings": [],
+            "skill_injection_context_used": bool(skill_context),
+        },
     )
 
     review_plan = ReviewPlan(
@@ -137,21 +156,29 @@ def build_stage_role_contracts(
             "generic_stock_feel",
             "physical_incoherence",
             "bad_composition",
+            "poor_platform_fit",
             "no_visual_change",
             "dead_static_scene",
             "confusing_subject",
             "voice_visual_mismatch",
+            "low_phone_size_readability",
         ],
-        platform_fit_checks=["portrait_readability", "first_beat_hook", "mobile_composition"],
+        platform_fit_checks=["portrait_readability", "first_beat_hook", "mobile_composition", "low_phone_size_readability"],
         artifact_checks=["visible_text", "phone_or_ui", "split_screen", "collage", "labels_or_logos"],
         rejection_rules=["visible text/UI/device in clean lifestyle mode", "technical validation failed", "off-topic motif"],
         selection_policy=str(plan.metadata.get("selection_mode") or "quality_guarded_best_valid_take"),
-        skill_ids=[skill_id for skill_id in loaded_skill_ids if skill_id.startswith(("review/", "stages/quality_review", "models/qwen3_vl_review"))],
-        metadata={"contract_version": CONTRACT_VERSION},
+        skill_ids=list(skill_context.get("review_skills") or [skill_id for skill_id in loaded_skill_ids if skill_id.startswith(("review/", "stages/quality_review", "models/qwen3_vl_review"))]),
+        metadata={"contract_version": CONTRACT_VERSION, "skill_injection_context_used": bool(skill_context)},
     )
 
     return {
         "contract_version": CONTRACT_VERSION,
+        "skill_injection_context": skill_context,
+        "creative_intent": plan.metadata.get("creative_intent"),
+        "beat_plan_candidates": plan.metadata.get("beat_plan_candidates") or [],
+        "beat_plan_candidate_scores": plan.metadata.get("beat_plan_candidate_scores") or [],
+        "selected_beat_plan_candidate": plan.metadata.get("selected_beat_plan_candidate"),
+        "per_scene_visual_direction": per_scene_visual_direction,
         "creative_strategy": strategy.model_dump(mode="json"),
         "beat_plan": beat_plan.model_dump(mode="json"),
         "visual_direction": visual_direction.model_dump(mode="json"),

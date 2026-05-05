@@ -11,6 +11,10 @@ from pathlib import Path
 from typing import Any
 from urllib import error, parse, request
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
 from agent_core.resume_contract import inspect_resume_contract
 
 
@@ -460,6 +464,40 @@ def render_checkpoint_summary(run_dir: Path, *, verbose: bool = False) -> bool:
         print(_line("Approve", f"python3 /workspace/scripts/agent_core_cli.py --approve-checkpoint {run_dir} {blocked} --approved-by \"human\" --approval-note \"...\"", width=18))
         print(_line("Resume", "prepared, but executor resume is future work; rerun/start behavior must be defined next", width=18))
         print()
+    return True
+
+
+def render_feedback_summary(run_dir: Path) -> bool:
+    feedback_payload = load_json_safe(run_dir / "feedback_actions.json")
+    retry_payload = load_json_safe(run_dir / "retry_plan.json")
+    state = load_json_safe(run_dir / "state.json")
+    actions = feedback_payload.get("feedback_actions") if isinstance(feedback_payload.get("feedback_actions"), list) else []
+    top = feedback_payload.get("top_priority_action") if isinstance(feedback_payload.get("top_priority_action"), dict) else None
+    if not top and actions:
+        top = actions[0] if isinstance(actions[0], dict) else None
+    if not actions and not retry_payload and not state.get("blocked_by_feedback_action_id"):
+        return False
+    print("FEEDBACK")
+    if top:
+        print(_line("Top action", top.get("action_type"), width=22))
+        print(_line("Issue", top.get("issue_type"), width=22))
+        print(_line("Scene", top.get("target_scene_id") or "-", width=22))
+        print(_line("Blocking", "yes" if top.get("blocking") else "no", width=22))
+        print(_line("Next stage", feedback_payload.get("recommended_next_stage") or top.get("target_stage"), width=22))
+        print(_line("Suggested fix", short_prompt(top.get("suggested_fix"), 120), width=22))
+    elif state.get("blocked_by_feedback_action_id"):
+        print(_line("Blocked action", state.get("blocked_by_feedback_action_id"), width=22))
+        print(_line("Next action", state.get("feedback_next_action"), width=22))
+        print(_line("Requires approval", "yes" if state.get("feedback_requires_approval") else "no", width=22))
+    if retry_payload:
+        print(_line("Retry plan", "blocked" if retry_payload.get("blocked") else "open", width=22))
+        print(_line("Human approval", "yes" if retry_payload.get("requires_human_approval") else "no", width=22))
+        print(_line("Allowed actions", _compact_list(retry_payload.get("allowed_next_actions"), limit=5), width=22))
+        print(_line("Invalidates", _compact_list(retry_payload.get("invalidated_artifacts"), limit=5), width=22))
+    print(_line("feedback_actions", run_dir / "feedback_actions.json", width=22))
+    if (run_dir / "retry_plan.json").exists():
+        print(_line("retry_plan", run_dir / "retry_plan.json", width=22))
+    print()
     return True
 
 
@@ -1778,8 +1816,10 @@ def _inspect_run(path: Path, *, tail_lines: int, show_log_tail: bool, verbose: b
     success = bool(result.get("success")) if result else state.get("status") == "done"
     if success:
         print_success_summary(result, state, takes, run_dir, DEFAULT_BASE_URL, verbose=verbose)
+        render_feedback_summary(run_dir)
         return 0
     print_failure_summary(result, state, takes, run_dir, tail_lines=tail_lines, show_tail=show_log_tail)
+    render_feedback_summary(run_dir)
     return 1
 
 

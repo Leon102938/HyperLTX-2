@@ -6,6 +6,14 @@ Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E, 3A, 3B, 4A, 4B und
 - Kanonische Capability-Uebersicht: `/workspace/codex/CAPABILITY_MAP.md`
 
 ## Verifizierte Fakten
+- 2026-05-03 Phase G6 Skill Injection ist umgesetzt.
+- Neuer `SkillInjectionContext` in `agent_core/creative_system/skill_injection.py` sammelt Pipeline-, Mode-, Style-, Skill-, Prompt-Policy-, Constraint-, Anti-Pattern- und Audit-Hint-Kontext serialisierbar.
+- `VideoAgent._attach_skill_trace()` nutzt jetzt den SkillInjectionContext und speist ihn in `plan.metadata`, `stage_contracts.json`, `prompt_audit.json`, `model_prompts.json` und `decision_log.json`.
+- Neue Model-Skills `models/zimage_turbo`, `models/ltx_video` und `models/qwen3_vl_review` sind als Markdown-Skills vorhanden und werden fuer `clean_shortform_v1` geladen.
+- Stage Contracts werden jetzt mit SkillInjectionContext aktiv befuellt; CreativeStrategy, BeatPlan, VisualDirection, ModelPromptPlan und ReviewPlan sind nicht mehr nur leere Anschluss-Artefakte.
+- PromptBuilder tracebar: `ltx_positive_prompt_sent` und `ltx_negative_prompt_sent` sind in Prompt-Parts und Artefakten getrennt; Z-Image bleibt positive-only.
+- ReviewPlan/Qwen-Prompt enthalten kreative Review-Kriterien inklusive low phone-size readability; Heuristik behauptet weiter keine Fake-VLM-Inferenz.
+- Sicherer G6-Smoke ohne Render: `/workspace/agent_runs/g6-skill-injection-stop-after-model-prompts-smoke` erzeugt `prompt_audit.json`, `model_prompts.json`, `stage_contracts.json`, `decision_log.json`, aber kein `final.mp4`.
 - 2026-05-02 Phase G2 Skill Layer + Pipeline Modes + Creative Roles ist umgesetzt.
 - Neue Markdown-Skills liegen unter `agent_core/creative_system/skills/` fuer Models, Platforms, Stages, Directing, Prompting und Review; jede Skill-Datei hat `title`, `purpose`, `when_to_use`, `rules`, `do`, `dont`, `output_contract`, `common_failures` und `audit_hints`.
 - Neuer Skill Loader: `agent_core/creative_system/skill_loader.py` laedt Skills per ID oder Pfad, meldet fehlende Skills robust und loest Pipeline-/Mode-/Style-required-skills zu einem Trace auf.
@@ -910,3 +918,81 @@ Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E, 3A, 3B, 4A, 4B und
 - Noch nicht geloest:
   - `focus_break` bleibt trotz neutralisiertem `style_lock.visual_identity` modellseitig deutlich text-/screen-anfaellig
   - Burn-in-Subtitles sind funktional, aber der neue Subtitle-Hebel verbessert diese beiden realen Clips nur leicht; die groessere sichtbare Schwachstelle bleibt das Bildmaterial
+
+## Update 2026-05-03 G7 Creative Beat Planner
+
+### Einordnung
+- G6 ist weiter aktiv: SkillInjectionContext, Stage Contracts, Prompt Policies, ReviewPlan und DecisionLog bleiben die Grundlage.
+- G7 macht daraus fuer `clean_shortform_v1` eine echte kreative Auswahlstufe statt einer festen Morning-Reset-Sequenz.
+
+### Implementierter Stand
+- `CreativeIntent` analysiert User-Idee und Script runtimefrei und erzeugt eine sanitisierte visuelle Absicht ohne Script-Literal-Leakage.
+- `BeatPlanCandidates` erzeugen fuer Morning Reset mindestens drei Varianten: `light_to_action`, `tactile_first`, `motion_first`.
+- Candidate Scoring bewertet Hook, visuelle Klarheit, Action-Lesbarkeit, Originalitaet, Modellmachbarkeit, Artefaktrisiko, Platform Fit, Continuity und Anti-Boring.
+- Planner waehlt den besten Candidate deterministisch aus und baut daraus ScenePlan sowie per-scene VisualDirection.
+- PromptBuilder nutzt per-scene Direction und selected shot recipes fuer Z-Image/LTX Prompts.
+- `stage_contracts.json`, `prompt_audit.json`, `model_prompts.json` und `decision_log.json` zeigen Intent, Candidates, Scores, selected Candidate und per-scene Direction.
+- G8 Scaffold ist vorhanden: `FeedbackAction`-Mapping, aber noch kein Retry-Executor.
+
+### Verifikation
+- Sicherer Stop-after-Smoke: `/workspace/agent_runs/g7-beat-planner-stop-after-model-prompts-smoke`
+- Der Smoke stoppte bei `model_prompts`; `final.mp4` wurde nicht erzeugt.
+- Es wurden keine Render, Modelle, Downloads, Runtime-, Docker-, `init.sh`-, Backend-, n8n/API/GUI-Aenderungen gestartet oder gebaut.
+
+### Offene Punkte
+- FeedbackAction muss in G8 noch in einen kontrollierten Retry-/Replan-Executor ueberfuehrt werden.
+- Ein erster kontrollierter Render-Test bleibt nach dem Feedback-Executor beziehungsweise mit explizitem Render-Auftrag Future Work.
+
+## Update 2026-05-03 G8 Feedback Loop / Retry Policy Scaffold
+
+### Implementierter Stand
+- `FeedbackAction` ist ein serialisierbarer Vertrag mit Action-ID, Issue-Type, Action-Type, Zielstage, Szene/Take, Suggested Fix, Blocking, Retry-Budget-Impact, Confidence und Review-Quelle.
+- `evaluate_feedback_actions()` akzeptiert Review-Payloads aus manuellen Issue-Listen, Heuristiken, Take-Reviews, Final Verdicts oder Qwen-Review-Metadaten.
+- Prioritaet ist defensiv: technische Fehler vor visuellen Blocking-Issues; sichtbarer Text/UI/Device vor boring/static.
+- `RetryBudget` und `RetryPlan` definieren erlaubte naechste Aktionen, invalidierte Artefakte, reusable Artefakte, Blocking und Human-Approval, ohne Render-Retry auszufuehren.
+- DecisionLog-Utilities koennen FeedbackActions, RetryPlan und Artifact-Invalidations persistieren.
+- CLI Inspect zeigt FeedbackActions und RetryPlan, wenn die JSON-Artefakte vorhanden sind.
+
+### Smoke
+- Fixture: `/workspace/agent_runs/g8-feedback-policy-smoke`
+- Beispiel-Issues: `scene_01 boring_scene`, `scene_02 visible_text`, `scene_03 low_phone_size_readability`
+- Top Priority: `visible_text -> regenerate_keyframe`
+- `blocked=true`, `requires_human_approval=true`
+- Kein `final.mp4`
+
+### Offene Punkte
+- Der echte automatische Retry-/Replan-Executor bleibt bewusst Future Work.
+- G9 soll zuerst einen kontrollierten echten V1-Run mit aktivem Trace fahren und FeedbackActions manuell auswerten.
+
+## Update 2026-05-03 G9 First Controlled V1 Run
+
+### Dry-Run
+- Run: `/workspace/agent_runs/g9-v1-morning-reset-dryrun-001`
+- Pipeline: `clean_shortform_v1`
+- Stop: `model_prompts`
+- Candidate: `tactile_first`
+- Artefakte: `stage_contracts.json`, `prompt_audit.json`, `model_prompts.json`, `decision_log.json`, `G9_DRYRUN_REVIEW.md`
+- Kein `final.mp4`
+
+### Real Run
+- Run: `/workspace/agent_runs/g9-v1-morning-reset-render-001`
+- Genau ein echter Render wurde gestartet.
+- Settings: portrait `512x768`, Storyboard an, LTX an, Voice/Music/Subtitles aus, 3 Szenen, 1 Variation, 1 Take, heuristic review.
+- Ergebnis: `success=true`, `final_phase=assembled`, `final.mp4` vorhanden, Dauer ca. `9.479s`.
+- Final Quality Verdict: `needs_review`, Postability `0.394`, technische Validierung passed.
+- Review: `real_vlm_inference_used=false`, Provider heuristic.
+
+### Sichtbefund
+- Szene 1: Wasserglas-Hook vorhanden, aber schwarzer ink-/map-artiger Artefaktbereich im Glas.
+- Szene 2: klare text-/UI-/Papierartefakte; nicht V1-demo-tauglich.
+- Szene 3: ruhige Person im Raum, technisch sauberer, aber Payoff/Reset-Aktion schwach.
+
+### Feedback
+- `feedback_actions.json` und `retry_plan.json` wurden analytisch erzeugt.
+- Top Action: `visible_text -> regenerate_keyframe` fuer `scene_02`, blocking.
+- RetryPlan blockiert und verlangt Human Review; kein Retry-Render wurde ausgefuehrt.
+
+### Fazit
+- V1-Systembeweis: ja.
+- Demo-wuerdiger Clip: nein.
+- Naechster Schritt: G10 Content Maschine V1 Tuning / Seele auf Basis des G9 Reports.

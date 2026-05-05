@@ -8,7 +8,7 @@ from typing import Any
 from agent_core.adapters.base import MusicBackendAdapter, StoryboardAdapter, VideoAdapter, VoiceAdapter
 from agent_core.assembler import ResultAssembler
 from agent_core.backend_registry import BackendRegistry, build_default_registry
-from agent_core.creative_system import build_stage_role_contracts, load_creative_system, resolve_skills_for_pipeline
+from agent_core.creative_system import build_skill_injection_context, build_stage_role_contracts, load_creative_system
 from agent_core.decision_log import build_initial_decision_log
 from agent_core.pipeline import (
     DEFAULT_PIPELINE_ID,
@@ -527,13 +527,19 @@ class VideoAgent:
             plan.metadata["missing_skills"] = [f"creative_system_load_failed:{exc}"]
             plan.metadata["stage_roles"] = dict(getattr(pipeline, "stage_roles", {}) or {})
             return
-        skill_result = resolve_skills_for_pipeline(pipeline, mode, style)
-        trace = skill_result.to_trace()
+        skill_context = build_skill_injection_context(
+            pipeline_def=pipeline,
+            mode=mode if isinstance(mode, dict) else {},
+            style=style if isinstance(style, dict) else {},
+            job_metadata=job.metadata,
+        )
+        trace = skill_context.to_dict()
         plan.metadata["required_skills"] = trace["required_skills"]
         plan.metadata["loaded_skills"] = trace["loaded_skills"]
         plan.metadata["missing_skills"] = trace["missing_skills"]
+        plan.metadata["skill_injection_context"] = trace
         plan.metadata["stage_roles"] = dict(getattr(pipeline, "stage_roles", {}) or {})
-        plan.metadata["skill_trace_source"] = "pipeline_def_plus_mode_style"
+        plan.metadata["skill_trace_source"] = "skill_injection_context"
         if isinstance(mode, dict):
             plan.metadata["motif_families"] = list(mode.get("motif_families") or [])
         plan.metadata["stage_contracts"] = build_stage_role_contracts(
@@ -542,6 +548,7 @@ class VideoAgent:
             mode=mode if isinstance(mode, dict) else {},
             style=style if isinstance(style, dict) else {},
             loaded_skills=trace["loaded_skills"],
+            skill_injection_context=trace,
         )
 
     def _save_decision_log(self, job: JobInput, plan: ProductionPlan, state, pipeline) -> None:
@@ -549,6 +556,7 @@ class VideoAgent:
             "required_skills": plan.metadata.get("required_skills", []),
             "loaded_skills": plan.metadata.get("loaded_skills", []),
             "missing_skills": plan.metadata.get("missing_skills", []),
+            "skill_injection_context": plan.metadata.get("skill_injection_context", {}),
         }
         checkpoint_trace = {
             "current_checkpoint_id": state.current_checkpoint_id,
@@ -860,6 +868,8 @@ class VideoAgent:
                     "motif_id": contract.get("motif_id"),
                     "shot_recipe_id": contract.get("shot_recipe_id"),
                     "hook_function": contract.get("hook_function"),
+                    "selected_candidate_id": contract.get("selected_candidate_id") or plan.metadata.get("selected_candidate_id"),
+                    "per_scene_visual_direction": contract.get("per_scene_visual_direction") or (plan.metadata.get("per_scene_visual_direction") or {}).get(scene.scene_id),
                     "anti_patterns_checked": contract.get("anti_patterns_checked", []),
                     "backend_prompt_policy": contract.get("backend_prompt_policy"),
                     "debug_prompt": scene.prompt_build_metadata.get("debug_prompt") or scene.prompt_text,
@@ -923,6 +933,19 @@ class VideoAgent:
             "missing_skills": plan.metadata.get("missing_skills", []),
             "stage_roles": plan.metadata.get("stage_roles", {}),
             "stage_contracts": plan.metadata.get("stage_contracts", {}),
+            "skill_injection_context": plan.metadata.get("skill_injection_context", {}),
+            "creative_intent": plan.metadata.get("creative_intent"),
+            "beat_plan_candidates": plan.metadata.get("beat_plan_candidates", []),
+            "beat_plan_candidate_scores": plan.metadata.get("beat_plan_candidate_scores", []),
+            "selected_beat_plan_candidate": plan.metadata.get("selected_beat_plan_candidate"),
+            "per_scene_visual_direction": plan.metadata.get("per_scene_visual_direction", {}),
+            "selected_candidate_id": plan.metadata.get("selected_candidate_id"),
+            "selected_hook_pattern": plan.metadata.get("selected_hook_pattern"),
+            "creative_strategy": (plan.metadata.get("stage_contracts") or {}).get("creative_strategy"),
+            "beat_plan": (plan.metadata.get("stage_contracts") or {}).get("beat_plan"),
+            "visual_direction": (plan.metadata.get("stage_contracts") or {}).get("visual_direction"),
+            "model_prompt_plan": (plan.metadata.get("stage_contracts") or {}).get("model_prompt_plan"),
+            "review_plan": (plan.metadata.get("stage_contracts") or {}).get("review_plan"),
             "backend_prompt_policy": plan.metadata.get("backend_prompt_policy"),
             "backend_prompt_policy_notes": {
                 "zimage": "positive_only; no avoid list is sent to Z-Image",
@@ -1039,6 +1062,8 @@ class VideoAgent:
                     "motif_id": contract.get("motif_id"),
                     "shot_recipe_id": meta.get("shot_recipe_id") or contract.get("shot_recipe_id"),
                     "hook_function": meta.get("hook_function") or contract.get("hook_function"),
+                    "selected_candidate_id": contract.get("selected_candidate_id") or plan.metadata.get("selected_candidate_id"),
+                    "per_scene_visual_direction": contract.get("per_scene_visual_direction") or (plan.metadata.get("per_scene_visual_direction") or {}).get(scene.scene_id),
                     "positive_model_prompt": positive_model_prompt,
                     "negative_model_prompt": negative_model_prompt,
                     "combined_model_prompt": combined_model_prompt,
@@ -1086,6 +1111,19 @@ class VideoAgent:
             "missing_skills": plan.metadata.get("missing_skills", []),
             "stage_roles": plan.metadata.get("stage_roles", {}),
             "stage_contracts": plan.metadata.get("stage_contracts", {}),
+            "skill_injection_context": plan.metadata.get("skill_injection_context", {}),
+            "creative_intent": plan.metadata.get("creative_intent"),
+            "beat_plan_candidates": plan.metadata.get("beat_plan_candidates", []),
+            "beat_plan_candidate_scores": plan.metadata.get("beat_plan_candidate_scores", []),
+            "selected_beat_plan_candidate": plan.metadata.get("selected_beat_plan_candidate"),
+            "per_scene_visual_direction": plan.metadata.get("per_scene_visual_direction", {}),
+            "selected_candidate_id": plan.metadata.get("selected_candidate_id"),
+            "selected_hook_pattern": plan.metadata.get("selected_hook_pattern"),
+            "creative_strategy": (plan.metadata.get("stage_contracts") or {}).get("creative_strategy"),
+            "beat_plan": (plan.metadata.get("stage_contracts") or {}).get("beat_plan"),
+            "visual_direction": (plan.metadata.get("stage_contracts") or {}).get("visual_direction"),
+            "model_prompt_plan": (plan.metadata.get("stage_contracts") or {}).get("model_prompt_plan"),
+            "review_plan": (plan.metadata.get("stage_contracts") or {}).get("review_plan"),
             "backend_prompt_policy": first_policy or PromptBuilder.DEFAULT_BACKEND_PROMPT_POLICY,
             "backend_prompt_policy_notes": {
                 "zimage": "positive_only; zimage_prompt_sent must stay free of Avoid/debug/script content",

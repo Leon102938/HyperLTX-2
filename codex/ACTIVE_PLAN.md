@@ -319,3 +319,12 @@ Den bereits vorbereiteten Director-Layer produktiv an ein echtes lokales Directo
 ## Tagesabschluss
 - Commit-wuerdig sind aktuell die Quellordner `agent_core/`, `app/`, `tests/`, `examples/`, die geschraefte `.gitignore` und der kanonische Projekt-Memory unter `/workspace/codex`.
 - Laufzeit- und Artefaktordner wie `agent_runs/`, `exports/`, `jobs/`, `status/`, `venvs/` und Checkpoints bleiben bewusst ausserhalb eines sauberen Code-Commits.
+# Aktiver Plan: G10 Content Maschine V1 Tuning / Seele
+
+G9 ist abgeschlossen. Der erste kontrollierte echte V1-Run lief end-to-end mit G6/G7/G8-Trace, Storyboard, LTX, Final Quality Verdict, FeedbackActions und RetryPlan. Der Clip ist technisch erfolgreich, aber wegen sichtbarer Text-/UI-/Papierartefakte in Szene 2 nicht demo-wuerdig.
+
+Der naechste sinnvolle Schritt ist G10 Content Maschine V1 Tuning / Seele:
+- Szene-2-Motiv/Shot-Recipe vom dokument-/papierartigen Objekt wegfuehren.
+- Taktile Motive staerker physisch und weniger UI-/Papier-assoziiert machen.
+- G8 FeedbackActions als manuelle Tuning-Anleitung nutzen, weiterhin ohne Auto-Retry.
+- Keine Runtime-, Modell-, Docker-, `init.sh`-, Backend-, n8n/API/GUI-Umbauten ohne neuen expliziten Auftrag.

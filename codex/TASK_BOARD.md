@@ -141,3 +141,13 @@
 - echter erfolgreicher Phase-5B-Live-Run `phase5b-qwen-live-1776506522` mit `director_mode=llm_augmented` verifiziert
 - `.gitignore` fuer Laufzeit-/Artefaktordner geschaerft
 - `HANDOFF.md` fuer die naechste Session angelegt
+- [x] G6 Skill Injection Context gebaut und in Agent/Stage Contracts/Prompt-Audit/Model-Prompts/DecisionLog verdrahtet.
+- [x] G6 Model-Skills fuer Z-Image, LTX und Qwen3-VL Review ergaenzt.
+- [x] G6 PromptBuilder-Policy fuer Z-Image positive-only und LTX positive/negative Trace getestet.
+- [x] G6 ReviewPlan/Qwen-Prompt um kreative Qualitaetskriterien erweitert.
+- [x] G6 Stop-after Smoke ohne Render erstellt: `g6-skill-injection-stop-after-model-prompts-smoke`.
+- [x] G7 Creative Strategy / Beat Planner 2.0: CreativeIntent, BeatPlanCandidates, Scoring, selected Candidate, per-scene VisualDirection und Trace-Integration.
+- [x] G8 Feedback Policy Scaffold: Review-Issues werden zu serialisierbaren FeedbackAction-Vorschlaegen gemappt, ohne Retry-Executor.
+- [x] G8 Feedback Loop / Retry Policy Executor Scaffold: FeedbackAction, Evaluator, RetryBudget, RetryPlan, DecisionLog, Checkpoint-State und CLI Inspect ohne echte Retry-Ausfuehrung.
+- [x] G9 kontrollierter erster echter V1-Run mit aktivem Trace und manueller Feedback-Auswertung.
+- [ ] G10 Content Maschine V1 Tuning / Seele auf Basis des G9 Reports.
