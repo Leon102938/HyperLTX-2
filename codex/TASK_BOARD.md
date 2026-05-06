@@ -1,6 +1,8 @@
 # TASK_BOARD.md
 
 ## TODO
+- Creative OS Stage 8 enger Folgeschritt: kontrollierten LTX I2V Render-Plan/Executor-Gate entwerfen, ohne Batch/n8n/API und ohne sofortigen unkontrollierten Render.
+- Creative OS V1 Dry-Run-Artefakte manuell auditieren und dann genau einen Integrationspunkt in den bestehenden Stop-after-`model_prompts`-Pfad entscheiden.
 - G5-Folge: Skills und Stage Contracts aktiv in Director/Planner/PromptBuilder einspeisen und nicht nur laden/tracen.
 - G2-Folge: Decision Log um echte selected_take- und final_quality_decision-Eintraege nach Selection/Assembly erweitern.
 - G2-Folge: Adapter-seitigen LTX-`negative_prompt` Support pruefen und bei echter Backend-Unterstuetzung sauber getrennt verdrahten.
@@ -26,6 +28,21 @@
 - noch leer
 
 ## DONE
+- Creative OS CLI Dashboard V1 gebaut: read-only `scripts/creative_os_status.py` mit Views `overview`, `skills`, `stages`, `artifacts`, `issues`, `next`, `all`.
+- Dashboard-Beleg `creative-os-jungle-001`: `ready_for_stage_8`, Stage 01-08 passed, Stage 09 pending, none blocking.
+- Dashboard-Tests gruen: `python3 -m unittest /workspace/tests/test_creative_os_status.py -v`.
+- Creative OS Stage 7 gebaut: LTX Motion Prompt Compiler erzeugt pro passed Keyframe einen I2V-Motion-Prompt und schreibt `ltx_motion_prompts.json`, `ltx_prompt_audit.json`, `creative_os_stage7_report.md`.
+- Stage-7-Beleglauf `creative-os-jungle-001`: 3 Motion Prompts erzeugt, Audit overall `passed`, kein LTX-Render gestartet.
+- Stage-7-Tests gruen: `python3 -m unittest /workspace/tests/test_creative_os_ltx_prompts.py -v`.
+- Creative OS Stage 6.1 Review Decision abgeschlossen: `scene_02` manual-structured auf `passed`, keine Regeneration.
+- Creative OS Stage 6 gebaut: Z-Image-Prompts werden ueber den bestehenden Z-Image-HTTP-Pfad zu PNG-Keyframes generiert und mit heuristic QA reviewed.
+- Stage-6-Beleglauf `creative-os-jungle-001`: 3 echte PNGs erzeugt; QA `scene_01=passed`, `scene_02=needs_review`, `scene_03=passed`.
+- Stage-6-Artefakte geschrieben: `keyframe_manifest.json`, `keyframe_review.json`, `keyframe_generation_log.json`, `creative_os_stage6_report.md`.
+- Stage-6-Tests gruen: `python3 -m unittest /workspace/tests/test_creative_os_keyframes.py /workspace/tests/test_creative_os_keyframe_qa.py -v`.
+- Creative OS V1 Dry-Run-Schicht umgesetzt: isoliertes `agent_core/creative_os/` plus `scripts/creative_os_dry_run.py`.
+- Creative OS V1 schreibt die geforderten Artefakte unter `/workspace/agent_runs/<job_id>/creative_os/` und kompiliert 3 Z-Image-Keyframe-Prompts ohne Render.
+- Creative OS V1 Skill-Fallback fuer Jungle/Adventure verifiziert: kein Morning-Reset-Fallback, sondern Generic Visual Adventure + Cinematic Nature.
+- Creative OS V1 Tests gruen: `python3 -m unittest /workspace/tests/test_creative_os_skill_loader.py /workspace/tests/test_creative_os_runner.py /workspace/tests/test_creative_os_prompts.py -v`.
 - Final Mega Task G3/G4/G5 umgesetzt: Stage Role Contracts, Stop-after, Resume Contract, Creative Quality Review Warnings und staerkerer Decision Log.
 - `stage_contracts.json` als Run-Artefakt eingefuehrt und in Prompt-/Model-Audits gespiegelt.
 - `--stop-after scene_plan|model_prompts|storyboard` als CLI/Core-Metadata-Vertrag eingefuehrt; sichere Stops starten keine Render-/Modell-Backends.
@@ -71,6 +88,11 @@
 - reale Backend-Fixes fuer Aufloesung, Framezahl und Phase-1-Pipeline-Vertrag umgesetzt
 - Assembler auf finales MP4 mit gemuxter Voice erweitert
 - sauberer Fallback implementiert: ohne nutzbares Voice-Artefakt wird trotzdem `final.mp4` erzeugt
+- [x] Creative OS CLI Cockpit V1.6 Rich Grid finalisiert: Header, Sidebar, Active Workspace, Scene Jobs, Bottom Grid.
+- [x] Plain Mode stabil gehalten und Rich-Snapshots erzeugt.
+- [x] Status-Tests gruen: `python3 -m unittest /workspace/tests/test_creative_os_status.py -v`.
+- [x] Kein Stage 8 / kein Render / kein LTX / kein Video / kein Backend-Aufruf / kein n8n / keine API / kein Textual gebaut.
+- [ ] Naechster enger Schritt: Design visuell vom Operator pruefen.
 - echter End-to-End-Mux-Lauf gegen reale Qwen-TTS- und LTX2-Backends erfolgreich verifiziert
 - Dauervertrag zwischen Planner, LTX2-Frame-Quantisierung, realem Video und finalem Muxing geschaerft
 - reale Randfaelle fuer Voice kuerzer, Voice laenger und kein Voice-Artefakt verifiziert

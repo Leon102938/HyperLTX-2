@@ -6,6 +6,25 @@ Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E, 3A, 3B, 4A, 4B und
 - Kanonische Capability-Uebersicht: `/workspace/codex/CAPABILITY_MAP.md`
 
 ## Verifizierte Fakten
+- 2026-05-05 Creative OS V1 Dry-Run-Schicht ist als isolierter Zusatzpfad unter `agent_core/creative_os/` umgesetzt.
+- Neuer Entry: `scripts/creative_os_dry_run.py`; er schreibt Artefakte nach `/workspace/agent_runs/<job_id>/creative_os/` und startet keine Bild-, Video-, VLM-, Batch-, n8n- oder Runtime-Backends.
+- Real funktionierende Stages: Input-Normalisierung, Intent Router, Skill Resolver, Creative Strategist, Beat/Hook Planner, Creative Judge, Scene Contracts, Keyframe Contracts, Z-Image Prompt Compiler und Decision Log/Report.
+- Kleine Skillbibliothek vorhanden: `core/tiktok_shortform`, `core/positive_image_prompting`, `core/anti_boring`, `core/artifact_avoidance`, `models/zimage`, `styles/cinematic_nature`, `styles/clean_lifestyle`, `fallback/generic_visual_adventure`, `fallback/generic_shortform_story`.
+- Jungle/Adventure ohne Spezialskill faellt sichtbar auf `fallback/generic_visual_adventure` + `styles/cinematic_nature` zurueck und nicht auf Morning Reset.
+- Beleglauf: `/workspace/agent_runs/creative-os-jungle-001/creative_os/` mit 3 SceneContracts, 3 KeyframeContracts und 3 Z-Image-Prompt-Objekten.
+- Tests gruen: `python3 -m unittest /workspace/tests/test_creative_os_skill_loader.py /workspace/tests/test_creative_os_runner.py /workspace/tests/test_creative_os_prompts.py -v` -> 4 Tests OK.
+- Creative OS Stage 6 ist als enger Zusatzpfad gebaut: `scripts/creative_os_keyframes.py` liest vorhandene `zimage_prompts.json`, nutzt den bestehenden Z-Image-HTTP-Backendpfad, speichert PNG-Keyframes unter `creative_os/keyframes/` und schreibt `keyframe_manifest.json`, `keyframe_review.json`, `keyframe_generation_log.json`, `creative_os_stage6_report.md`.
+- Realer Stage-6-Lauf fuer `creative-os-jungle-001`: 3 echte PNGs erzeugt (`scene_01.png`, `scene_02.png`, `scene_03.png`), Backend `zimage_http`, Review Provider `heuristic`.
+- Stage-6-QA fuer `creative-os-jungle-001`: `scene_01=passed`, `scene_02=passed` nach manual-structured Stage-6.1 Review, `scene_03=passed`.
+- Stage-6-Tests gruen: `python3 -m unittest /workspace/tests/test_creative_os_keyframes.py /workspace/tests/test_creative_os_keyframe_qa.py -v` -> 6 Tests OK.
+- Creative OS Stage 7 ist gebaut: `scripts/creative_os_ltx_prompts.py` kompiliert aus passed Keyframes, Scene Contracts, Keyframe Contracts, Creative Strategy und Reviews genau einen LTX-I2V-Motion-Prompt pro Szene und startet keinen LTX-Render.
+- Realer Stage-7-Lauf fuer `creative-os-jungle-001`: 3 LTX Motion Prompts erzeugt, `ltx_prompt_audit.json` overall `passed`, `render_started=false`.
+- Stage-7-Artefakte: `ltx_motion_prompts.json`, `ltx_prompt_audit.json`, `creative_os_stage7_report.md`.
+- Stage-7-Tests gruen: `python3 -m unittest /workspace/tests/test_creative_os_ltx_prompts.py -v` -> 2 Tests OK.
+- Creative OS CLI Dashboard V1 ist gebaut als read-only Inspect-Tool: `scripts/creative_os_status.py` liest ausschliesslich vorhandene Run-Artefakte und ruft keine Backends/API/VLMs auf.
+- Dashboard-Views: `overview`, `skills`, `stages`, `artifacts`, `issues`, `next`, `all`; Exit-Codes: 0 lesbar ohne Blocking, 1 Run fehlt/harte Fehler, 2 Blocking Issues.
+- Dashboard-Beleg fuer `creative-os-jungle-001`: Status `ready_for_stage_8`, Stage 01-08 passed, Stage 09 pending, Issues `none blocking`, Next Action `Stage 8: render 1 LTX I2V take per scene`.
+- Dashboard-Tests gruen: `python3 -m unittest /workspace/tests/test_creative_os_status.py -v` -> 5 Tests OK.
 - 2026-05-03 Phase G6 Skill Injection ist umgesetzt.
 - Neuer `SkillInjectionContext` in `agent_core/creative_system/skill_injection.py` sammelt Pipeline-, Mode-, Style-, Skill-, Prompt-Policy-, Constraint-, Anti-Pattern- und Audit-Hint-Kontext serialisierbar.
 - `VideoAgent._attach_skill_trace()` nutzt jetzt den SkillInjectionContext und speist ihn in `plan.metadata`, `stage_contracts.json`, `prompt_audit.json`, `model_prompts.json` und `decision_log.json`.
@@ -916,6 +935,16 @@ Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E, 3A, 3B, 4A, 4B und
   - die kleine Motivbibliothek verbessert das Morning-Format real und macht Szene 3 stabiler/social-lesbarer
   - der Subtitle-Hebel ist produktiv verdrahtet und real in `plan.json` belegt
 - Noch nicht geloest:
+## Update 2026-05-05 Creative OS CLI Cockpit V1.6
+
+- Creative OS CLI Cockpit V1.6 ist gebaut als reine Read-only-Kommandozentrale.
+- Rich-Mode: Header, System Sidebar, Pipeline Map, Active Workspace, Scene Jobs, Skill/Artifacts/Issues/Next Bottom Grid.
+- Plain-Mode bleibt stabil und ist weiter Default.
+- Keine Stage 8, kein Render, kein LTX-Render, kein Video, kein Backend-Aufruf, kein n8n, keine API und kein Textual.
+- Verifikation: `python3 -m unittest /workspace/tests/test_creative_os_status.py -v` -> 12 Tests OK.
+- Snapshots: `/workspace/cli_cockpit_snapshots/overview_rich_cli.txt`, `/workspace/cli_cockpit_snapshots/all_rich_cli.txt`, `/workspace/cli_cockpit_snapshots/overview_plain_cli.txt`.
+- Naechster enger Schritt: Design visuell vom Operator pruefen.
+
   - `focus_break` bleibt trotz neutralisiertem `style_lock.visual_identity` modellseitig deutlich text-/screen-anfaellig
   - Burn-in-Subtitles sind funktional, aber der neue Subtitle-Hebel verbessert diese beiden realen Clips nur leicht; die groessere sichtbare Schwachstelle bleibt das Bildmaterial
 

@@ -26,6 +26,17 @@ Eine kleine Director-/Brain-Schicht vor dem bestehenden Planner bauen, die Jobs 
 Den bereits vorbereiteten Director-Layer produktiv an ein echtes lokales Director-Modell anbinden, bevorzugt Qwen3.6-35B-A3B in praktikabler quantisierter Form als GGUF `Q4_K_M`, ohne Fake-Integration, ohne neuen Mega-Stack und mit sauberem Fallback auf den bisherigen regelbasierten Flow.
 
 ## Aktueller Operativer Fokus
+- Creative OS CLI Dashboard V1 ist gebaut. Aktueller read-only Inspect-Befehl: `python3 /workspace/scripts/creative_os_status.py --job-id creative-os-jungle-001 --view overview`.
+- Dashboard-Status fuer `creative-os-jungle-001`: `ready_for_stage_8`, Stage 01-08 passed, Stage 09 pending, keine blockierenden Issues.
+- Creative OS Stage 7 ist gebaut und real fuer `creative-os-jungle-001` gelaufen: 3 passed Keyframes -> 3 LTX Motion Prompts -> Audit passed; kein LTX-Render gestartet.
+- Aktueller enger Output: `/workspace/agent_runs/creative-os-jungle-001/creative_os/ltx_motion_prompts.json`, `ltx_prompt_audit.json`, `creative_os_stage7_report.md`.
+- Naechster enger Schritt: Stage 8 als kontrollierten LTX I2V Render-Plan/Executor-Gate entwerfen, bevor irgendein Video-Render gestartet wird.
+- Creative OS Stage 6 ist gebaut und real fuer `creative-os-jungle-001` gelaufen: Z-Image-Prompts -> 3 PNG-Keyframes -> heuristic QA -> Stage-6-Artefakte.
+- Stage 6 bleibt bewusst vor LTX stehen. Aktueller enger Output: `/workspace/agent_runs/creative-os-jungle-001/creative_os/keyframes/` plus `keyframe_manifest.json`, `keyframe_review.json`, `keyframe_generation_log.json`, `creative_os_stage6_report.md`.
+- Stage 6.1 hat `scene_02` manual-structured auf `passed` gesetzt; alle drei Keyframes sind fuer Stage 7 nutzbar.
+- Creative OS V1 Dry-Run ist als andockbare Zusatzschicht gebaut. Aktueller enger Pfad: `scripts/creative_os_dry_run.py` -> `/workspace/agent_runs/<job_id>/creative_os/` -> 3 Z-Image-Keyframe-Prompts.
+- Die Schicht ist nicht in `VideoAgent.run_job()` integriert und ersetzt keine bestehende Video-Pipeline. Sie dient als planender Prompt-Compiler bis `zimage_prompts.json`.
+- Naechster enger Schritt: Creative OS V1 Output manuell gegen vorhandene `model_prompts.json`-/Prompt-Audit-Konventionen abgleichen, bevor ein Integrationspunkt in den bestehenden Stop-after-Pfad entschieden wird.
 - Phase G2 ist umgesetzt: Die Content-Maschine hat jetzt eine Skill-Schicht unter `agent_core/creative_system/skills/`, eine skill-aware Pipeline `clean_shortform_v1`, Creative Role Contracts und initialen Decision-Log-Trace.
 - Skills sind in G2 noch keine neue Executor-Engine. Sie sind ladbare, tracebare Wissensvertraege, die Pipeline Definitions, Prompt Audit und spaetere Director-/Planner-/Prompt-Builder-Entscheidungen strukturieren.
 - Morning Reset nutzt jetzt flexible `motif_families` statt nur starrer Pflichtszenen. Die alten Shot Recipes bleiben als kompatible Bausteine erhalten.
@@ -169,6 +180,17 @@ Den bereits vorbereiteten Director-Layer produktiv an ein echtes lokales Directo
   - `director_output`, `scene_intent`, `creative_intent` und `prompt_build_metadata` im bestehenden Plan-/Scene-/Take-/Result-Vertrag
   - optionaler lokaler OpenAI-kompatibler Director-Adapter mit ehrlichem Fallback auf `rule_based_fallback`
   - `app/agent_core_api.py` im Workspace wiederhergestellt und in `app.main` eingebunden
+# Aktiver Plan: Creative OS CLI Cockpit V1.6 Abschluss
+
+Creative OS ist bewusst vor Stage 8 gestoppt. Der aktuelle Abschlussstand ist ein read-only CLI Cockpit:
+- `scripts/creative_os_status.py --style plain` bleibt stabil.
+- `scripts/creative_os_status.py --style rich` zeigt V1.6 Rich Cockpit Grid.
+- Snapshots liegen unter `/workspace/cli_cockpit_snapshots/`.
+- Tests: `python3 -m unittest /workspace/tests/test_creative_os_status.py -v` -> 12 Tests OK.
+- Nicht gebaut: Stage 8, Render, LTX, Video, Backend-Aufruf, n8n, API, neue Creative-OS-Stages, Textual.
+
+Naechster enger Schritt: Design visuell vom Operator pruefen.
+
 - verifiziert:
   - Tests laufen gruen
   - Voice-Dauer beeinflusst die geplante Videolaenge

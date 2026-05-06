@@ -1,5 +1,45 @@
 # HANDOFF.md
 
+## Stand 2026-05-05 Creative OS CLI Cockpit V1.6 Abschluss
+- Read-only CLI Cockpit ist auf V1.6 finalisiert: `scripts/creative_os_status.py --style rich` zeigt ein Rich-Grid mit Header, linker Sidebar, Active Workspace, Scene Jobs und Bottom Panels.
+- `--style plain` bleibt stabil; `--style rich` faellt bei fehlendem Rich sauber auf plain zurueck.
+- Beispielrun: `creative-os-jungle-001`, Status `ready_for_ltx_i2v_takes`, Stage 01-08 passed, Stage 09 pending, Issues `none blocking`.
+- Snapshots liegen unter `/workspace/cli_cockpit_snapshots/`: `overview_rich_cli.txt`, `all_rich_cli.txt`, `overview_plain_cli.txt`.
+- Tests: `python3 -m unittest /workspace/tests/test_creative_os_status.py -v` -> 12 Tests OK.
+- Bewusst nicht gebaut: Stage 8, Render, LTX-Ausfuehrung, Video, Backend-Aufruf, n8n, API, neue Creative-OS-Stages, Textual.
+- Naechster enger Schritt: Design visuell vom Operator pruefen.
+
+## Stand 2026-05-05 Creative OS CLI Dashboard V1
+- Read-only Dashboard ist gebaut: `scripts/creative_os_status.py`.
+- Views: `overview`, `skills`, `stages`, `artifacts`, `issues`, `next`, `all`.
+- Beleg: `python3 /workspace/scripts/creative_os_status.py --job-id creative-os-jungle-001 --view overview` zeigt `ready_for_stage_8`, Stage 01-08 passed, Stage 09 pending, none blocking.
+- Das Tool liest nur Artefakte; keine Backend-/API-/Qwen-/Render-Aufrufe und keine Mutation der Run-Artefakte.
+- Tests: `python3 -m unittest /workspace/tests/test_creative_os_status.py -v` -> 5 Tests OK.
+- Naechster enger Schritt bleibt: Stage 8 als kontrollierten LTX I2V Render-Plan/Executor-Gate entwerfen.
+
+## Stand 2026-05-05 Creative OS Stage 7
+- Stage 7 ist gebaut unter `agent_core/creative_os/`: LTX Motion Prompt Compiler und Stage-7-Runner.
+- Entry: `python3 /workspace/scripts/creative_os_ltx_prompts.py --job-id creative-os-jungle-001`.
+- Realer Lauf erzeugte `ltx_motion_prompts.json`, `ltx_prompt_audit.json` und `creative_os_stage7_report.md`.
+- Audit-Stand: `scene_01=passed`, `scene_02=passed`, `scene_03=passed`, overall `passed`, `render_started=false`.
+- Es wurde kein LTX-Render, kein Video, kein Take-Review, kein Assembly, kein n8n, keine API und kein Batch-System gebaut.
+- Naechster enger Schritt: Stage 8 als kontrollierten LTX I2V Render-Plan/Executor-Gate entwerfen.
+
+## Stand 2026-05-05 Creative OS Stage 6
+- Stage 6 ist gebaut unter `agent_core/creative_os/`: Keyframe-Generator, heuristic Keyframe-QA und Stage-6-Runner.
+- Entry: `python3 /workspace/scripts/creative_os_keyframes.py --job-id creative-os-jungle-001 --review-provider heuristic`.
+- Realer Lauf erzeugte 3 echte PNGs unter `/workspace/agent_runs/creative-os-jungle-001/creative_os/keyframes/`.
+- Artefakte: `keyframe_manifest.json`, `keyframe_review.json`, `keyframe_generation_log.json`, `creative_os_stage6_report.md`.
+- QA-Stand: `scene_01=passed`, `scene_02=passed` nach Stage 6.1 manual-structured Review, `scene_03=passed`.
+- Es wurde kein LTX Motion Prompt Compiler, kein LTX Render, kein Video, kein n8n, keine API und kein Batch-System gebaut.
+
+## Stand 2026-05-05 Creative OS V1 Dry-Run
+- Andockbare Creative OS V1 Dry-Run-Schicht ist isoliert unter `agent_core/creative_os/` gebaut; Entry ist `scripts/creative_os_dry_run.py`.
+- Der Pfad stoppt bei `zimage_prompts.json`: kein Bildrender, kein LTX-Render, kein Qwen-VL, kein Batch, kein n8n, keine Runtime-Aenderung.
+- Beleglauf: `/workspace/agent_runs/creative-os-jungle-001/creative_os/` mit allen Pflichtartefakten und 3 Z-Image-Prompt-Objekten.
+- Tests: `python3 -m unittest /workspace/tests/test_creative_os_skill_loader.py /workspace/tests/test_creative_os_runner.py /workspace/tests/test_creative_os_prompts.py -v` -> 4 Tests OK.
+- Naechster enger Schritt: Creative-OS-Artefakte manuell auditieren und erst danach entscheiden, ob der bestehende Stop-after-`model_prompts`-Pfad diese Schicht aufrufen soll.
+
 ## Stand 2026-05-01 Tagesabschluss
 - Phase F2 Grundlage ist umgesetzt: `agent_core/creative_system/` enthaelt Hook Patterns, Shot Recipes und Anti-Patterns; Morning Reset nutzt feste Shot Recipes und Hook Functions.
 - Backend Prompt Policy ist aktiv: Z-Image bekommt fuer Morning Reset positive-only Prompts; LTX bekommt positive Prosa plus kurze Avoid-Liste.

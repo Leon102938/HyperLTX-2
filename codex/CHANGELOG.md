@@ -1,5 +1,41 @@
 # CHANGELOG.md
 
+## 2026-05-05 Creative OS CLI Dashboard V1
+- Read-only CLI-Kommandozentrale gebaut: `agent_core/creative_os/run_inspector.py`, `dashboard.py` und `scripts/creative_os_status.py`.
+- Views: `overview`, `skills`, `stages`, `artifacts`, `issues`, `next`, `all`.
+- Status wird ausschliesslich aus vorhandenen Creative-OS-Artefakten abgeleitet; API/Director bleiben `? not_checked`, wenn sie nicht real geprueft werden.
+- Beleglauf: `python3 /workspace/scripts/creative_os_status.py --job-id creative-os-jungle-001 --view overview` und `--view all` liefen mit Exit-Code 0.
+- Dashboard erkennt fuer `creative-os-jungle-001`: Stage 01-08 passed, Stage 09 pending, `ready_for_stage_8`, keine blockierenden Issues.
+- Tests: `python3 -m unittest /workspace/tests/test_creative_os_status.py -v` -> 5 Tests OK.
+- Bewusst nicht gebaut: LTX Render, Video, Backend-Aufrufe, Qwen-VL-Aufruf, n8n, API, Batch, Mutationen der Run-Artefakte oder neue Creative-OS-Stages.
+
+## 2026-05-05 Creative OS Stage 7 LTX Motion Prompt Compiler
+- Creative OS Stage 7 gebaut: `agent_core/creative_os/ltx_motion_prompt_compiler.py`, `stage7_runner.py` und `scripts/creative_os_ltx_prompts.py`.
+- Stage 7 nutzt nur passed Keyframes plus Scene Contracts, Keyframe Contracts, Creative Strategy, Z-Image-Prompts und Keyframe Reviews.
+- Realer Lauf: `python3 /workspace/scripts/creative_os_ltx_prompts.py --job-id creative-os-jungle-001`.
+- Ergebnis: 3 LTX-I2V-Motion-Prompts in `ltx_motion_prompts.json`; Audit `ltx_prompt_audit.json` overall `passed`, alle Szenen `passed`, `render_started=false`.
+- Report geschrieben: `creative_os_stage7_report.md`.
+- Tests: `python3 -m unittest /workspace/tests/test_creative_os_ltx_prompts.py -v` -> 2 Tests OK.
+- Bewusst nicht gebaut: LTX Render, Video, Take Review, Final Assembly, n8n, API-Erweiterung, Batch-System, grosse Retry-Loops oder Hauptpipeline-Refactor.
+
+## 2026-05-05 Creative OS Stage 6 Keyframes + QA
+- Creative OS Stage 6 gebaut: `agent_core/creative_os/keyframe_generator.py`, `keyframe_qa.py`, `stage6_runner.py` und `scripts/creative_os_keyframes.py`.
+- Stage 6 liest vorhandene Creative-OS-`zimage_prompts.json`, generiert Keyframes ueber den bestehenden Z-Image-HTTP-Pfad und schreibt Manifest, Generation Log, Review und Stage-6-Report.
+- Realer Lauf: `python3 /workspace/scripts/creative_os_keyframes.py --job-id creative-os-jungle-001 --review-provider heuristic --max-wait-sec 900`.
+- Ergebnis: echte PNGs erzeugt unter `/workspace/agent_runs/creative-os-jungle-001/creative_os/keyframes/scene_01.png`, `scene_02.png`, `scene_03.png`.
+- QA: heuristic file/prompt review; `scene_01=passed`, `scene_02=needs_review` initial, danach Stage 6.1 manual-structured `passed`, `scene_03=passed`.
+- Tests: `python3 -m unittest /workspace/tests/test_creative_os_keyframes.py /workspace/tests/test_creative_os_keyframe_qa.py -v` -> 6 Tests OK.
+- Bewusst nicht gebaut: LTX Motion Prompt Compiler, LTX Render, Video, n8n, API-Erweiterung, Batch-System, grosse Retry-Loops oder Refactor der Hauptpipeline.
+
+## 2026-05-05 Creative OS V1 Dry-Run Layer
+- Isolierten Zusatzpfad `agent_core/creative_os/` gebaut: Schemas, Skill Loader, Intent Router, Creative Strategist, Beat Planner, Creative Judge, Scene Contracts, Keyframe Contracts, Z-Image Prompt Compiler und Runner.
+- Neues Script `scripts/creative_os_dry_run.py` erzeugt aus einem Job bis zu 3 Z-Image-Keyframe-Prompts und stoppt dort.
+- Pflichtartefakte werden unter `/workspace/agent_runs/<job_id>/creative_os/` geschrieben: normalized job, intent route, skill match, strategy, candidates, selected plan, scene contracts, keyframe contracts, zimage prompts, decision log und Markdown-Report.
+- Kleine reale Skillbibliothek angelegt; fehlender `modes/jungle_adventure` crasht nicht, sondern nutzt `fallback/generic_visual_adventure` plus `styles/cinematic_nature`.
+- Beleglauf `creative-os-jungle-001` erzeugte 3 positive, einzelne Keyframe-Prompts ohne Render.
+- Tests: `python3 -m unittest /workspace/tests/test_creative_os_skill_loader.py /workspace/tests/test_creative_os_runner.py /workspace/tests/test_creative_os_prompts.py -v` -> 4 Tests OK.
+- Bewusst nicht gebaut: Bildrender, LTX-Render, Qwen-VL-Zwang, Batch, n8n, API-Erweiterung, Runtime-/llama.cpp-Umbau und Integration in den bestehenden Video-Executor.
+
 ## 2026-05-02 Final Mega Task G3/G4/G5 Architecture + Archive Prep
 - G2 wurde auditiert: Skills, Loader, `simple_video_v1`, `clean_shortform_v1`, Skill Trace, Prompt Policies und CLI Safety Flags sind vorhanden und getestet.
 - G3 umgesetzt: `agent_core/creative_system/contracts.py` erzeugt Stage Role Contracts fuer `CreativeStrategy`, `BeatPlan`, `VisualDirection`, `ModelPromptPlan` und `ReviewPlan`.
@@ -877,6 +913,15 @@
   - Window-/Coffee-/Breathing-Payoff
 - neuer Test in `tests/test_planner_rules.py` verifiziert, dass textnahe Schreib-/Papiermotive fuer dieses Format nicht mehr im Planner landen
 - Tests gruen:
+# 2026-05-05 Creative OS CLI Cockpit V1.6
+
+- Rich Cockpit Grid fuer `scripts/creative_os_status.py --style rich` finalisiert.
+- Layout: kompakter Header, linke Sidebar mit System Status und Pipeline Map, dominante Active Workspace Flaeche, Scene Jobs und Bottom Grid.
+- `--style plain` bleibt Default und stabil.
+- Snapshots erzeugt unter `/workspace/cli_cockpit_snapshots/`.
+- Tests: `python3 -m unittest /workspace/tests/test_creative_os_status.py -v` -> 12 Tests OK.
+- Kein Stage 8, kein Render, kein LTX, kein Video, kein Backend-Aufruf, kein n8n, keine API, kein Textual.
+
   - `python3 -m unittest /workspace/tests/test_planner_rules.py /workspace/tests/test_output_quality_utils.py /workspace/tests/test_assembler_mux.py`
 - realer E2E-Run:
   - `demo-social-morning-005`
