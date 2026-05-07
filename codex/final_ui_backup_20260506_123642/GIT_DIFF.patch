@@ -1,0 +1,1322 @@
+# git diff --binary tracked changes
+diff --git a/agent_core/creative_os/dashboard.py b/agent_core/creative_os/dashboard.py
+index 033009a..a0785ea 100644
+--- a/agent_core/creative_os/dashboard.py
++++ b/agent_core/creative_os/dashboard.py
+@@ -11,9 +11,32 @@ BOX_WIDTH = 62
+ RULE = "─" * BOX_WIDTH
+ 
+ 
++COCKPIT_THEME = {
++    "background": "#020617",
++    "panel_bg": "#020817",
++    "border_primary": "#38BDF8",
++    "border_secondary": "#1E3A5F",
++    "title": "bold #67E8F9",
++    "label": "#67E8F9",
++    "value": "#E5E7EB",
++    "muted": "#64748B",
++    "ok": "#22C55E",
++    "warn": "#FBBF24",
++    "error": "#EF4444",
++    "pending": "#67E8F9",
++    "active": "bold #FBBF24",
++    "next": "bold #67E8F9",
++    "disabled": "#64748B",
++}
++
++
++def _t(name: str) -> str:
++    return COCKPIT_THEME[name]
++
++
+ def render_dashboard(inspection: RunInspection, *, view: str = "overview", focus: str = "none") -> str:
+     if not inspection.exists:
+-        return f"Creative OS run not found: {inspection.job_id}\nPath: {inspection.run_dir}\n"
++        return _missing_run_message(inspection)
+     if view == "all":
+         return "\n\n".join(
+             _view_block(name.upper(), render_dashboard(inspection, view=name, focus=focus))
+@@ -35,7 +58,6 @@ def render_dashboard(inspection: RunInspection, *, view: str = "overview", focus
+ def render_rich_dashboard(inspection: RunInspection, *, view: str = "overview", focus: str = "none") -> str:
+     try:
+         from rich import box
+-        from rich.columns import Columns
+         from rich.console import Console, Group
+         from rich.panel import Panel
+         from rich.table import Table
+@@ -48,44 +70,96 @@ def render_rich_dashboard(inspection: RunInspection, *, view: str = "overview",
+     if not inspection.exists:
+         return render_dashboard(inspection, view=view, focus=focus)
+ 
+-    console_width = min(132, max(92, shutil.get_terminal_size((118, 24)).columns))
+-    console = Console(record=True, width=console_width, color_system="standard", file=StringIO())
+-    inspector = CreativeOSRunInspector()
++    console_width = min(142, max(88, shutil.get_terminal_size((122, 24)).columns))
++    console = Console(record=True, width=console_width, color_system="truecolor", file=StringIO())
+     meta = _job_meta(inspection)
+-
+-    header = Table.grid(expand=True)
+-    header.add_column(ratio=3)
+-    header.add_column(ratio=1)
+-    header.add_row(Text("CONTENT MASCHINE LIVE", style="bold cyan"))
+-    header.add_row(f"Job        {inspection.job_id}", "Session  artifact read")
+-    header.add_row("Pipeline   shortform_storyboard_v1", "Checks   no live checks")
+-    header.add_row(Text(f"Mode       {meta['mode']} · {meta['topic']}", style="cyan"), "Render   paused")
+-    header.add_row(f"Format     {meta['orientation']} · {meta['resolution']} · {meta['duration']}s · {meta['scene_count']} scenes", "")
+-    header.add_row(Text(f"Status     {inspection.status}", style=_status_style(inspection.status)), "")
+-    header.add_row(Text(f"Focus      {_operator_focus(focus)}", style="cyan"), "")
++    header = _rich_header(inspection, focus, meta)
+ 
+     if view == "all":
+-        console.print(Panel(header, box=box.ROUNDED, border_style="cyan"))
++        console.print(_cockpit_panel(header, box=box.ROUNDED, border_style=_t("border_primary"), padding=(0, 2)))
+         console.print(_rich_overview_group(inspection, focus, width=console_width))
+         for title, body in (
+-            ("SKILLS", _skills(inspection)),
+-            ("STAGES", _stages(inspection)),
+-            ("ARTIFACTS", _artifacts(inspection)),
+-            ("ISSUES", _issues(inspection)),
+-            ("NEXT", _next(inspection, focus)),
++            ("SKILLS DETAIL", _skills(inspection)),
++            ("STAGES DETAIL", _stages(inspection)),
++            ("ARTIFACTS DETAIL", _artifacts(inspection)),
++            ("ISSUES DETAIL", _issues(inspection)),
++            ("NEXT DETAIL", _next(inspection, focus)),
+         ):
+-            console.print(Panel(body.strip(), title=title, box=box.ROUNDED, border_style="blue"))
++            console.rule(Text(title, style=_t("title")), style=_t("border_secondary"))
++            console.print(_cockpit_panel(body.strip(), box=box.ROUNDED, border_style=_t("border_secondary")))
+         return console.export_text()
+ 
+     if view != "overview":
+-        console.print(Panel(render_dashboard(inspection, view=view, focus=focus).strip(), title=view.upper(), box=box.ROUNDED))
++        console.print(_cockpit_panel(render_dashboard(inspection, view=view, focus=focus).strip(), title=view.upper(), box=box.ROUNDED, border_style=_t("border_secondary")))
+         return console.export_text()
+ 
+-    console.print(Panel(header, box=box.ROUNDED, border_style="cyan"))
++    console.print(_cockpit_panel(header, box=box.ROUNDED, border_style=_t("border_primary"), padding=(0, 2)))
+     console.print(_rich_overview_group(inspection, focus, width=console_width))
+     return console.export_text()
+ 
+ 
++def _missing_run_message(inspection: RunInspection) -> str:
++    return (
++        "Run not found:\n"
++        f"  job_id: {inspection.job_id}\n"
++        f"  searched: {inspection.run_dir}\n"
++        "\n"
++        "This is not a system error.\n"
++        "agent_runs contains disposable run artifacts only.\n"
++        "Use --runs-root for fixtures or create a real run first.\n"
++    )
++
++
++def _technical_flow() -> Any:
++    from rich.console import Group
++    from rich.text import Text
++
++    title = Text("TECHNICAL FLOW", style=_t("title"))
++    flow = Text()
++    for index, label in enumerate(
++        (
++            ("Director", _t("muted")),
++            ("Creative OS", _t("muted")),
++            ("Z-Image", _t("ok")),
++            ("Keyframes", _t("ok")),
++            ("QA", _t("ok")),
++            ("LTX Motion", _t("ok")),
++            ("LTX I2V Takes", _t("active")),
++        )
++    ):
++        if index:
++            flow.append("  →  ", style=_t("muted"))
++        flow.append(label[0], style=label[1])
++    return Group(title, flow)
++
++
++def _cockpit_panel(*args: Any, **kwargs: Any) -> Any:
++    from rich.panel import Panel
++
++    kwargs.setdefault("style", f"{_t('value')} on {_t('panel_bg')}")
++    kwargs.setdefault("padding", (0, 1))
++    return Panel(*args, **kwargs)
++
++
++def _rich_header(inspection: RunInspection, focus: str, meta: dict[str, Any]) -> Any:
++    from rich.console import Group
++    from rich.table import Table
++    from rich.text import Text
++
++    header = Table.grid(expand=True, padding=(0, 2))
++    header.add_column(width=11)
++    header.add_column(ratio=5)
++    header.add_column(width=11)
++    header.add_column(ratio=4)
++    header.add_row(Text("Job", style=_t("label")), Text(inspection.job_id, style=_t("value")), Text("Pipeline", style=_t("label")), Text("shortform_storyboard_v1", style=_t("value")))
++    header.add_row(Text("Mode", style=_t("label")), Text(_shorten(f"{meta['mode']} · {meta['topic']}", 58), style=_t("value")), "", "")
++    header.add_row(Text("Format", style=_t("label")), Text(f"{meta['orientation']} · {meta['resolution']} · {meta['duration']}s · {meta['scene_count']} scenes", style=_t("value")), "", "")
++    header.add_row(Text("Status", style=_t("label")), Text(inspection.status, style=_status_style(inspection.status)), Text("Focus", style=_t("label")), Text(_operator_focus_short(focus), style=_t("next")))
++    header.add_row(Text("Session", style=_t("label")), Text(_session_label(inspection), style=_t("warn") if _is_fixture_run(inspection) else _t("value")), Text("Checks", style=_t("label")), Text("no live checks", style=_t("muted")))
++    header.add_row(Text("Render", style=_t("label")), Text("paused" if _render_paused(focus) == "yes" else "not_paused", style=_t("warn")), Text("Style", style=_t("label")), Text("rich cockpit", style=_t("value")))
++    return Group(Text("CONTENT MASCHINE LIVE", style="bold #67E8F9"), header)
++
++
+ def _rich_overview_group(inspection: RunInspection, focus: str, width: int) -> Any:
+     from rich import box
+     from rich.columns import Columns
+@@ -99,47 +173,49 @@ def _rich_overview_group(inspection: RunInspection, focus: str, width: int) -> A
+     next_action = inspector.next_action(inspection)
+ 
+     system = Table.grid(padding=(0, 1), expand=True)
+-    system.add_column(justify="left")
+-    system.add_column()
+-    system.add_row(Text("API", style="cyan"), Text("? not_checked", style="dim"))
+-    system.add_row(Text("Director", style="cyan"), Text("? not_checked", style="dim"))
+-    system.add_row("Image Backend", Text("✓ zimage_http", style="green") if inspection.artifacts.get("keyframe_manifest.json") else Text("? not_checked", style="dim"))
+-    system.add_row(Text("Video Backend", style="cyan"), Text("? planned ltx2", style="dim cyan"))
+-    system.add_row(Text("Vision Review", style="cyan"), Text("- manual_structured", style="yellow") if "stage6_review_decision" in inspection.data else Text("- heuristic", style="yellow"))
+-    system.add_row(Text("Voice", style="cyan"), Text("- disabled", style="dim"))
+-    system.add_row(Text("Music", style="cyan"), Text("- disabled", style="dim"))
+-    system.add_row(Text("Subtitles", style="cyan"), Text("- off", style="dim"))
++    system.add_column(justify="left", ratio=2)
++    system.add_column(ratio=2)
++    system.add_row(Text("API", style=_t("label")), Text("? not_checked", style=_t("muted")))
++    system.add_row(Text("Director", style=_t("label")), Text("? not_checked", style=_t("muted")))
++    system.add_row(Text("Image Backend", style=_t("label")), Text("✓ zimage_http", style=_t("ok")) if inspection.artifacts.get("keyframe_manifest.json") else Text("? not_checked", style=_t("muted")))
++    system.add_row(Text("Video Backend", style=_t("label")), Text("? planned ltx2", style=_t("muted")))
++    system.add_row(Text("Vision Review", style=_t("label")), Text("- manual_structured", style=_t("warn")) if "stage6_review_decision" in inspection.data else Text("- heuristic", style=_t("warn")))
++    system.add_row(Text("Voice", style=_t("label")), Text("- disabled", style=_t("disabled")))
++    system.add_row(Text("Music", style=_t("label")), Text("- disabled", style=_t("disabled")))
++    system.add_row(Text("Subtitles", style=_t("label")), Text("- off", style=_t("disabled")))
+ 
+     pipeline = Table.grid(expand=True)
+     for stage in inspection.stages:
+-        pipeline.add_row(Text(f"{_mark(stage.status)} {stage.index} {stage.name}", style=_stage_style(stage.status)))
++        label = f"{_stage_timeline_mark(stage.status)} {stage.index} {stage.name}"
++        pipeline.add_row(Text(label, style=_stage_style(stage.status, stage.index)))
+ 
+     workspace = Table.grid(padding=(0, 1), expand=True)
+-    workspace.add_column("label")
+-    workspace.add_column("value")
+-    workspace.add_row(Text("Current Step", style="cyan"), Text("LTX Motion Ready", style="bold cyan"))
+-    workspace.add_row(Text("Last passed", style="cyan"), Text("✓ 08 LTX motion prompts", style="green"))
+-    workspace.add_row(Text("Next technical", style="cyan"), Text("○ 09 LTX I2V takes", style="cyan"))
+-    workspace.add_row("Operator focus", _operator_focus(focus))
+-    workspace.add_row("Render paused", Text(_render_paused(focus), style="yellow"))
++    workspace.add_column(ratio=1)
++    workspace.add_column(ratio=3)
++    workspace.add_row(Text("Current Step", style=_t("label")), Text("LTX Motion Ready", style=_t("next")))
++    workspace.add_row(Text("Last passed", style=_t("label")), Text(f"✓ {inspector.last_passed_stage(inspection)}", style=_t("ok")))
++    workspace.add_row(Text("Next technical", style=_t("label")), Text("○ 09 LTX I2V takes", style=_t("active")))
++    workspace.add_row(Text("Operator focus", style=_t("label")), Text(_operator_focus_short(focus), style=_t("value")))
++    workspace.add_row(Text("Render paused", style=_t("label")), Text(_render_paused(focus), style=_t("warn")))
+     stage_output = Text()
+-    stage_output.append("✓ 3 motion prompts passed\n", style="green")
+-    stage_output.append("✓ 3 keyframes passed\n", style="green")
+-    stage_output.append("○ video takes not built", style="cyan")
++    stage_output.append("  ✓ 3 motion prompts passed\n", style=_t("ok"))
++    stage_output.append("  ✓ 3 keyframes passed\n", style=_t("ok"))
++    stage_output.append("  ○ video takes not built", style=_t("muted"))
+ 
+-    scene_blocks: list[Any] = [Text("SCENE JOBS", style="bold cyan"), Text("─" * 46, style="dim")]
++    scene_blocks: list[Any] = [Text("SCENE JOBS", style=_t("title"))]
+     for item in _motion_items(inspection):
+-        scene = Text()
+-        scene.append(f"[✓] {item['scene_id']}  READY FOR LTX\n", style="bold green")
+-        scene.append("    keyframe   ", style="dim")
+-        scene.append(f"{_basename(item['keyframe'])}\n", style="white")
+-        scene.append("    motion     ", style="dim")
+-        scene.append(item["summary"], style="cyan")
++        scene = Table.grid(expand=True, padding=(0, 1))
++        scene.add_column(width=12)
++        scene.add_column(ratio=1)
++        scene.add_row(Text("Scene", style=_t("muted")), Text(f"[✓] {item['scene_id']}  READY FOR LTX", style=f"bold {_t('ok')}"))
++        scene.add_row(Text("keyframe", style=_t("muted")), Text(_basename(item["keyframe"]), style=_t("value")))
++        scene.add_row(Text("motion", style=_t("muted")), Text(item["summary"], style=_t("value")))
++        scene.add_row(Text("status", style=_t("muted")), Text("waiting for Stage 09 render gate", style=_t("warn")))
+         scene_blocks.append(
+-            Panel(
++            _cockpit_panel(
+                 scene,
+-                box=box.SIMPLE,
+-                border_style="green",
++                box=box.ROUNDED,
++                border_style=_t("border_secondary"),
+                 padding=(0, 1),
+             )
+         )
+@@ -147,18 +223,18 @@ def _rich_overview_group(inspection: RunInspection, focus: str, width: int) -> A
+     workspace_group = Group(
+         workspace,
+         Text(""),
+-        Text("Stage output:", style="bold cyan"),
++        Text("Stage output:", style=_t("title")),
+         stage_output,
+         Text(""),
+         *scene_blocks,
++        Text(""),
++        _technical_flow(),
+     )
+ 
+-    skill = Text(
+-        f"{health['mark']} {health['status']}\n"
+-        f"loaded {len(health['loaded'])} · fallbacks {len(health['fallbacks'])}\n"
+-        f"missing opt {len(health['missing_optional'])} · blocking {len(health['blocking_missing'])}",
+-        style="green" if health["status"] == "ok" else "yellow",
+-    )
++    skill = Text()
++    skill.append(f"{health['mark']} {health['status']}\n", style=_t("ok") if health["status"] == "ok" else _t("warn"))
++    skill.append(f"loaded {len(health['loaded'])} · fallbacks {len(health['fallbacks'])}\n", style=_t("value"))
++    skill.append(f"missing optional {len(health['missing_optional'])} · blocking {len(health['blocking_missing'])}", style=_t("value"))
+     artifacts = Table.grid()
+     keyframe_count = sum(1 for scene_id in ("scene_01", "scene_02", "scene_03") if inspection.artifacts.get(f"keyframes/{scene_id}.png"))
+     for line in (
+@@ -168,31 +244,36 @@ def _rich_overview_group(inspection: RunInspection, focus: str, width: int) -> A
+         f"{_artifact_mark(inspection, 'ltx_prompt_audit.json')} ltx_prompt_audit.json",
+         f"{_artifact_mark(inspection, 'ltx_video_takes_manifest.json')} video_takes_manifest",
+     ):
+-        artifacts.add_row(line)
+-    issues = Text(_issue_text(inspection), style="green" if not inspection.blocking_issues else "red")
+-    next_panel = Text("Tech: Stage 09\nOp: CLI focus" if focus == "cli" else f"Tech: {next_action}\nOp: {_operator_focus(focus)}", style="cyan")
++        artifacts.add_row(Text(line, style=_artifact_line_style(line)))
++    issues = Text(_issue_text(inspection), style=_t("ok") if not inspection.blocking_issues else _t("error"))
++    next_panel = Table.grid(expand=True, padding=(0, 1))
++    next_panel.add_column(width=10)
++    next_panel.add_column(ratio=1)
++    next_panel.add_row(Text("Technical", style=_t("label")), Text("Stage 09: LTX I2V takes", style=_t("active")))
++    next_panel.add_row(Text("Operator", style=_t("label")), Text("Improve CLI cockpit", style=_t("next")))
+ 
+     sidebar = Group(
+-        Panel(system, title="SYSTEM STATUS", box=box.ROUNDED, border_style="blue"),
+-        Panel(pipeline, title="PIPELINE MAP", box=box.ROUNDED, border_style="blue"),
++        _cockpit_panel(system, title=Text("SYSTEM STATUS", style=_t("title")), box=box.ROUNDED, border_style=_t("border_primary"), padding=(1, 1)),
++        Text(""),
++        _cockpit_panel(pipeline, title=Text("PIPELINE MAP", style=_t("title")), box=box.ROUNDED, border_style=_t("border_secondary"), padding=(1, 1)),
+     )
+-    workspace_panel = Panel(workspace_group, title="ACTIVE WORKSPACE", box=box.ROUNDED, border_style="cyan", padding=(1, 2))
++    workspace_panel = _cockpit_panel(workspace_group, title=Text("ACTIVE WORKSPACE", style=_t("title")), box=box.ROUNDED, border_style=_t("border_primary"), padding=(1, 2))
+     if width >= 110:
+-        main_grid = Table.grid(expand=True, padding=(0, 1))
+-        main_grid.add_column(ratio=1)
+-        main_grid.add_column(ratio=2)
++        main_grid = Table.grid(expand=True, padding=(0, 2))
++        main_grid.add_column(ratio=36)
++        main_grid.add_column(ratio=64)
+         main_grid.add_row(sidebar, workspace_panel)
+     else:
+         main_grid = Group(sidebar, workspace_panel)
+ 
+     bottom_panels = [
+-        Panel(skill, title="SKILL HEALTH", box=box.ROUNDED, border_style="green"),
+-        Panel(artifacts, title="ARTIFACTS", box=box.ROUNDED, border_style="blue"),
+-        Panel(issues, title="ISSUES", box=box.ROUNDED, border_style="green" if not inspection.blocking_issues else "red"),
+-        Panel(next_panel, title="NEXT", box=box.ROUNDED, border_style="cyan"),
++        _cockpit_panel(skill, title=Text("SKILL HEALTH", style=_t("title")), box=box.ROUNDED, border_style=_t("border_secondary")),
++        _cockpit_panel(artifacts, title=Text("ARTIFACTS", style=_t("title")), box=box.ROUNDED, border_style=_t("border_secondary")),
++        _cockpit_panel(issues, title=Text("ISSUES", style=_t("title")), box=box.ROUNDED, border_style=_t("ok") if not inspection.blocking_issues else _t("error")),
++        _cockpit_panel(next_panel, title=Text("NEXT", style=_t("title")), box=box.ROUNDED, border_style=_t("border_primary")),
+     ]
+-    bottom_grid = Table.grid(expand=True, padding=(0, 1))
+-    if width >= 118:
++    bottom_grid = Table.grid(expand=True, padding=(0, 2))
++    if width >= 150:
+         for _ in range(4):
+             bottom_grid.add_column(ratio=1)
+         bottom_grid.add_row(*bottom_panels)
+@@ -202,7 +283,7 @@ def _rich_overview_group(inspection: RunInspection, focus: str, width: int) -> A
+         bottom_grid.add_row(bottom_panels[0], bottom_panels[1])
+         bottom_grid.add_row(bottom_panels[2], bottom_panels[3])
+ 
+-    return Group(main_grid, bottom_grid)
++    return Group(main_grid, Text(""), bottom_grid)
+ 
+ 
+ def _overview(inspection: RunInspection, focus: str) -> str:
+@@ -358,10 +439,30 @@ def _mark(status: str) -> str:
+     return "○"
+ 
+ 
++def _stage_timeline_mark(status: str) -> str:
++    if status == "passed":
++        return "✓"
++    if status in {"pending", "missing"}:
++        return "○"
++    if status in {"needs_review", "unknown"}:
++        return "?"
++    if status == "rejected":
++        return "!"
++    return "○"
++
++
+ def _artifact_mark(inspection: RunInspection, name: str) -> str:
+     return "✓" if inspection.artifacts.get(name) else "○"
+ 
+ 
++def _artifact_line_style(line: str) -> str:
++    if line.startswith("✓"):
++        return _t("ok")
++    if line.startswith("!"):
++        return _t("error")
++    return _t("muted")
++
++
+ def _issue_text(inspection: RunInspection) -> str:
+     return "none blocking" if not inspection.blocking_issues else "; ".join(inspection.blocking_issues)
+ 
+@@ -375,6 +476,23 @@ def _operator_focus(focus: str) -> str:
+     }.get(focus, "none")
+ 
+ 
++def _operator_focus_short(focus: str) -> str:
++    return {
++        "cli": "CLI cockpit refinement",
++        "render": "Prepare controlled render gate",
++        "audit": "Artifact audit before rendering",
++        "none": "none",
++    }.get(focus, "none")
++
++
++def _is_fixture_run(inspection: RunInspection) -> bool:
++    return "tests/fixtures/creative_os_runs" in str(inspection.run_dir)
++
++
++def _session_label(inspection: RunInspection) -> str:
++    return "fixture/demo" if _is_fixture_run(inspection) else "artifact read"
++
++
+ def _render_paused(focus: str) -> str:
+     return "no" if focus == "render" else "yes"
+ 
+@@ -450,7 +568,7 @@ def _motion_items(inspection: RunInspection) -> list[dict[str, str]]:
+         keyframe = str(prompt.get("source_keyframe_path") or "")
+         keyframe_display = keyframe.replace(str(inspection.run_dir) + "/", "") if keyframe else "missing"
+         summary = str(prompt.get("camera_motion") or prompt.get("motion_prompt") or "motion prompt present")
+-        items.append({"scene_id": scene_id, "keyframe": keyframe_display, "summary": _shorten(summary, 48)})
++        items.append({"scene_id": scene_id, "keyframe": keyframe_display, "summary": _shorten(summary, 65)})
+     return items
+ 
+ 
+@@ -467,25 +585,27 @@ def _basename(path: str) -> str:
+ 
+ def _status_style(status: str) -> str:
+     if status == "ready_for_ltx_i2v_takes":
+-        return "bold cyan"
++        return _t("next")
+     if status in {"blocked_by_keyframe_review", "blocked_by_ltx_prompt_audit", "blocked"}:
+-        return "bold red"
++        return f"bold {_t('error')}"
+     if status == "completed":
+-        return "bold green"
++        return f"bold {_t('ok')}"
+     if status == "in_progress":
+-        return "yellow"
+-    return "dim"
++        return _t("warn")
++    return _t("muted")
+ 
+ 
+-def _stage_style(status: str) -> str:
++def _stage_style(status: str, index: str | None = None) -> str:
++    if index == "09" and status == "pending":
++        return _t("active")
+     if status == "passed":
+-        return "green"
++        return _t("ok")
+     if status == "pending":
+-        return "cyan"
++        return _t("pending")
+     if status == "needs_review":
+-        return "yellow"
++        return _t("warn")
+     if status == "rejected":
+-        return "red"
++        return _t("error")
+     if status in {"missing", "unknown"}:
+-        return "dim"
+-    return "white"
++        return _t("muted")
++    return _t("value")
+diff --git a/codex/CHANGELOG.md b/codex/CHANGELOG.md
+index 1c98cca..fe658a3 100644
+--- a/codex/CHANGELOG.md
++++ b/codex/CHANGELOG.md
+@@ -1,5 +1,31 @@
+ # CHANGELOG.md
+ 
++## 2026-05-06 Creative OS Textual Cockpit V0.1
++- Neuer Textual-TUI-Prototyp gebaut: `agent_core/creative_os/textual_cockpit.py` und Entry `scripts/creative_os_cockpit.py`.
++- Startbefehl: `python3 /workspace/scripts/creative_os_cockpit.py --job-id creative-os-jungle-001 --runs-root /workspace/tests/fixtures/creative_os_runs`.
++- Layout: Fullscreen-Cockpit mit Header, linker Sidebar fuer System/Pipeline, grossem Active Workspace, Scene Cards, Bottom-Kacheln und Footer-Keybinds `q`, `r`, `h`.
++- Datenquelle bleibt der vorhandene `CreativeOSRunInspector`; Refresh liest nur neu ein und schreibt keine Run-Artefakte.
++- `textual>=0.89,<1.0` ist in `requirements.txt` dokumentiert; das Script meldet fehlendes Textual mit Installationshinweis.
++- `/workspace/agent_runs` bleibt fluechtig und wurde nicht als Design-/Testquelle verwendet oder mutiert.
++- Nicht gebaut/gestartet: Stage 8, Render, LTX, Video, API, n8n, Backend-Aufrufe oder neue Creative-OS-Stages.
++
++## 2026-05-06 Creative OS Rich Cockpit V1.7
++- Rich-Cockpit-Design-Pass V1.7 umgesetzt: Theme-System weiter zentralisiert, Header kompakter gemacht, Fixture/Demo-Session im Banner sichtbar, Stage 09 als naechster Schritt staerker akzentuiert und Active Workspace um einen kompakten technischen Flow-Streifen ergaenzt.
++- Alle UI-Checks und Snapshots laufen explizit mit `--runs-root /workspace/tests/fixtures/creative_os_runs`; `/workspace/agent_runs` bleibt fluechtig und wird nicht als Design-/Testquelle genutzt.
++- `--style plain` bleibt stabil; `--view all --style rich` zeigt zuerst das Cockpit-Overview und danach getrennte Detailbereiche.
++- Snapshots aktualisiert unter `/workspace/cli_cockpit_snapshots/`.
++- Nicht gebaut/gestartet: Stage 8, Render, LTX, Video, API, n8n, Textual, Backend-Livechecks oder neue Creative-OS-Stages.
++
++## 2026-05-06 Creative OS CLI Cockpit Design-Pass
++- Rich-Overview des read-only Creative-OS-Status-Dashboards als Operator-Cockpit ueberarbeitet: zentrales Theme, kompaktes Status-Banner, Sidebar/Workspace-Hauptgrid, Scene-Job-Karten und sauberes Bottom-Grid.
++- `--style plain` bleibt stabil; `--style rich` ist der neue Cockpit-Modus. `--view all --style rich` zeigt zuerst das Overview und danach getrennte Detailbereiche.
++- Run-Root-Abhaengigkeit geklaert: `/workspace/agent_runs` ist nur der Default-Ort fuer fluechtige echte Run-Artefakte, keine Systemquelle, kein Config-Ort, kein Skill-Ort und keine Pflichtabhaengigkeit.
++- `scripts/creative_os_status.py` akzeptiert `--runs-root`; Design-/Testdaten liegen stabil unter `/workspace/tests/fixtures/creative_os_runs`.
++- Fehlende Runs melden jetzt explizit, dass dies kein Systemfehler ist und dass nach Pod-Reset echte Runs neu erzeugt oder per `--runs-root` Fixtures gelesen werden muessen.
++- Keine Stage 8, kein Render, kein LTX-Lauf, kein Video, keine API-, n8n-, Backend- oder Textual-Integration gebaut.
++- Snapshots erzeugt unter `/workspace/cli_cockpit_snapshots/` gegen die isolierte CLI-Fixture, weil der echte Run-Ordner `/workspace/agent_runs/creative-os-jungle-001/creative_os` im aktuellen Workspace fehlt.
++- Tests: `python3 -m unittest /workspace/tests/test_creative_os_status.py -v` -> 13 Tests OK.
++
+ ## 2026-05-05 Creative OS CLI Dashboard V1
+ - Read-only CLI-Kommandozentrale gebaut: `agent_core/creative_os/run_inspector.py`, `dashboard.py` und `scripts/creative_os_status.py`.
+ - Views: `overview`, `skills`, `stages`, `artifacts`, `issues`, `next`, `all`.
+diff --git a/codex/HANDOFF.md b/codex/HANDOFF.md
+index 89e2877..e61d527 100644
+--- a/codex/HANDOFF.md
++++ b/codex/HANDOFF.md
+@@ -1,5 +1,30 @@
+ # HANDOFF.md
+ 
++## 2026-05-06 Creative OS Textual Cockpit V0.1
++- Textual-TUI-Prototyp ist gebaut: `scripts/creative_os_cockpit.py`.
++- Startbefehl: `python3 /workspace/scripts/creative_os_cockpit.py --job-id creative-os-jungle-001 --runs-root /workspace/tests/fixtures/creative_os_runs`.
++- Bedienung: `q` beendet, `r` liest Fixture-Daten neu ein, `h` blendet Hilfe/Keybinds ein.
++- Die App nutzt `CreativeOSRunInspector` und schreibt keine Artefakte. `/workspace/agent_runs` bleibt fluechtig und unberuehrt.
++- Status-CLI bleibt erhalten: `scripts/creative_os_status.py` plain/rich wurde nicht ersetzt.
++- Falls Textual in einer frischen Umgebung fehlt: `python3 -m pip install 'textual>=0.89,<1.0'` oder Requirements installieren.
++- Nicht gebaut/gestartet: Stage 8, Render, LTX, Video, API, n8n, Backend-Aufrufe oder neue Creative-OS-Stages.
++
++## 2026-05-06 Creative OS Rich Cockpit V1.7
++- Rich-Cockpit V1.7 ist umgesetzt in `agent_core/creative_os/dashboard.py`.
++- Fuer Design, Tests und Snapshots immer explizit nutzen: `--runs-root /workspace/tests/fixtures/creative_os_runs`.
++- Header zeigt bei Fixture-Root `Session fixture/demo`; dadurch entsteht kein falscher Eindruck eines echten `/workspace/agent_runs`-Runs.
++- Snapshots liegen unter `/workspace/cli_cockpit_snapshots/`; `/workspace/agent_runs` wurde nicht als Quelle verwendet und nicht mutiert.
++- Nicht gebaut/gestartet: Stage 8, Render, LTX, Video, API, n8n, Textual, Backend-Livechecks.
++
++## 2026-05-06 Creative OS CLI Cockpit
++- Rich-Cockpit-Design-Pass ist umgesetzt in `agent_core/creative_os/dashboard.py`; `scripts/creative_os_status.py` bleibt der Entry.
++- `scripts/creative_os_status.py` unterstuetzt `--runs-root`; `/workspace/agent_runs` ist nur Default fuer fluechtige echte Run-Artefakte, keine Systemquelle, kein Config-Ort, kein Skill-Ort und keine Pflichtabhaengigkeit.
++- Tests gruen: `python3 -m unittest /workspace/tests/test_creative_os_status.py -v`.
++- Snapshots: `/workspace/cli_cockpit_snapshots/overview_rich_cli.txt`, `/workspace/cli_cockpit_snapshots/all_rich_cli.txt`, `/workspace/cli_cockpit_snapshots/overview_plain_cli.txt`.
++- Wichtiger Zustand: Der echte Run-Ordner `/workspace/agent_runs/creative-os-jungle-001/creative_os` kann nach Pod-Reset fehlen. Snapshots/Tests nutzen deshalb die stabile isolierte Fixture `/workspace/tests/fixtures/creative_os_runs`; echte Runs muessen bei leerem `agent_runs` neu erzeugt werden.
++- Fehlende Runs sind kein Systemfehler; das CLI meldet den gesuchten Pfad und verweist auf `--runs-root` oder das Erzeugen eines echten Runs.
++- Nicht gebaut/gestartet: Stage 8, Render, LTX, Video, API, n8n, Textual, Backend-Livechecks.
++
+ ## Stand 2026-05-05 Creative OS CLI Cockpit V1.6 Abschluss
+ - Read-only CLI Cockpit ist auf V1.6 finalisiert: `scripts/creative_os_status.py --style rich` zeigt ein Rich-Grid mit Header, linker Sidebar, Active Workspace, Scene Jobs und Bottom Panels.
+ - `--style plain` bleibt stabil; `--style rich` faellt bei fehlendem Rich sauber auf plain zurueck.
+diff --git a/codex/PROJECT_STATE.md b/codex/PROJECT_STATE.md
+index c4ea86b..2e8031c 100644
+--- a/codex/PROJECT_STATE.md
++++ b/codex/PROJECT_STATE.md
+@@ -6,6 +6,21 @@ Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E, 3A, 3B, 4A, 4B und
+ - Kanonische Capability-Uebersicht: `/workspace/codex/CAPABILITY_MAP.md`
+ 
+ ## Verifizierte Fakten
++- 2026-05-06 Creative OS Textual Cockpit V0.1 ist als separater TUI-Prototyp gebaut.
++- Neuer Entry: `scripts/creative_os_cockpit.py`; Start mit `--job-id creative-os-jungle-001 --runs-root /workspace/tests/fixtures/creative_os_runs`.
++- Die Textual-App nutzt den bestehenden `CreativeOSRunInspector`, zeigt Fixture/Demo-Session, no live checks und render paused, und bietet nur sichere Keybinds: `q` Quit, `r` Refresh/read-only reload, `h` Help.
++- `creative_os_status.py` plain/rich bleibt erhalten; keine Pipeline-Logik wurde geaendert.
++- `/workspace/agent_runs` bleibt fluechtig und wurde fuer V0.1 nicht als UI-/Testquelle benutzt oder mutiert.
++- Nicht gebaut/gestartet: Stage 8, Render, LTX, Video, API, n8n, Backend-Aufruf, Textual-Render-Aktion oder neue Creative-OS-Stages.
++- 2026-05-06 Creative OS Rich Cockpit V1.7 ist umgesetzt: Rich-Header ist kompakter, zeigt `fixture/demo` bei Fixture-Root, Active Workspace hat Scene-Karten plus technischen Flow-Streifen, und Stage 09 ist im Rich-Timeline-Stil als naechster technischer Schritt hervorgehoben.
++- V1.7 UI-Checks/Snapshots nutzen explizit `--runs-root /workspace/tests/fixtures/creative_os_runs`; `/workspace/agent_runs` bleibt fluechtig und wurde nicht veraendert.
++- Kein Stage 8, kein Render, kein LTX-/Video-/API-/n8n-/Backend-/Textual-Schritt und keine neue Creative-OS-Stage wurden gebaut.
++- 2026-05-06 Creative OS CLI Cockpit Design-Pass ist im Rich-Statusdashboard umgesetzt: zentrale Theme-Konstanten, Cockpit-Header, linke Sidebar mit System/Pipeline, dominante Active-Workspace-Flaeche, Scene-Job-Karten und Bottom-Grid fuer Skill Health, Artifacts, Issues und Next.
++- Der Statuspfad bleibt read-only: keine Run-Artefakte wurden veraendert, kein Stage 8, kein Render, kein LTX-/Video-/API-/n8n-/Backend-/Textual-Schritt wurde gestartet oder gebaut.
++- `--style plain` bleibt erhalten; `scripts/creative_os_status.py` kann mit `--runs-root` einen expliziten Run-Artefakt-Root lesen.
++- `/workspace/agent_runs` ist nur Default fuer fluechtige echte Run-Artefakte. Es ist keine Systemquelle, kein Config-Ort, kein Skill-Ort und keine Pflichtabhaengigkeit des CLI-Cockpits.
++- Tests nutzen eine isolierte Fixture unter `/workspace/tests/fixtures/creative_os_runs`, weil `/workspace/agent_runs/creative-os-jungle-001/creative_os` nach Pod-Reset fehlen kann; echte Runs muessen dann neu erzeugt werden.
++- Cockpit-Snapshots liegen unter `/workspace/cli_cockpit_snapshots/`; sie wurden gegen die Fixture erzeugt, nicht gegen echte Run-Artefakte.
+ - 2026-05-05 Creative OS V1 Dry-Run-Schicht ist als isolierter Zusatzpfad unter `agent_core/creative_os/` umgesetzt.
+ - Neuer Entry: `scripts/creative_os_dry_run.py`; er schreibt Artefakte nach `/workspace/agent_runs/<job_id>/creative_os/` und startet keine Bild-, Video-, VLM-, Batch-, n8n- oder Runtime-Backends.
+ - Real funktionierende Stages: Input-Normalisierung, Intent Router, Skill Resolver, Creative Strategist, Beat/Hook Planner, Creative Judge, Scene Contracts, Keyframe Contracts, Z-Image Prompt Compiler und Decision Log/Report.
+diff --git a/init.sh b/init.sh
+old mode 100644
+new mode 100755
+diff --git a/requirements.txt b/requirements.txt
+index 63795c1..202a5fa 100644
+--- a/requirements.txt
++++ b/requirements.txt
+@@ -36,4 +36,5 @@ fastapi
+ uvicorn[standard]
+ pydantic>=2.7,<3
+ jupyterlab
+-ipykernel
+\ No newline at end of file
++ipykernel
++textual>=0.89,<1.0
+diff --git a/scripts/agent_core_cli.py b/scripts/agent_core_cli.py
+old mode 100644
+new mode 100755
+diff --git a/scripts/check_director_llm.py b/scripts/check_director_llm.py
+old mode 100644
+new mode 100755
+diff --git a/scripts/creative_os_status.py b/scripts/creative_os_status.py
+old mode 100644
+new mode 100755
+index 1f704b3..683add5
+--- a/scripts/creative_os_status.py
++++ b/scripts/creative_os_status.py
+@@ -33,8 +33,13 @@ def main() -> int:
+         default="plain",
+         help="Dashboard rendering style. Rich falls back to plain if the package is unavailable.",
+     )
++    parser.add_argument(
++        "--runs-root",
++        default="/workspace/agent_runs",
++        help="Root containing disposable Creative OS run artifacts. Defaults to /workspace/agent_runs.",
++    )
+     args = parser.parse_args()
+-    inspector = CreativeOSRunInspector()
++    inspector = CreativeOSRunInspector(runs_root=args.runs_root)
+     inspection = inspector.inspect(args.job_id)
+     if args.style == "rich":
+         print(render_rich_dashboard(inspection, view=args.view, focus=args.focus), end="")
+diff --git a/scripts/download_director_model.py b/scripts/download_director_model.py
+old mode 100644
+new mode 100755
+diff --git a/scripts/download_qwen3_vl_model.py b/scripts/download_qwen3_vl_model.py
+old mode 100644
+new mode 100755
+diff --git a/scripts/ensure_llama_cpp.sh b/scripts/ensure_llama_cpp.sh
+old mode 100644
+new mode 100755
+diff --git a/scripts/ensure_qwen3_vl_review_runtime.sh b/scripts/ensure_qwen3_vl_review_runtime.sh
+old mode 100644
+new mode 100755
+diff --git a/scripts/qwen3_vl_review_subprocess.py b/scripts/qwen3_vl_review_subprocess.py
+old mode 100644
+new mode 100755
+diff --git a/scripts/serve_director_llm.sh b/scripts/serve_director_llm.sh
+old mode 100644
+new mode 100755
+diff --git a/tests/test_creative_os_status.py b/tests/test_creative_os_status.py
+index 21780c0..83df36f 100644
+--- a/tests/test_creative_os_status.py
++++ b/tests/test_creative_os_status.py
+@@ -12,17 +12,19 @@ from agent_core.creative_os.dashboard import render_dashboard, render_rich_dashb
+ from agent_core.creative_os.run_inspector import CreativeOSRunInspector
+ 
+ 
+-SOURCE_RUN = Path("/workspace/agent_runs/creative-os-jungle-001/creative_os")
++FIXTURE_RUNS_ROOT = Path("/workspace/tests/fixtures/creative_os_runs")
++SOURCE_RUN = FIXTURE_RUNS_ROOT / "creative-os-jungle-001" / "creative_os"
+ 
+ 
+ class CreativeOSStatusTests(unittest.TestCase):
+     def test_inspector_detects_existing_artifacts_and_next_action(self) -> None:
+-        inspection = CreativeOSRunInspector().inspect("creative-os-jungle-001")
++        inspector = CreativeOSRunInspector(runs_root=FIXTURE_RUNS_ROOT)
++        inspection = inspector.inspect("creative-os-jungle-001")
+         self.assertTrue(inspection.exists)
+         self.assertEqual("ready_for_ltx_i2v_takes", inspection.status)
+         self.assertFalse(inspection.blocking_issues)
+         self.assertTrue(inspection.artifacts["ltx_motion_prompts.json"])
+-        self.assertIn("Stage 09", CreativeOSRunInspector().next_action(inspection))
++        self.assertIn("Stage 09", inspector.next_action(inspection))
+ 
+     def test_missing_files_do_not_crash(self) -> None:
+         with tempfile.TemporaryDirectory() as tmp:
+@@ -36,6 +38,16 @@ class CreativeOSStatusTests(unittest.TestCase):
+             self.assertIn("Input normalized", render_dashboard(inspection, view="overview"))
+             self.assertIn("CURRENT POSITION", render_dashboard(inspection, view="overview"))
+ 
++    def test_missing_run_message_explains_disposable_agent_runs(self) -> None:
++        inspection = CreativeOSRunInspector(runs_root="/workspace/agent_runs").inspect("definitely-missing-run")
++        dashboard = render_rich_dashboard(inspection, view="overview")
++        self.assertIn("Run not found:", dashboard)
++        self.assertIn("job_id: definitely-missing-run", dashboard)
++        self.assertIn("searched: /workspace/agent_runs/definitely-missing-run/creative_os", dashboard)
++        self.assertIn("This is not a system error.", dashboard)
++        self.assertIn("agent_runs contains disposable run artifacts only.", dashboard)
++        self.assertIn("Use --runs-root for fixtures or create a real run first.", dashboard)
++
+     def test_needs_review_or_rejected_generates_issue(self) -> None:
+         with tempfile.TemporaryDirectory() as tmp:
+             run_dir = Path(tmp) / "issue-run" / "creative_os"
+@@ -50,8 +62,9 @@ class CreativeOSStatusTests(unittest.TestCase):
+             self.assertIn("visible text", render_dashboard(inspection, view="issues"))
+ 
+     def test_skill_health_separates_optional_and_blocking_missing(self) -> None:
+-        inspection = CreativeOSRunInspector().inspect("creative-os-jungle-001")
+-        health = CreativeOSRunInspector().skill_health(inspection)
++        inspector = CreativeOSRunInspector(runs_root=FIXTURE_RUNS_ROOT)
++        inspection = inspector.inspect("creative-os-jungle-001")
++        health = inspector.skill_health(inspection)
+         self.assertEqual(["modes/jungle_adventure"], health["missing_optional"])
+         self.assertEqual([], health["blocking_missing"])
+         self.assertEqual("ok", health["status"])
+@@ -60,7 +73,7 @@ class CreativeOSStatusTests(unittest.TestCase):
+         self.assertIn("blocking missing:", dashboard)
+ 
+     def test_overview_uses_cockpit_layout(self) -> None:
+-        inspection = CreativeOSRunInspector().inspect("creative-os-jungle-001")
++        inspection = CreativeOSRunInspector(runs_root=FIXTURE_RUNS_ROOT).inspect("creative-os-jungle-001")
+         dashboard = render_dashboard(inspection, view="overview", focus="cli")
+         self.assertIn("╭", dashboard)
+         self.assertIn("│ CONTENT MASCHINE LIVE", dashboard)
+@@ -74,7 +87,7 @@ class CreativeOSStatusTests(unittest.TestCase):
+         self.assertNotIn("keyframes/scene_01.png", dashboard)
+ 
+     def test_all_view_uses_clear_separators(self) -> None:
+-        inspection = CreativeOSRunInspector().inspect("creative-os-jungle-001")
++        inspection = CreativeOSRunInspector(runs_root=FIXTURE_RUNS_ROOT).inspect("creative-os-jungle-001")
+         dashboard = render_dashboard(inspection, view="all", focus="cli")
+         self.assertIn("────────────────", dashboard)
+         self.assertIn("SKILLS\n────────────────", dashboard)
+@@ -103,6 +116,8 @@ class CreativeOSStatusTests(unittest.TestCase):
+                 "cli",
+                 "--style",
+                 "plain",
++                "--runs-root",
++                str(FIXTURE_RUNS_ROOT),
+             ],
+             cwd="/workspace",
+             text=True,
+@@ -130,6 +145,8 @@ class CreativeOSStatusTests(unittest.TestCase):
+                 "cli",
+                 "--style",
+                 "plain",
++                "--runs-root",
++                str(FIXTURE_RUNS_ROOT),
+             ],
+             cwd="/workspace",
+             text=True,
+@@ -142,9 +159,10 @@ class CreativeOSStatusTests(unittest.TestCase):
+         self.assertIn("────────────────", all_view.stdout)
+ 
+     def test_rich_overview_contains_cockpit_panels(self) -> None:
+-        inspection = CreativeOSRunInspector().inspect("creative-os-jungle-001")
++        inspection = CreativeOSRunInspector(runs_root=FIXTURE_RUNS_ROOT).inspect("creative-os-jungle-001")
+         dashboard = render_rich_dashboard(inspection, view="overview", focus="cli")
+         self.assertIn("CONTENT MASCHINE LIVE", dashboard)
++        self.assertIn("fixture/demo", dashboard)
+         self.assertIn("SYSTEM STATUS", dashboard)
+         self.assertIn("PIPELINE MAP", dashboard)
+         self.assertIn("ACTIVE WORKSPACE", dashboard)
+@@ -153,6 +171,7 @@ class CreativeOSStatusTests(unittest.TestCase):
+         self.assertIn("scene_01", dashboard)
+         self.assertIn("READY FOR LTX", dashboard)
+         self.assertIn("Stage output:", dashboard)
++        self.assertIn("TECHNICAL FLOW", dashboard)
+         self.assertIn("SKILL HEALTH", dashboard)
+         self.assertIn("ARTIFACTS", dashboard)
+         self.assertIn("ISSUES", dashboard)
+@@ -161,7 +180,7 @@ class CreativeOSStatusTests(unittest.TestCase):
+         self.assertNotIn("ETA", dashboard)
+ 
+     def test_rich_missing_package_falls_back_to_plain(self) -> None:
+-        inspection = CreativeOSRunInspector().inspect("creative-os-jungle-001")
++        inspection = CreativeOSRunInspector(runs_root=FIXTURE_RUNS_ROOT).inspect("creative-os-jungle-001")
+         real_import = __import__
+ 
+         def fake_import(name, *args, **kwargs):
+@@ -197,6 +216,8 @@ class CreativeOSStatusTests(unittest.TestCase):
+                 "cli",
+                 "--style",
+                 "rich",
++                "--runs-root",
++                str(FIXTURE_RUNS_ROOT),
+             ],
+             cwd="/workspace",
+             text=True,
+@@ -218,6 +239,8 @@ class CreativeOSStatusTests(unittest.TestCase):
+                 "cli",
+                 "--style",
+                 "rich",
++                "--runs-root",
++                str(FIXTURE_RUNS_ROOT),
+             ],
+             cwd="/workspace",
+             text=True,
+
+# untracked relevant files
+
+# new file: agent_core/creative_os/textual_cockpit.py
+diff --git a/workspace/agent_core/creative_os/textual_cockpit.py b/workspace/agent_core/creative_os/textual_cockpit.py
+new file mode 100644
+index 0000000..42c14de
+--- /dev/null
++++ b/workspace/agent_core/creative_os/textual_cockpit.py
+@@ -0,0 +1,498 @@
++from __future__ import annotations
++
++from dataclasses import dataclass
++from pathlib import Path
++from .run_inspector import CreativeOSRunInspector, RunInspection
++
++
++try:
++    from textual.app import App, ComposeResult
++    from textual.binding import Binding
++    from textual.containers import Container, Horizontal, Vertical
++    from textual.widgets import Static
++    from rich.text import Text
++except ImportError as exc:  # pragma: no cover - exercised by script import guard.
++    raise RuntimeError(
++        "Textual is not installed. Install dependencies with: python3 -m pip install 'textual>=0.89,<1.0'"
++    ) from exc
++
++
++FIXTURE_MARKER = "tests/fixtures/creative_os_runs"
++
++
++@dataclass(frozen=True)
++class CockpitArgs:
++    job_id: str
++    runs_root: Path
++
++
++class CockpitPanel(Static):
++    def __init__(self, title: str, body: str, *, panel_id: str | None = None, classes: str | None = None) -> None:
++        super().__init__(body, id=panel_id, classes=classes)
++        self.border_title = title
++
++
++class CreativeOSCockpitApp(App[None]):
++    CSS = """
++    Screen {
++        background: #06111A;
++        color: #E8F4FF;
++    }
++
++    #app-root {
++        height: 100%;
++        padding: 1 1 0 1;
++        background: #06111A;
++    }
++
++    .panel {
++        background: #081722;
++        border: round #16C6FF;
++        padding: 1 2;
++        margin: 0 1 1 0;
++        color: #E8F4FF;
++    }
++
++    #cockpit-header {
++        height: 12;
++        border: round #16C6FF;
++        background: #081722;
++        padding: 1 2;
++        margin-bottom: 1;
++    }
++
++    #header-brand {
++        width: 42%;
++        height: 100%;
++        content-align: center middle;
++        color: #16C6FF;
++        text-style: bold;
++        background: #06111A;
++        border-right: solid #16C6FF;
++    }
++
++    #header-details {
++        width: 1fr;
++        padding-left: 2;
++        color: #DFF0FF;
++        text-style: bold;
++    }
++
++    #header-meta {
++        width: 27;
++        padding-left: 2;
++        border-left: solid #16C6FF;
++        color: #A8C7DB;
++    }
++
++    #main-area {
++        height: 1fr;
++        min-height: 13;
++        margin-bottom: 1;
++    }
++
++    #sidebar {
++        width: 36%;
++        min-width: 36;
++        margin-right: 1;
++    }
++
++    #workspace {
++        width: 1fr;
++        border: round #16C6FF;
++        background: #0B1E2D;
++        padding: 1 2;
++        height: 100%;
++        overflow: hidden hidden;
++    }
++
++    #system-status {
++        height: 11;
++        border: round #16C6FF;
++    }
++
++    #pipeline-map {
++        height: 1fr;
++        overflow: hidden hidden;
++    }
++
++    #bottom-area {
++        height: 9;
++        margin-bottom: 0;
++    }
++
++    .tile {
++        width: 1fr;
++        min-width: 24;
++        background: #081722;
++        border: round #16C6FF;
++        padding: 1 2;
++        margin-right: 1;
++        height: 100%;
++    }
++
++    #skill-tile {
++        width: 33%;
++        border: round #16C6FF;
++    }
++
++    #artifacts-tile {
++        width: 33%;
++    }
++
++    #right-bottom {
++        width: 30%;
++    }
++
++    #issues-tile,
++    #next-tile {
++        width: 100%;
++        height: 1fr;
++        margin-right: 0;
++    }
++
++    #next-tile {
++        border: round #16C6FF;
++    }
++
++    #issues-tile.ok {
++        border: round #22C55E;
++    }
++
++    #help-panel {
++        dock: bottom;
++        height: 5;
++        display: none;
++        border: round #16C6FF;
++        background: #091923;
++        padding: 1 2;
++        margin: 1;
++    }
++
++    #help-panel.visible {
++        display: block;
++    }
++
++    .title {
++        color: #67E8F9;
++        text-style: bold;
++    }
++
++    .ok {
++        color: #22C55E;
++    }
++
++    .active {
++        color: #FBBF24;
++        text-style: bold;
++    }
++
++    .muted {
++        color: #64748B;
++    }
++
++    .label {
++        color: #67E8F9;
++    }
++
++    #keybar {
++        height: 1;
++        background: #06111A;
++        color: #16C6FF;
++        content-align: center middle;
++        margin-top: 0;
++    }
++    """
++
++    BINDINGS = [
++        Binding("q", "quit", "Quit", show=True),
++        Binding("r", "refresh", "Refresh", show=True),
++        Binding("h", "toggle_help", "Help", show=True),
++    ]
++
++    def __init__(self, args: CockpitArgs) -> None:
++        super().__init__()
++        self.args = args
++        self.inspector = CreativeOSRunInspector(runs_root=args.runs_root)
++        self.inspection = self.inspector.inspect(args.job_id)
++
++    def compose(self) -> ComposeResult:
++        with Container(id="app-root"):
++            with Horizontal(id="cockpit-header"):
++                yield Static(self._brand_title(), id="header-brand")
++                yield Static(self._header_details(), id="header-details")
++                yield Static(self._header_meta(), id="header-meta")
++            with Horizontal(id="main-area"):
++                with Vertical(id="sidebar"):
++                    yield CockpitPanel("SYSTEM STATUS", self._system_status(), panel_id="system-status", classes="panel")
++                    yield CockpitPanel("PIPELINE MAP", self._pipeline_map(), panel_id="pipeline-map", classes="panel")
++                yield CockpitPanel("ACTIVE WORKSPACE", self._workspace(), panel_id="workspace")
++            with Horizontal(id="bottom-area"):
++                yield CockpitPanel("SKILL HEALTH", self._skill_health(), panel_id="skill-tile", classes="tile")
++                yield CockpitPanel("ARTIFACTS", self._artifacts(), panel_id="artifacts-tile", classes="tile")
++                with Vertical(id="right-bottom"):
++                    yield CockpitPanel("ISSUES", self._issues(), panel_id="issues-tile", classes="tile ok")
++                    yield CockpitPanel("NEXT", self._next(), panel_id="next-tile", classes="tile")
++            yield Static("q Quit · r Refresh · h Help", id="help-panel")
++            yield Static("q Quit · r Refresh · h Help", id="keybar")
++
++    def action_refresh(self) -> None:
++        self.inspection = self.inspector.inspect(self.args.job_id)
++        self._update_panels()
++        self.notify("Fixture data reloaded", timeout=1.5)
++
++    def action_toggle_help(self) -> None:
++        help_panel = self.query_one("#help-panel", Static)
++        help_panel.toggle_class("visible")
++
++    def _update_panels(self) -> None:
++        updates = {
++            "#header-details": self._header_details(),
++            "#header-meta": self._header_meta(),
++            "#system-status": self._system_status(),
++            "#pipeline-map": self._pipeline_map(),
++            "#workspace": self._workspace(),
++            "#skill-tile": self._skill_health(),
++            "#artifacts-tile": self._artifacts(),
++            "#issues-tile": self._issues(),
++            "#next-tile": self._next(),
++        }
++        for selector, content in updates.items():
++            self.query_one(selector, Static).update(content)
++
++    def _header_details(self) -> Text:
++        meta = _job_meta(self.inspection)
++        rows = [
++            (("JOB", str(self.inspection.job_id)), ("PIPELINE", "shortform_storyboard_v1")),
++            None,
++            (("MODE", _shorten(meta["mode"] + " · " + meta["topic"], 78)),),
++            (("FORMAT", f"{meta['orientation']} · {meta['resolution']} · {meta['duration']}s · {meta['scene_count']} scenes"),),
++            None,
++            (("STATUS", self.inspection.status), ("FOCUS", "CLI cockpit refinement")),
++            (("RENDER", "paused"),),
++        ]
++        details = Text()
++        for row in rows:
++            if row is None:
++                details.append("\n")
++                continue
++            for index, (label, value) in enumerate(row):
++                if index:
++                    details.append("     ")
++                details.append(f"{label:<9}", style="bold #16C6FF")
++                details.append(f"{str(value):<36}", style="#E8F4FF")
++            details.append("\n")
++        return details
++
++    def _brand_title(self) -> Text:
++        title = Text()
++        title.append("▛▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▜\n", style="#16C6FF")
++        title.append("▌                               ▐\n", style="#16C6FF")
++        title.append("  CONTENT  MASCHINE  ", style="bold #E8F4FF")
++        title.append("LIVE\n", style="bold #FFB347")
++        title.append("▌                               ▐\n", style="#16C6FF")
++        title.append("▙▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟", style="#16C6FF")
++        return title
++
++    def _header_meta(self) -> Text:
++        meta = Text()
++        rows = [
++            ("SESSION", _session_label(self.inspection)),
++            ("CHECKS", "no live checks"),
++            ("MODE", "fixture" if FIXTURE_MARKER in str(self.inspection.run_dir) else "artifact read"),
++        ]
++        for index, (label, value) in enumerate(rows):
++            if index:
++                meta.append("\n")
++            meta.append(f"{label}\n", style="bold #16C6FF")
++            meta.append(value, style="#B7D2E6")
++            if index < len(rows) - 1:
++                meta.append("\n")
++        return meta
++
++    def _system_status(self) -> Text:
++        vision = "- manual_structured" if "stage6_review_decision" in self.inspection.data else "- heuristic"
++        image = "✓ zimage_http" if self.inspection.artifacts.get("keyframe_manifest.json") else "? not_checked"
++        return _rows_text(
++            [
++                ("API", "? not_checked"),
++                ("Director", "? not_checked"),
++                ("Image Backend", image),
++                ("Video Backend", "? planned ltx2"),
++                ("Vision Review", vision),
++                ("Voice", "- disabled"),
++                ("Music", "- disabled"),
++                ("Subtitles", "- off"),
++            ]
++        )
++
++    def _pipeline_map(self) -> Text:
++        timeline = Text()
++        for stage in self.inspection.stages:
++            mark = _mark(stage.status)
++            prefix = "▶" if stage.index == "09" and stage.status == "pending" else mark
++            style = "bold #FFB347" if stage.index == "09" and stage.status == "pending" else _status_text_style(stage.status)
++            timeline.append(f"{prefix} {stage.index} {stage.name}\n", style=style)
++        return timeline
++
++    def _workspace(self) -> Text:
++        workspace = _rows_text(
++            [
++                ("Current Step", "LTX Motion Ready"),
++                ("Last passed", f"✓ {self.inspector.last_passed_stage(self.inspection)}"),
++                ("Next technical", "○ 09 LTX I2V takes"),
++                ("Operator focus", "CLI cockpit refinement"),
++                ("Render paused", "yes"),
++            ]
++        )
++        workspace.append("\nSTAGE OUTPUT\n", style="bold #16C6FF")
++        workspace.append("  ✓ 3 motion prompts passed\n", style="#7CD66B")
++        workspace.append("  ✓ 3 keyframes passed\n", style="#7CD66B")
++        workspace.append("  ○ video takes not built\n", style="#A8C7DB")
++        workspace.append("\nSCENE JOBS\n", style="bold #16C6FF")
++        for item in _motion_items(self.inspection):
++            workspace.append("\n╭────────────────────────────────────────────────────────────╮\n", style="#16C6FF")
++            workspace.append("│", style="#16C6FF")
++            workspace.append(f" [✓] {item['scene_id']}  READY FOR LTX".ljust(60), style="bold #7CD66B")
++            workspace.append("│\n", style="#16C6FF")
++            workspace.append("│", style="#16C6FF")
++            workspace.append(f" keyframe: {_basename(item['keyframe'])}".ljust(60), style="#E8F4FF")
++            workspace.append("│\n", style="#16C6FF")
++            workspace.append("│", style="#16C6FF")
++            workspace.append(f" motion:   {item['summary']}".ljust(60), style="#B7D2E6")
++            workspace.append("│\n", style="#16C6FF")
++            workspace.append("│", style="#16C6FF")
++            workspace.append(" status:   ", style="#E8F4FF")
++            workspace.append("waiting for Stage 09 render gate".ljust(49), style="#FFB347")
++            workspace.append("│\n", style="#16C6FF")
++            workspace.append("╰────────────────────────────────────────────────────────────╯\n", style="#16C6FF")
++        return workspace
++
++    def _skill_health(self) -> Text:
++        health = self.inspector.skill_health(self.inspection)
++        tile = Text()
++        tile.append(f"{health['mark']} {health['status']}\n", style="bold #7CD66B")
++        tile.append(f"loaded {len(health['loaded'])} · fallbacks {len(health['fallbacks'])}\n", style="#E8F4FF")
++        tile.append(f"missing optional {len(health['missing_optional'])} · blocking {len(health['blocking_missing'])}", style="#B7D2E6")
++        return tile
++
++    def _artifacts(self) -> Text:
++        keyframes = sum(
++            1 for scene_id in ("scene_01", "scene_02", "scene_03") if self.inspection.artifacts.get(f"keyframes/{scene_id}.png")
++        )
++        artifacts = Text()
++        for line in [
++            f"{_artifact_mark(self.inspection, 'zimage_prompts.json')} zimage_prompts.json",
++            f"{'✓' if keyframes == 3 else '○'} {keyframes} keyframes",
++            f"{_artifact_mark(self.inspection, 'ltx_motion_prompts.json')} ltx_motion_prompts.json",
++            f"{_artifact_mark(self.inspection, 'ltx_prompt_audit.json')} ltx_prompt_audit.json",
++            f"{_artifact_mark(self.inspection, 'ltx_video_takes_manifest.json')} video_takes_manifest",
++        ]:
++            artifacts.append(line + "\n", style="#7CD66B" if line.startswith("✓") else "#A8C7DB")
++        return artifacts
++
++    def _issues(self) -> Text:
++        return Text("none blocking", style="bold #7CD66B") if not self.inspection.blocking_issues else Text("\n".join(self.inspection.blocking_issues), style="bold #EF4444")
++
++    def _next(self) -> Text:
++        return _rows_text([("Technical", "Stage 09: LTX I2V takes"), ("Operator", "Improve CLI cockpit")], label_width=10)
++
++
++def _row(label: str, value: str) -> str:
++    return f"{label.upper():<16} {value}"
++
++
++def _rows_text(rows: list[tuple[str, str]], *, label_width: int = 16) -> Text:
++    text = Text()
++    for label, value in rows:
++        text.append(f"{label.upper():<{label_width}} ", style="bold #16C6FF")
++        text.append(f"{value}\n", style=_value_style(value))
++    return text
++
++
++def _value_style(value: str) -> str:
++    if value.startswith("✓"):
++        return "bold #7CD66B"
++    if value.startswith("?") or value.startswith("-"):
++        return "#A8C7DB"
++    if "Stage 09" in value or value == "paused":
++        return "bold #FFB347"
++    return "#E8F4FF"
++
++
++def _status_text_style(status: str) -> str:
++    if status == "passed":
++        return "#7CD66B"
++    if status == "pending":
++        return "#A8C7DB"
++    if status in {"needs_review", "unknown"}:
++        return "#FFB347"
++    if status == "rejected":
++        return "#EF4444"
++    return "#E8F4FF"
++
++
++def _mark(status: str) -> str:
++    if status == "passed":
++        return "✓"
++    if status in {"needs_review", "unknown"}:
++        return "!"
++    if status == "rejected":
++        return "✗"
++    return "○"
++
++
++def _artifact_mark(inspection: RunInspection, name: str) -> str:
++    return "✓" if inspection.artifacts.get(name) else "○"
++
++
++def _session_label(inspection: RunInspection) -> str:
++    return "fixture/demo" if FIXTURE_MARKER in str(inspection.run_dir) else "artifact read"
++
++
++def _job_meta(inspection: RunInspection) -> dict[str, object]:
++    job = inspection.data.get("normalized_job") or {}
++    route = inspection.data.get("intent_route") or {}
++    scenes = inspection.data.get("scene_contracts") or []
++    return {
++        "resolution": job.get("resolution") or "512x768",
++        "duration": job.get("duration_sec") or 9,
++        "orientation": job.get("orientation") or "portrait",
++        "mode": route.get("genre_intent") or route.get("mode_intent") or "unknown",
++        "topic": route.get("topic_intent") or "unknown",
++        "scene_count": len(scenes) or 3,
++    }
++
++
++def _motion_items(inspection: RunInspection) -> list[dict[str, str]]:
++    prompts = inspection.data.get("ltx_motion_prompts") or []
++    if not isinstance(prompts, list):
++        return []
++    items: list[dict[str, str]] = []
++    for prompt in prompts:
++        if not isinstance(prompt, dict):
++            continue
++        keyframe = str(prompt.get("source_keyframe_path") or "")
++        items.append(
++            {
++                "scene_id": str(prompt.get("scene_id") or "unknown"),
++                "keyframe": keyframe,
++                "summary": _shorten(str(prompt.get("camera_motion") or prompt.get("motion_prompt") or "motion prompt present"), 65),
++            }
++        )
++    return items
++
++
++def _shorten(text: object, limit: int) -> str:
++    compact = " ".join(str(text).split())
++    if len(compact) <= limit:
++        return compact
++    return compact[: max(0, limit - 1)] + "…"
++
++
++def _basename(path: str) -> str:
++    return path.rsplit("/", 1)[-1] if path else "missing"
++
++
++def run_cockpit(job_id: str, runs_root: str | Path) -> None:
++    CreativeOSCockpitApp(CockpitArgs(job_id=job_id, runs_root=Path(runs_root))).run()
+
+# new file: scripts/creative_os_cockpit.py
+diff --git a/workspace/scripts/creative_os_cockpit.py b/workspace/scripts/creative_os_cockpit.py
+new file mode 100644
+index 0000000..e586c95
+--- /dev/null
++++ b/workspace/scripts/creative_os_cockpit.py
+@@ -0,0 +1,34 @@
++#!/usr/bin/env python3
++from __future__ import annotations
++
++import argparse
++import sys
++from pathlib import Path
++
++ROOT = Path(__file__).resolve().parents[1]
++if str(ROOT) not in sys.path:
++    sys.path.insert(0, str(ROOT))
++
++
++def main() -> int:
++    parser = argparse.ArgumentParser(description="Textual Creative OS cockpit prototype.")
++    parser.add_argument("--job-id", required=True)
++    parser.add_argument(
++        "--runs-root",
++        default="/workspace/agent_runs",
++        help="Root containing disposable Creative OS run artifacts. Use /workspace/tests/fixtures/creative_os_runs for design checks.",
++    )
++    args = parser.parse_args()
++
++    try:
++        from agent_core.creative_os.textual_cockpit import run_cockpit
++    except RuntimeError as exc:
++        print(str(exc), file=sys.stderr)
++        return 1
++
++    run_cockpit(args.job_id, args.runs_root)
++    return 0
++
++
++if __name__ == "__main__":
++    raise SystemExit(main())
+
+# new file: tests/test_creative_os_cockpit.py
+diff --git a/workspace/tests/test_creative_os_cockpit.py b/workspace/tests/test_creative_os_cockpit.py
+new file mode 100644
+index 0000000..055fe73
+--- /dev/null
++++ b/workspace/tests/test_creative_os_cockpit.py
+@@ -0,0 +1,29 @@
++from __future__ import annotations
++
++import unittest
++from pathlib import Path
++
++from agent_core.creative_os.textual_cockpit import CockpitArgs, CreativeOSCockpitApp
++
++
++FIXTURE_RUNS_ROOT = Path("/workspace/tests/fixtures/creative_os_runs")
++
++
++class CreativeOSCockpitTests(unittest.IsolatedAsyncioTestCase):
++    async def test_textual_cockpit_loads_fixture_layout(self) -> None:
++        app = CreativeOSCockpitApp(CockpitArgs(job_id="creative-os-jungle-001", runs_root=FIXTURE_RUNS_ROOT))
++        async with app.run_test() as pilot:
++            self.assertEqual("ready_for_ltx_i2v_takes", app.inspection.status)
++            text = app.query_one("#workspace").renderable
++            self.assertIn("SCENE JOBS", str(text))
++            self.assertIn("scene_01", str(text))
++            self.assertIn("READY FOR LTX", str(text))
++            self.assertIn("fixture/demo", str(app.query_one("#header-meta").renderable))
++            await pilot.press("h")
++            self.assertTrue(app.query_one("#help-panel").has_class("visible"))
++            await pilot.press("r")
++            self.assertEqual("ready_for_ltx_i2v_takes", app.inspection.status)
++
++
++if __name__ == "__main__":
++    unittest.main()

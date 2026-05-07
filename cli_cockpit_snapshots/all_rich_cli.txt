@@ -1,0 +1,139 @@
+╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│  CONTENT MASCHINE LIVE                                                                                                                     │
+│  Job          creative-os-jungle-001                                        Pipeline     shortform_storyboard_v1                           │
+│  Mode         visual_adventure · jungle safari at sunrise                                                                                  │
+│  Format       portrait · 512x768 · 9s · 3 scenes                                                                                           │
+│  Status       ready_for_ltx_i2v_takes                                       Focus        CLI cockpit refinement                            │
+│  Session      fixture/demo                                                  Checks       no live checks                                    │
+│  Render       paused                                                        Style        rich cockpit                                      │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭──────────────── SYSTEM STATUS ─────────────────╮  ╭─────────────────────────────────── ACTIVE WORKSPACE ───────────────────────────────────╮
+│                                                │  │                                                                                        │
+│ API                    ? not_checked           │  │  Current Step         LTX Motion Ready                                                 │
+│ Director               ? not_checked           │  │  Last passed          ✓ 08 LTX motion prompts                                          │
+│ Image Backend          ✓ zimage_http           │  │  Next technical       ○ 09 LTX I2V takes                                               │
+│ Video Backend          ? planned ltx2          │  │  Operator focus       CLI cockpit refinement                                           │
+│ Vision Review          - manual_structured     │  │  Render paused        yes                                                              │
+│ Voice                  - disabled              │  │                                                                                        │
+│ Music                  - disabled              │  │  Stage output:                                                                         │
+│ Subtitles              - off                   │  │    ✓ 3 motion prompts passed                                                           │
+│                                                │  │    ✓ 3 keyframes passed                                                                │
+╰────────────────────────────────────────────────╯  │    ○ video takes not built                                                             │
+                                                    │                                                                                        │
+╭───────────────── PIPELINE MAP ─────────────────╮  │  SCENE JOBS                                                                            │
+│                                                │  │  ╭──────────────────────────────────────────────────────────────────────────────────╮  │
+│ ✓ 01 Input normalized                          │  │  │ Scene        [✓] scene_01  READY FOR LTX                                         │  │
+│ ✓ 02 Intent routed                             │  │  │ keyframe     scene_01.png                                                        │  │
+│ ✓ 03 Skills loaded                             │  │  │ motion       slow canopy push-in, sunrise haze, stable jungle frame              │  │
+│ ✓ 04 Creative strategy                         │  │  │ status       waiting for Stage 09 render gate                                    │  │
+│ ✓ 05 Z-Image prompts                           │  │  ╰──────────────────────────────────────────────────────────────────────────────────╯  │
+│ ✓ 06 Keyframes generated                       │  │  ╭──────────────────────────────────────────────────────────────────────────────────╮  │
+│ ✓ 07 Keyframe QA                               │  │  │ Scene        [✓] scene_02  READY FOR LTX                                         │  │
+│ ✓ 08 LTX motion prompts                        │  │  │ keyframe     scene_02.png                                                        │  │
+│ ○ 09 LTX video takes                           │  │  │ motion       controlled suspense forward glide, no new creature                  │  │
+│ ○ 10 Video review                              │  │  │ status       waiting for Stage 09 render gate                                    │  │
+│ ○ 11 Assembly                                  │  │  ╰──────────────────────────────────────────────────────────────────────────────────╯  │
+│ ○ 12 Final verdict                             │  │  ╭──────────────────────────────────────────────────────────────────────────────────╮  │
+│                                                │  │  │ Scene        [✓] scene_03  READY FOR LTX                                         │  │
+╰────────────────────────────────────────────────╯  │  │ keyframe     scene_03.png                                                        │  │
+                                                    │  │ motion       calm golden path reveal, stable forward motion                      │  │
+                                                    │  │ status       waiting for Stage 09 render gate                                    │  │
+                                                    │  ╰──────────────────────────────────────────────────────────────────────────────────╯  │
+                                                    │                                                                                        │
+                                                    │  TECHNICAL FLOW                                                                        │
+                                                    │  Director  →  Creative OS  →  Z-Image  →  Keyframes  →  QA  →  LTX Motion  →  LTX I2V  │
+                                                    │  Takes                                                                                 │
+                                                    │                                                                                        │
+                                                    ╰────────────────────────────────────────────────────────────────────────────────────────╯
+
+╭────────────────────────── SKILL HEALTH ───────────────────────────╮  ╭───────────────────────────── ARTIFACTS ─────────────────────────────╮
+│ ✓ ok                                                              │  │ ✓ zimage_prompts.json                                               │
+│ loaded 8 · fallbacks 2                                            │  │ ✓ 3 keyframes                                                       │
+│ missing optional 1 · blocking 0                                   │  │ ✓ ltx_motion_prompts.json                                           │
+╰───────────────────────────────────────────────────────────────────╯  │ ✓ ltx_prompt_audit.json                                             │
+                                                                       │ ○ video_takes_manifest                                              │
+                                                                       ╰─────────────────────────────────────────────────────────────────────╯
+╭───────────────────────────── ISSUES ──────────────────────────────╮  ╭─────────────────────────────── NEXT ────────────────────────────────╮
+│ none blocking                                                     │  │ Technical  Stage 09: LTX I2V takes                                  │
+╰───────────────────────────────────────────────────────────────────╯  │ Operator   Improve CLI cockpit                                      │
+                                                                       ╰─────────────────────────────────────────────────────────────────────╯
+─────────────────────────────────────────────────────────────── SKILLS DETAIL ────────────────────────────────────────────────────────────────
+╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ SKILLS                                                                                                                                     │
+│ ──────────────────────────────────────────────────────────────                                                                             │
+│ health: ✓ ok                                                                                                                               │
+│ core:                                                                                                                                      │
+│   - core/tiktok_shortform                                                                                                                  │
+│   - core/positive_image_prompting                                                                                                          │
+│   - core/anti_boring                                                                                                                       │
+│   - core/artifact_avoidance                                                                                                                │
+│ model:                                                                                                                                     │
+│   - models/zimage                                                                                                                          │
+│ style:                                                                                                                                     │
+│   - styles/cinematic_nature                                                                                                                │
+│ fallback:                                                                                                                                  │
+│   - fallback/generic_visual_adventure · fallback for missing modes/jungle_adventure                                                        │
+│   - fallback/generic_shortform_story                                                                                                       │
+│ missing optional:                                                                                                                          │
+│   - modes/jungle_adventure                                                                                                                 │
+│ blocking missing:                                                                                                                          │
+│   - none                                                                                                                                   │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+─────────────────────────────────────────────────────────────── STAGES DETAIL ────────────────────────────────────────────────────────────────
+╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ STAGES                                                                                                                                     │
+│ ──────────────────────────────────────────────────────────────                                                                             │
+│ ✓ 01 Input normalized · normalized_job.json · passed · present                                                                             │
+│ ✓ 02 Intent routed · intent_route.json · passed · present                                                                                  │
+│ ✓ 03 Skills loaded · skill_match.json · passed · present                                                                                   │
+│ ✓ 04 Creative strategy · creative_strategy.json · passed · present                                                                         │
+│ ✓ 05 Z-Image prompts · zimage_prompts.json · passed · 3 prompts                                                                            │
+│ ✓ 06 Keyframes generated · keyframe_manifest.json · passed · 3/3 pngs                                                                      │
+│ ✓ 07 Keyframe QA · keyframe_review.json · passed · 3 passed                                                                                │
+│ ✓ 08 LTX motion prompts · ltx_motion_prompts.json · passed · 3 prompts; audit passed                                                       │
+│ ○ 09 LTX video takes · ltx_video_takes_manifest.json · pending · not built                                                                 │
+│ ○ 10 Video review · video_review.json · pending · not built                                                                                │
+│ ○ 11 Assembly · final.mp4 · pending · not built                                                                                            │
+│ ○ 12 Final verdict · final_quality_verdict.json · pending · not built                                                                      │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+────────────────────────────────────────────────────────────── ARTIFACTS DETAIL ──────────────────────────────────────────────────────────────
+╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ ARTIFACTS                                                                                                                                  │
+│ ──────────────────────────────────────────────────────────────                                                                             │
+│ ○ creative_os_report.md · missing                                                                                                          │
+│ ○ creative_os_stage6_report.md · missing                                                                                                   │
+│ ○ creative_os_stage7_report.md · missing                                                                                                   │
+│ ✓ creative_strategy.json · exists                                                                                                          │
+│ ○ final.mp4 · missing                                                                                                                      │
+│ ○ final_quality_verdict.json · missing                                                                                                     │
+│ ✓ intent_route.json · exists                                                                                                               │
+│ ✓ keyframe_contracts.json · exists                                                                                                         │
+│ ✓ keyframe_manifest.json · exists                                                                                                          │
+│ ✓ keyframe_review.json · exists                                                                                                            │
+│ ✓ keyframes/scene_01.png · exists                                                                                                          │
+│ ✓ keyframes/scene_02.png · exists                                                                                                          │
+│ ✓ keyframes/scene_03.png · exists                                                                                                          │
+│ ✓ ltx_motion_prompts.json · exists                                                                                                         │
+│ ✓ ltx_prompt_audit.json · exists                                                                                                           │
+│ ○ ltx_video_takes_manifest.json · missing                                                                                                  │
+│ ✓ normalized_job.json · exists                                                                                                             │
+│ ✓ scene_contracts.json · exists                                                                                                            │
+│ ✓ selected_beat_plan.json · exists                                                                                                         │
+│ ✓ skill_match.json · exists                                                                                                                │
+│ ✓ stage6_review_decision.json · exists                                                                                                     │
+│ ○ video_review.json · missing                                                                                                              │
+│ ✓ zimage_prompts.json · exists                                                                                                             │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+─────────────────────────────────────────────────────────────── ISSUES DETAIL ────────────────────────────────────────────────────────────────
+╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ ISSUES                                                                                                                                     │
+│ ──────────────────────────────────────────────────────────────                                                                             │
+│ none blocking                                                                                                                              │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+──────────────────────────────────────────────────────────────── NEXT DETAIL ─────────────────────────────────────────────────────────────────
+╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ NEXT                                                                                                                                       │
+│ ──────────────────────────────────────────────────────────────                                                                             │
+│ Technical   Stage 09: render 1 LTX I2V take per scene                                                                                      │
+│ Operator    Improve CLI cockpit before rendering                                                                                           │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯

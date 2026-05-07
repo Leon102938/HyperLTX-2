@@ -33,8 +33,13 @@ def main() -> int:
         default="plain",
         help="Dashboard rendering style. Rich falls back to plain if the package is unavailable.",
     )
+    parser.add_argument(
+        "--runs-root",
+        default="/workspace/agent_runs",
+        help="Root containing disposable Creative OS run artifacts. Defaults to /workspace/agent_runs.",
+    )
     args = parser.parse_args()
-    inspector = CreativeOSRunInspector()
+    inspector = CreativeOSRunInspector(runs_root=args.runs_root)
     inspection = inspector.inspect(args.job_id)
     if args.style == "rich":
         print(render_rich_dashboard(inspection, view=args.view, focus=args.focus), end="")

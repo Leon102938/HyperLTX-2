@@ -1,5 +1,31 @@
 # CHANGELOG.md
 
+## 2026-05-06 Creative OS Textual Cockpit V0.1
+- Neuer Textual-TUI-Prototyp gebaut: `agent_core/creative_os/textual_cockpit.py` und Entry `scripts/creative_os_cockpit.py`.
+- Startbefehl: `python3 /workspace/scripts/creative_os_cockpit.py --job-id creative-os-jungle-001 --runs-root /workspace/tests/fixtures/creative_os_runs`.
+- Layout: Fullscreen-Cockpit mit Header, linker Sidebar fuer System/Pipeline, grossem Active Workspace, Scene Cards, Bottom-Kacheln und Footer-Keybinds `q`, `r`, `h`.
+- Datenquelle bleibt der vorhandene `CreativeOSRunInspector`; Refresh liest nur neu ein und schreibt keine Run-Artefakte.
+- `textual>=0.89,<1.0` ist in `requirements.txt` dokumentiert; das Script meldet fehlendes Textual mit Installationshinweis.
+- `/workspace/agent_runs` bleibt fluechtig und wurde nicht als Design-/Testquelle verwendet oder mutiert.
+- Nicht gebaut/gestartet: Stage 8, Render, LTX, Video, API, n8n, Backend-Aufrufe oder neue Creative-OS-Stages.
+
+## 2026-05-06 Creative OS Rich Cockpit V1.7
+- Rich-Cockpit-Design-Pass V1.7 umgesetzt: Theme-System weiter zentralisiert, Header kompakter gemacht, Fixture/Demo-Session im Banner sichtbar, Stage 09 als naechster Schritt staerker akzentuiert und Active Workspace um einen kompakten technischen Flow-Streifen ergaenzt.
+- Alle UI-Checks und Snapshots laufen explizit mit `--runs-root /workspace/tests/fixtures/creative_os_runs`; `/workspace/agent_runs` bleibt fluechtig und wird nicht als Design-/Testquelle genutzt.
+- `--style plain` bleibt stabil; `--view all --style rich` zeigt zuerst das Cockpit-Overview und danach getrennte Detailbereiche.
+- Snapshots aktualisiert unter `/workspace/cli_cockpit_snapshots/`.
+- Nicht gebaut/gestartet: Stage 8, Render, LTX, Video, API, n8n, Textual, Backend-Livechecks oder neue Creative-OS-Stages.
+
+## 2026-05-06 Creative OS CLI Cockpit Design-Pass
+- Rich-Overview des read-only Creative-OS-Status-Dashboards als Operator-Cockpit ueberarbeitet: zentrales Theme, kompaktes Status-Banner, Sidebar/Workspace-Hauptgrid, Scene-Job-Karten und sauberes Bottom-Grid.
+- `--style plain` bleibt stabil; `--style rich` ist der neue Cockpit-Modus. `--view all --style rich` zeigt zuerst das Overview und danach getrennte Detailbereiche.
+- Run-Root-Abhaengigkeit geklaert: `/workspace/agent_runs` ist nur der Default-Ort fuer fluechtige echte Run-Artefakte, keine Systemquelle, kein Config-Ort, kein Skill-Ort und keine Pflichtabhaengigkeit.
+- `scripts/creative_os_status.py` akzeptiert `--runs-root`; Design-/Testdaten liegen stabil unter `/workspace/tests/fixtures/creative_os_runs`.
+- Fehlende Runs melden jetzt explizit, dass dies kein Systemfehler ist und dass nach Pod-Reset echte Runs neu erzeugt oder per `--runs-root` Fixtures gelesen werden muessen.
+- Keine Stage 8, kein Render, kein LTX-Lauf, kein Video, keine API-, n8n-, Backend- oder Textual-Integration gebaut.
+- Snapshots erzeugt unter `/workspace/cli_cockpit_snapshots/` gegen die isolierte CLI-Fixture, weil der echte Run-Ordner `/workspace/agent_runs/creative-os-jungle-001/creative_os` im aktuellen Workspace fehlt.
+- Tests: `python3 -m unittest /workspace/tests/test_creative_os_status.py -v` -> 13 Tests OK.
+
 ## 2026-05-05 Creative OS CLI Dashboard V1
 - Read-only CLI-Kommandozentrale gebaut: `agent_core/creative_os/run_inspector.py`, `dashboard.py` und `scripts/creative_os_status.py`.
 - Views: `overview`, `skills`, `stages`, `artifacts`, `issues`, `next`, `all`.

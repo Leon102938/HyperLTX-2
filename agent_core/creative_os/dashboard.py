@@ -11,9 +11,32 @@ BOX_WIDTH = 62
 RULE = "─" * BOX_WIDTH
 
 
+COCKPIT_THEME = {
+    "background": "#020617",
+    "panel_bg": "#020817",
+    "border_primary": "#38BDF8",
+    "border_secondary": "#1E3A5F",
+    "title": "bold #67E8F9",
+    "label": "#67E8F9",
+    "value": "#E5E7EB",
+    "muted": "#64748B",
+    "ok": "#22C55E",
+    "warn": "#FBBF24",
+    "error": "#EF4444",
+    "pending": "#67E8F9",
+    "active": "bold #FBBF24",
+    "next": "bold #67E8F9",
+    "disabled": "#64748B",
+}
+
+
+def _t(name: str) -> str:
+    return COCKPIT_THEME[name]
+
+
 def render_dashboard(inspection: RunInspection, *, view: str = "overview", focus: str = "none") -> str:
     if not inspection.exists:
-        return f"Creative OS run not found: {inspection.job_id}\nPath: {inspection.run_dir}\n"
+        return _missing_run_message(inspection)
     if view == "all":
         return "\n\n".join(
             _view_block(name.upper(), render_dashboard(inspection, view=name, focus=focus))
@@ -35,7 +58,6 @@ def render_dashboard(inspection: RunInspection, *, view: str = "overview", focus
 def render_rich_dashboard(inspection: RunInspection, *, view: str = "overview", focus: str = "none") -> str:
     try:
         from rich import box
-        from rich.columns import Columns
         from rich.console import Console, Group
         from rich.panel import Panel
         from rich.table import Table
@@ -48,42 +70,94 @@ def render_rich_dashboard(inspection: RunInspection, *, view: str = "overview", 
     if not inspection.exists:
         return render_dashboard(inspection, view=view, focus=focus)
 
-    console_width = min(132, max(92, shutil.get_terminal_size((118, 24)).columns))
-    console = Console(record=True, width=console_width, color_system="standard", file=StringIO())
-    inspector = CreativeOSRunInspector()
+    console_width = min(142, max(88, shutil.get_terminal_size((122, 24)).columns))
+    console = Console(record=True, width=console_width, color_system="truecolor", file=StringIO())
     meta = _job_meta(inspection)
-
-    header = Table.grid(expand=True)
-    header.add_column(ratio=3)
-    header.add_column(ratio=1)
-    header.add_row(Text("CONTENT MASCHINE LIVE", style="bold cyan"))
-    header.add_row(f"Job        {inspection.job_id}", "Session  artifact read")
-    header.add_row("Pipeline   shortform_storyboard_v1", "Checks   no live checks")
-    header.add_row(Text(f"Mode       {meta['mode']} · {meta['topic']}", style="cyan"), "Render   paused")
-    header.add_row(f"Format     {meta['orientation']} · {meta['resolution']} · {meta['duration']}s · {meta['scene_count']} scenes", "")
-    header.add_row(Text(f"Status     {inspection.status}", style=_status_style(inspection.status)), "")
-    header.add_row(Text(f"Focus      {_operator_focus(focus)}", style="cyan"), "")
+    header = _rich_header(inspection, focus, meta)
 
     if view == "all":
-        console.print(Panel(header, box=box.ROUNDED, border_style="cyan"))
+        console.print(_cockpit_panel(header, box=box.ROUNDED, border_style=_t("border_primary"), padding=(0, 2)))
         console.print(_rich_overview_group(inspection, focus, width=console_width))
         for title, body in (
-            ("SKILLS", _skills(inspection)),
-            ("STAGES", _stages(inspection)),
-            ("ARTIFACTS", _artifacts(inspection)),
-            ("ISSUES", _issues(inspection)),
-            ("NEXT", _next(inspection, focus)),
+            ("SKILLS DETAIL", _skills(inspection)),
+            ("STAGES DETAIL", _stages(inspection)),
+            ("ARTIFACTS DETAIL", _artifacts(inspection)),
+            ("ISSUES DETAIL", _issues(inspection)),
+            ("NEXT DETAIL", _next(inspection, focus)),
         ):
-            console.print(Panel(body.strip(), title=title, box=box.ROUNDED, border_style="blue"))
+            console.rule(Text(title, style=_t("title")), style=_t("border_secondary"))
+            console.print(_cockpit_panel(body.strip(), box=box.ROUNDED, border_style=_t("border_secondary")))
         return console.export_text()
 
     if view != "overview":
-        console.print(Panel(render_dashboard(inspection, view=view, focus=focus).strip(), title=view.upper(), box=box.ROUNDED))
+        console.print(_cockpit_panel(render_dashboard(inspection, view=view, focus=focus).strip(), title=view.upper(), box=box.ROUNDED, border_style=_t("border_secondary")))
         return console.export_text()
 
-    console.print(Panel(header, box=box.ROUNDED, border_style="cyan"))
+    console.print(_cockpit_panel(header, box=box.ROUNDED, border_style=_t("border_primary"), padding=(0, 2)))
     console.print(_rich_overview_group(inspection, focus, width=console_width))
     return console.export_text()
+
+
+def _missing_run_message(inspection: RunInspection) -> str:
+    return (
+        "Run not found:\n"
+        f"  job_id: {inspection.job_id}\n"
+        f"  searched: {inspection.run_dir}\n"
+        "\n"
+        "This is not a system error.\n"
+        "agent_runs contains disposable run artifacts only.\n"
+        "Use --runs-root for fixtures or create a real run first.\n"
+    )
+
+
+def _technical_flow() -> Any:
+    from rich.console import Group
+    from rich.text import Text
+
+    title = Text("TECHNICAL FLOW", style=_t("title"))
+    flow = Text()
+    for index, label in enumerate(
+        (
+            ("Director", _t("muted")),
+            ("Creative OS", _t("muted")),
+            ("Z-Image", _t("ok")),
+            ("Keyframes", _t("ok")),
+            ("QA", _t("ok")),
+            ("LTX Motion", _t("ok")),
+            ("LTX I2V Takes", _t("active")),
+        )
+    ):
+        if index:
+            flow.append("  →  ", style=_t("muted"))
+        flow.append(label[0], style=label[1])
+    return Group(title, flow)
+
+
+def _cockpit_panel(*args: Any, **kwargs: Any) -> Any:
+    from rich.panel import Panel
+
+    kwargs.setdefault("style", f"{_t('value')} on {_t('panel_bg')}")
+    kwargs.setdefault("padding", (0, 1))
+    return Panel(*args, **kwargs)
+
+
+def _rich_header(inspection: RunInspection, focus: str, meta: dict[str, Any]) -> Any:
+    from rich.console import Group
+    from rich.table import Table
+    from rich.text import Text
+
+    header = Table.grid(expand=True, padding=(0, 2))
+    header.add_column(width=11)
+    header.add_column(ratio=5)
+    header.add_column(width=11)
+    header.add_column(ratio=4)
+    header.add_row(Text("Job", style=_t("label")), Text(inspection.job_id, style=_t("value")), Text("Pipeline", style=_t("label")), Text("shortform_storyboard_v1", style=_t("value")))
+    header.add_row(Text("Mode", style=_t("label")), Text(_shorten(f"{meta['mode']} · {meta['topic']}", 58), style=_t("value")), "", "")
+    header.add_row(Text("Format", style=_t("label")), Text(f"{meta['orientation']} · {meta['resolution']} · {meta['duration']}s · {meta['scene_count']} scenes", style=_t("value")), "", "")
+    header.add_row(Text("Status", style=_t("label")), Text(inspection.status, style=_status_style(inspection.status)), Text("Focus", style=_t("label")), Text(_operator_focus_short(focus), style=_t("next")))
+    header.add_row(Text("Session", style=_t("label")), Text(_session_label(inspection), style=_t("warn") if _is_fixture_run(inspection) else _t("value")), Text("Checks", style=_t("label")), Text("no live checks", style=_t("muted")))
+    header.add_row(Text("Render", style=_t("label")), Text("paused" if _render_paused(focus) == "yes" else "not_paused", style=_t("warn")), Text("Style", style=_t("label")), Text("rich cockpit", style=_t("value")))
+    return Group(Text("CONTENT MASCHINE LIVE", style="bold #67E8F9"), header)
 
 
 def _rich_overview_group(inspection: RunInspection, focus: str, width: int) -> Any:
@@ -99,47 +173,49 @@ def _rich_overview_group(inspection: RunInspection, focus: str, width: int) -> A
     next_action = inspector.next_action(inspection)
 
     system = Table.grid(padding=(0, 1), expand=True)
-    system.add_column(justify="left")
-    system.add_column()
-    system.add_row(Text("API", style="cyan"), Text("? not_checked", style="dim"))
-    system.add_row(Text("Director", style="cyan"), Text("? not_checked", style="dim"))
-    system.add_row("Image Backend", Text("✓ zimage_http", style="green") if inspection.artifacts.get("keyframe_manifest.json") else Text("? not_checked", style="dim"))
-    system.add_row(Text("Video Backend", style="cyan"), Text("? planned ltx2", style="dim cyan"))
-    system.add_row(Text("Vision Review", style="cyan"), Text("- manual_structured", style="yellow") if "stage6_review_decision" in inspection.data else Text("- heuristic", style="yellow"))
-    system.add_row(Text("Voice", style="cyan"), Text("- disabled", style="dim"))
-    system.add_row(Text("Music", style="cyan"), Text("- disabled", style="dim"))
-    system.add_row(Text("Subtitles", style="cyan"), Text("- off", style="dim"))
+    system.add_column(justify="left", ratio=2)
+    system.add_column(ratio=2)
+    system.add_row(Text("API", style=_t("label")), Text("? not_checked", style=_t("muted")))
+    system.add_row(Text("Director", style=_t("label")), Text("? not_checked", style=_t("muted")))
+    system.add_row(Text("Image Backend", style=_t("label")), Text("✓ zimage_http", style=_t("ok")) if inspection.artifacts.get("keyframe_manifest.json") else Text("? not_checked", style=_t("muted")))
+    system.add_row(Text("Video Backend", style=_t("label")), Text("? planned ltx2", style=_t("muted")))
+    system.add_row(Text("Vision Review", style=_t("label")), Text("- manual_structured", style=_t("warn")) if "stage6_review_decision" in inspection.data else Text("- heuristic", style=_t("warn")))
+    system.add_row(Text("Voice", style=_t("label")), Text("- disabled", style=_t("disabled")))
+    system.add_row(Text("Music", style=_t("label")), Text("- disabled", style=_t("disabled")))
+    system.add_row(Text("Subtitles", style=_t("label")), Text("- off", style=_t("disabled")))
 
     pipeline = Table.grid(expand=True)
     for stage in inspection.stages:
-        pipeline.add_row(Text(f"{_mark(stage.status)} {stage.index} {stage.name}", style=_stage_style(stage.status)))
+        label = f"{_stage_timeline_mark(stage.status)} {stage.index} {stage.name}"
+        pipeline.add_row(Text(label, style=_stage_style(stage.status, stage.index)))
 
     workspace = Table.grid(padding=(0, 1), expand=True)
-    workspace.add_column("label")
-    workspace.add_column("value")
-    workspace.add_row(Text("Current Step", style="cyan"), Text("LTX Motion Ready", style="bold cyan"))
-    workspace.add_row(Text("Last passed", style="cyan"), Text("✓ 08 LTX motion prompts", style="green"))
-    workspace.add_row(Text("Next technical", style="cyan"), Text("○ 09 LTX I2V takes", style="cyan"))
-    workspace.add_row("Operator focus", _operator_focus(focus))
-    workspace.add_row("Render paused", Text(_render_paused(focus), style="yellow"))
+    workspace.add_column(ratio=1)
+    workspace.add_column(ratio=3)
+    workspace.add_row(Text("Current Step", style=_t("label")), Text("LTX Motion Ready", style=_t("next")))
+    workspace.add_row(Text("Last passed", style=_t("label")), Text(f"✓ {inspector.last_passed_stage(inspection)}", style=_t("ok")))
+    workspace.add_row(Text("Next technical", style=_t("label")), Text("○ 09 LTX I2V takes", style=_t("active")))
+    workspace.add_row(Text("Operator focus", style=_t("label")), Text(_operator_focus_short(focus), style=_t("value")))
+    workspace.add_row(Text("Render paused", style=_t("label")), Text(_render_paused(focus), style=_t("warn")))
     stage_output = Text()
-    stage_output.append("✓ 3 motion prompts passed\n", style="green")
-    stage_output.append("✓ 3 keyframes passed\n", style="green")
-    stage_output.append("○ video takes not built", style="cyan")
+    stage_output.append("  ✓ 3 motion prompts passed\n", style=_t("ok"))
+    stage_output.append("  ✓ 3 keyframes passed\n", style=_t("ok"))
+    stage_output.append("  ○ video takes not built", style=_t("muted"))
 
-    scene_blocks: list[Any] = [Text("SCENE JOBS", style="bold cyan"), Text("─" * 46, style="dim")]
+    scene_blocks: list[Any] = [Text("SCENE JOBS", style=_t("title"))]
     for item in _motion_items(inspection):
-        scene = Text()
-        scene.append(f"[✓] {item['scene_id']}  READY FOR LTX\n", style="bold green")
-        scene.append("    keyframe   ", style="dim")
-        scene.append(f"{_basename(item['keyframe'])}\n", style="white")
-        scene.append("    motion     ", style="dim")
-        scene.append(item["summary"], style="cyan")
+        scene = Table.grid(expand=True, padding=(0, 1))
+        scene.add_column(width=12)
+        scene.add_column(ratio=1)
+        scene.add_row(Text("Scene", style=_t("muted")), Text(f"[✓] {item['scene_id']}  READY FOR LTX", style=f"bold {_t('ok')}"))
+        scene.add_row(Text("keyframe", style=_t("muted")), Text(_basename(item["keyframe"]), style=_t("value")))
+        scene.add_row(Text("motion", style=_t("muted")), Text(item["summary"], style=_t("value")))
+        scene.add_row(Text("status", style=_t("muted")), Text("waiting for Stage 09 render gate", style=_t("warn")))
         scene_blocks.append(
-            Panel(
+            _cockpit_panel(
                 scene,
-                box=box.SIMPLE,
-                border_style="green",
+                box=box.ROUNDED,
+                border_style=_t("border_secondary"),
                 padding=(0, 1),
             )
         )
@@ -147,18 +223,18 @@ def _rich_overview_group(inspection: RunInspection, focus: str, width: int) -> A
     workspace_group = Group(
         workspace,
         Text(""),
-        Text("Stage output:", style="bold cyan"),
+        Text("Stage output:", style=_t("title")),
         stage_output,
         Text(""),
         *scene_blocks,
+        Text(""),
+        _technical_flow(),
     )
 
-    skill = Text(
-        f"{health['mark']} {health['status']}\n"
-        f"loaded {len(health['loaded'])} · fallbacks {len(health['fallbacks'])}\n"
-        f"missing opt {len(health['missing_optional'])} · blocking {len(health['blocking_missing'])}",
-        style="green" if health["status"] == "ok" else "yellow",
-    )
+    skill = Text()
+    skill.append(f"{health['mark']} {health['status']}\n", style=_t("ok") if health["status"] == "ok" else _t("warn"))
+    skill.append(f"loaded {len(health['loaded'])} · fallbacks {len(health['fallbacks'])}\n", style=_t("value"))
+    skill.append(f"missing optional {len(health['missing_optional'])} · blocking {len(health['blocking_missing'])}", style=_t("value"))
     artifacts = Table.grid()
     keyframe_count = sum(1 for scene_id in ("scene_01", "scene_02", "scene_03") if inspection.artifacts.get(f"keyframes/{scene_id}.png"))
     for line in (
@@ -168,31 +244,36 @@ def _rich_overview_group(inspection: RunInspection, focus: str, width: int) -> A
         f"{_artifact_mark(inspection, 'ltx_prompt_audit.json')} ltx_prompt_audit.json",
         f"{_artifact_mark(inspection, 'ltx_video_takes_manifest.json')} video_takes_manifest",
     ):
-        artifacts.add_row(line)
-    issues = Text(_issue_text(inspection), style="green" if not inspection.blocking_issues else "red")
-    next_panel = Text("Tech: Stage 09\nOp: CLI focus" if focus == "cli" else f"Tech: {next_action}\nOp: {_operator_focus(focus)}", style="cyan")
+        artifacts.add_row(Text(line, style=_artifact_line_style(line)))
+    issues = Text(_issue_text(inspection), style=_t("ok") if not inspection.blocking_issues else _t("error"))
+    next_panel = Table.grid(expand=True, padding=(0, 1))
+    next_panel.add_column(width=10)
+    next_panel.add_column(ratio=1)
+    next_panel.add_row(Text("Technical", style=_t("label")), Text("Stage 09: LTX I2V takes", style=_t("active")))
+    next_panel.add_row(Text("Operator", style=_t("label")), Text("Improve CLI cockpit", style=_t("next")))
 
     sidebar = Group(
-        Panel(system, title="SYSTEM STATUS", box=box.ROUNDED, border_style="blue"),
-        Panel(pipeline, title="PIPELINE MAP", box=box.ROUNDED, border_style="blue"),
+        _cockpit_panel(system, title=Text("SYSTEM STATUS", style=_t("title")), box=box.ROUNDED, border_style=_t("border_primary"), padding=(1, 1)),
+        Text(""),
+        _cockpit_panel(pipeline, title=Text("PIPELINE MAP", style=_t("title")), box=box.ROUNDED, border_style=_t("border_secondary"), padding=(1, 1)),
     )
-    workspace_panel = Panel(workspace_group, title="ACTIVE WORKSPACE", box=box.ROUNDED, border_style="cyan", padding=(1, 2))
+    workspace_panel = _cockpit_panel(workspace_group, title=Text("ACTIVE WORKSPACE", style=_t("title")), box=box.ROUNDED, border_style=_t("border_primary"), padding=(1, 2))
     if width >= 110:
-        main_grid = Table.grid(expand=True, padding=(0, 1))
-        main_grid.add_column(ratio=1)
-        main_grid.add_column(ratio=2)
+        main_grid = Table.grid(expand=True, padding=(0, 2))
+        main_grid.add_column(ratio=36)
+        main_grid.add_column(ratio=64)
         main_grid.add_row(sidebar, workspace_panel)
     else:
         main_grid = Group(sidebar, workspace_panel)
 
     bottom_panels = [
-        Panel(skill, title="SKILL HEALTH", box=box.ROUNDED, border_style="green"),
-        Panel(artifacts, title="ARTIFACTS", box=box.ROUNDED, border_style="blue"),
-        Panel(issues, title="ISSUES", box=box.ROUNDED, border_style="green" if not inspection.blocking_issues else "red"),
-        Panel(next_panel, title="NEXT", box=box.ROUNDED, border_style="cyan"),
+        _cockpit_panel(skill, title=Text("SKILL HEALTH", style=_t("title")), box=box.ROUNDED, border_style=_t("border_secondary")),
+        _cockpit_panel(artifacts, title=Text("ARTIFACTS", style=_t("title")), box=box.ROUNDED, border_style=_t("border_secondary")),
+        _cockpit_panel(issues, title=Text("ISSUES", style=_t("title")), box=box.ROUNDED, border_style=_t("ok") if not inspection.blocking_issues else _t("error")),
+        _cockpit_panel(next_panel, title=Text("NEXT", style=_t("title")), box=box.ROUNDED, border_style=_t("border_primary")),
     ]
-    bottom_grid = Table.grid(expand=True, padding=(0, 1))
-    if width >= 118:
+    bottom_grid = Table.grid(expand=True, padding=(0, 2))
+    if width >= 150:
         for _ in range(4):
             bottom_grid.add_column(ratio=1)
         bottom_grid.add_row(*bottom_panels)
@@ -202,7 +283,7 @@ def _rich_overview_group(inspection: RunInspection, focus: str, width: int) -> A
         bottom_grid.add_row(bottom_panels[0], bottom_panels[1])
         bottom_grid.add_row(bottom_panels[2], bottom_panels[3])
 
-    return Group(main_grid, bottom_grid)
+    return Group(main_grid, Text(""), bottom_grid)
 
 
 def _overview(inspection: RunInspection, focus: str) -> str:
@@ -358,8 +439,28 @@ def _mark(status: str) -> str:
     return "○"
 
 
+def _stage_timeline_mark(status: str) -> str:
+    if status == "passed":
+        return "✓"
+    if status in {"pending", "missing"}:
+        return "○"
+    if status in {"needs_review", "unknown"}:
+        return "?"
+    if status == "rejected":
+        return "!"
+    return "○"
+
+
 def _artifact_mark(inspection: RunInspection, name: str) -> str:
     return "✓" if inspection.artifacts.get(name) else "○"
+
+
+def _artifact_line_style(line: str) -> str:
+    if line.startswith("✓"):
+        return _t("ok")
+    if line.startswith("!"):
+        return _t("error")
+    return _t("muted")
 
 
 def _issue_text(inspection: RunInspection) -> str:
@@ -373,6 +474,23 @@ def _operator_focus(focus: str) -> str:
         "audit": "Audit Creative OS artifacts before rendering",
         "none": "none",
     }.get(focus, "none")
+
+
+def _operator_focus_short(focus: str) -> str:
+    return {
+        "cli": "CLI cockpit refinement",
+        "render": "Prepare controlled render gate",
+        "audit": "Artifact audit before rendering",
+        "none": "none",
+    }.get(focus, "none")
+
+
+def _is_fixture_run(inspection: RunInspection) -> bool:
+    return "tests/fixtures/creative_os_runs" in str(inspection.run_dir)
+
+
+def _session_label(inspection: RunInspection) -> str:
+    return "fixture/demo" if _is_fixture_run(inspection) else "artifact read"
 
 
 def _render_paused(focus: str) -> str:
@@ -450,7 +568,7 @@ def _motion_items(inspection: RunInspection) -> list[dict[str, str]]:
         keyframe = str(prompt.get("source_keyframe_path") or "")
         keyframe_display = keyframe.replace(str(inspection.run_dir) + "/", "") if keyframe else "missing"
         summary = str(prompt.get("camera_motion") or prompt.get("motion_prompt") or "motion prompt present")
-        items.append({"scene_id": scene_id, "keyframe": keyframe_display, "summary": _shorten(summary, 48)})
+        items.append({"scene_id": scene_id, "keyframe": keyframe_display, "summary": _shorten(summary, 65)})
     return items
 
 
@@ -467,25 +585,27 @@ def _basename(path: str) -> str:
 
 def _status_style(status: str) -> str:
     if status == "ready_for_ltx_i2v_takes":
-        return "bold cyan"
+        return _t("next")
     if status in {"blocked_by_keyframe_review", "blocked_by_ltx_prompt_audit", "blocked"}:
-        return "bold red"
+        return f"bold {_t('error')}"
     if status == "completed":
-        return "bold green"
+        return f"bold {_t('ok')}"
     if status == "in_progress":
-        return "yellow"
-    return "dim"
+        return _t("warn")
+    return _t("muted")
 
 
-def _stage_style(status: str) -> str:
+def _stage_style(status: str, index: str | None = None) -> str:
+    if index == "09" and status == "pending":
+        return _t("active")
     if status == "passed":
-        return "green"
+        return _t("ok")
     if status == "pending":
-        return "cyan"
+        return _t("pending")
     if status == "needs_review":
-        return "yellow"
+        return _t("warn")
     if status == "rejected":
-        return "red"
+        return _t("error")
     if status in {"missing", "unknown"}:
-        return "dim"
-    return "white"
+        return _t("muted")
+    return _t("value")

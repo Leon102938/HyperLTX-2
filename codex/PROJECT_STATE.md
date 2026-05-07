@@ -6,6 +6,21 @@ Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E, 3A, 3B, 4A, 4B und
 - Kanonische Capability-Uebersicht: `/workspace/codex/CAPABILITY_MAP.md`
 
 ## Verifizierte Fakten
+- 2026-05-06 Creative OS Textual Cockpit V0.1 ist als separater TUI-Prototyp gebaut.
+- Neuer Entry: `scripts/creative_os_cockpit.py`; Start mit `--job-id creative-os-jungle-001 --runs-root /workspace/tests/fixtures/creative_os_runs`.
+- Die Textual-App nutzt den bestehenden `CreativeOSRunInspector`, zeigt Fixture/Demo-Session, no live checks und render paused, und bietet nur sichere Keybinds: `q` Quit, `r` Refresh/read-only reload, `h` Help.
+- `creative_os_status.py` plain/rich bleibt erhalten; keine Pipeline-Logik wurde geaendert.
+- `/workspace/agent_runs` bleibt fluechtig und wurde fuer V0.1 nicht als UI-/Testquelle benutzt oder mutiert.
+- Nicht gebaut/gestartet: Stage 8, Render, LTX, Video, API, n8n, Backend-Aufruf, Textual-Render-Aktion oder neue Creative-OS-Stages.
+- 2026-05-06 Creative OS Rich Cockpit V1.7 ist umgesetzt: Rich-Header ist kompakter, zeigt `fixture/demo` bei Fixture-Root, Active Workspace hat Scene-Karten plus technischen Flow-Streifen, und Stage 09 ist im Rich-Timeline-Stil als naechster technischer Schritt hervorgehoben.
+- V1.7 UI-Checks/Snapshots nutzen explizit `--runs-root /workspace/tests/fixtures/creative_os_runs`; `/workspace/agent_runs` bleibt fluechtig und wurde nicht veraendert.
+- Kein Stage 8, kein Render, kein LTX-/Video-/API-/n8n-/Backend-/Textual-Schritt und keine neue Creative-OS-Stage wurden gebaut.
+- 2026-05-06 Creative OS CLI Cockpit Design-Pass ist im Rich-Statusdashboard umgesetzt: zentrale Theme-Konstanten, Cockpit-Header, linke Sidebar mit System/Pipeline, dominante Active-Workspace-Flaeche, Scene-Job-Karten und Bottom-Grid fuer Skill Health, Artifacts, Issues und Next.
+- Der Statuspfad bleibt read-only: keine Run-Artefakte wurden veraendert, kein Stage 8, kein Render, kein LTX-/Video-/API-/n8n-/Backend-/Textual-Schritt wurde gestartet oder gebaut.
+- `--style plain` bleibt erhalten; `scripts/creative_os_status.py` kann mit `--runs-root` einen expliziten Run-Artefakt-Root lesen.
+- `/workspace/agent_runs` ist nur Default fuer fluechtige echte Run-Artefakte. Es ist keine Systemquelle, kein Config-Ort, kein Skill-Ort und keine Pflichtabhaengigkeit des CLI-Cockpits.
+- Tests nutzen eine isolierte Fixture unter `/workspace/tests/fixtures/creative_os_runs`, weil `/workspace/agent_runs/creative-os-jungle-001/creative_os` nach Pod-Reset fehlen kann; echte Runs muessen dann neu erzeugt werden.
+- Cockpit-Snapshots liegen unter `/workspace/cli_cockpit_snapshots/`; sie wurden gegen die Fixture erzeugt, nicht gegen echte Run-Artefakte.
 - 2026-05-05 Creative OS V1 Dry-Run-Schicht ist als isolierter Zusatzpfad unter `agent_core/creative_os/` umgesetzt.
 - Neuer Entry: `scripts/creative_os_dry_run.py`; er schreibt Artefakte nach `/workspace/agent_runs/<job_id>/creative_os/` und startet keine Bild-, Video-, VLM-, Batch-, n8n- oder Runtime-Backends.
 - Real funktionierende Stages: Input-Normalisierung, Intent Router, Skill Resolver, Creative Strategist, Beat/Hook Planner, Creative Judge, Scene Contracts, Keyframe Contracts, Z-Image Prompt Compiler und Decision Log/Report.

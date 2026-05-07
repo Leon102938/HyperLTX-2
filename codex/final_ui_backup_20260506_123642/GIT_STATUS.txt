@@ -1,0 +1,33 @@
+ M agent_core/creative_os/dashboard.py
+ M codex/CHANGELOG.md
+ M codex/HANDOFF.md
+ M codex/PROJECT_STATE.md
+ M init.sh
+ M requirements.txt
+ M scripts/agent_core_cli.py
+ M scripts/check_director_llm.py
+ M scripts/creative_os_status.py
+ M scripts/download_director_model.py
+ M scripts/download_qwen3_vl_model.py
+ M scripts/ensure_llama_cpp.sh
+ M scripts/ensure_qwen3_vl_review_runtime.sh
+ M scripts/qwen3_vl_review_subprocess.py
+ M scripts/serve_director_llm.sh
+ M tests/test_creative_os_status.py
+?? .ipynb_checkpoints/
+?? ACE-Step-1.5/acestep/third_parts/nano-vllm/nano_vllm.egg-info/
+?? ACE-Step-1.5/checkpoints/
+?? LTX-2/checkpoints/
+?? agent_core/creative_os/textual_cockpit.py
+?? backups/
+?? cli_cockpit_snapshots/
+?? codex/final_ui_backup_20260506_123642/
+?? creative_os_final_ui_diff_20260506_123642.patch
+?? design_refs/
+?? fastapi.log
+?? jupyter.log
+?? scripts/creative_os_cockpit.py
+?? tests/fixtures/
+?? tests/test_creative_os_cockpit.py
+?? untitled.txt
+?? venvs/

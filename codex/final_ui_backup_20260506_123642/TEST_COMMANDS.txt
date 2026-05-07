@@ -1,0 +1,18 @@
+Commands run during final backup verification:
+
+1. Syntax check:
+python3 -m py_compile /workspace/agent_core/creative_os/textual_cockpit.py /workspace/scripts/creative_os_cockpit.py
+Result: OK
+
+2. Textual cockpit unit test:
+python3 -m unittest /workspace/tests/test_creative_os_cockpit.py -v
+Result: OK, 1 test passed
+
+3. Creative OS status CLI regression tests:
+python3 -m unittest /workspace/tests/test_creative_os_status.py -v
+Result: OK, 13 tests passed
+
+Manual launch command for the final cockpit:
+env -u NO_COLOR COLORTERM=truecolor python3 /workspace/scripts/creative_os_cockpit.py \
+  --job-id creative-os-jungle-001 \
+  --runs-root /workspace/tests/fixtures/creative_os_runs

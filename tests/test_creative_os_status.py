@@ -12,17 +12,19 @@ from agent_core.creative_os.dashboard import render_dashboard, render_rich_dashb
 from agent_core.creative_os.run_inspector import CreativeOSRunInspector
 
 
-SOURCE_RUN = Path("/workspace/agent_runs/creative-os-jungle-001/creative_os")
+FIXTURE_RUNS_ROOT = Path("/workspace/tests/fixtures/creative_os_runs")
+SOURCE_RUN = FIXTURE_RUNS_ROOT / "creative-os-jungle-001" / "creative_os"
 
 
 class CreativeOSStatusTests(unittest.TestCase):
     def test_inspector_detects_existing_artifacts_and_next_action(self) -> None:
-        inspection = CreativeOSRunInspector().inspect("creative-os-jungle-001")
+        inspector = CreativeOSRunInspector(runs_root=FIXTURE_RUNS_ROOT)
+        inspection = inspector.inspect("creative-os-jungle-001")
         self.assertTrue(inspection.exists)
         self.assertEqual("ready_for_ltx_i2v_takes", inspection.status)
         self.assertFalse(inspection.blocking_issues)
         self.assertTrue(inspection.artifacts["ltx_motion_prompts.json"])
-        self.assertIn("Stage 09", CreativeOSRunInspector().next_action(inspection))
+        self.assertIn("Stage 09", inspector.next_action(inspection))
 
     def test_missing_files_do_not_crash(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -35,6 +37,16 @@ class CreativeOSStatusTests(unittest.TestCase):
             self.assertEqual("missing", inspection.stages[1].status)
             self.assertIn("Input normalized", render_dashboard(inspection, view="overview"))
             self.assertIn("CURRENT POSITION", render_dashboard(inspection, view="overview"))
+
+    def test_missing_run_message_explains_disposable_agent_runs(self) -> None:
+        inspection = CreativeOSRunInspector(runs_root="/workspace/agent_runs").inspect("definitely-missing-run")
+        dashboard = render_rich_dashboard(inspection, view="overview")
+        self.assertIn("Run not found:", dashboard)
+        self.assertIn("job_id: definitely-missing-run", dashboard)
+        self.assertIn("searched: /workspace/agent_runs/definitely-missing-run/creative_os", dashboard)
+        self.assertIn("This is not a system error.", dashboard)
+        self.assertIn("agent_runs contains disposable run artifacts only.", dashboard)
+        self.assertIn("Use --runs-root for fixtures or create a real run first.", dashboard)
 
     def test_needs_review_or_rejected_generates_issue(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -50,8 +62,9 @@ class CreativeOSStatusTests(unittest.TestCase):
             self.assertIn("visible text", render_dashboard(inspection, view="issues"))
 
     def test_skill_health_separates_optional_and_blocking_missing(self) -> None:
-        inspection = CreativeOSRunInspector().inspect("creative-os-jungle-001")
-        health = CreativeOSRunInspector().skill_health(inspection)
+        inspector = CreativeOSRunInspector(runs_root=FIXTURE_RUNS_ROOT)
+        inspection = inspector.inspect("creative-os-jungle-001")
+        health = inspector.skill_health(inspection)
         self.assertEqual(["modes/jungle_adventure"], health["missing_optional"])
         self.assertEqual([], health["blocking_missing"])
         self.assertEqual("ok", health["status"])
@@ -60,7 +73,7 @@ class CreativeOSStatusTests(unittest.TestCase):
         self.assertIn("blocking missing:", dashboard)
 
     def test_overview_uses_cockpit_layout(self) -> None:
-        inspection = CreativeOSRunInspector().inspect("creative-os-jungle-001")
+        inspection = CreativeOSRunInspector(runs_root=FIXTURE_RUNS_ROOT).inspect("creative-os-jungle-001")
         dashboard = render_dashboard(inspection, view="overview", focus="cli")
         self.assertIn("╭", dashboard)
         self.assertIn("│ CONTENT MASCHINE LIVE", dashboard)
@@ -74,7 +87,7 @@ class CreativeOSStatusTests(unittest.TestCase):
         self.assertNotIn("keyframes/scene_01.png", dashboard)
 
     def test_all_view_uses_clear_separators(self) -> None:
-        inspection = CreativeOSRunInspector().inspect("creative-os-jungle-001")
+        inspection = CreativeOSRunInspector(runs_root=FIXTURE_RUNS_ROOT).inspect("creative-os-jungle-001")
         dashboard = render_dashboard(inspection, view="all", focus="cli")
         self.assertIn("────────────────", dashboard)
         self.assertIn("SKILLS\n────────────────", dashboard)
@@ -103,6 +116,8 @@ class CreativeOSStatusTests(unittest.TestCase):
                 "cli",
                 "--style",
                 "plain",
+                "--runs-root",
+                str(FIXTURE_RUNS_ROOT),
             ],
             cwd="/workspace",
             text=True,
@@ -130,6 +145,8 @@ class CreativeOSStatusTests(unittest.TestCase):
                 "cli",
                 "--style",
                 "plain",
+                "--runs-root",
+                str(FIXTURE_RUNS_ROOT),
             ],
             cwd="/workspace",
             text=True,
@@ -142,9 +159,10 @@ class CreativeOSStatusTests(unittest.TestCase):
         self.assertIn("────────────────", all_view.stdout)
 
     def test_rich_overview_contains_cockpit_panels(self) -> None:
-        inspection = CreativeOSRunInspector().inspect("creative-os-jungle-001")
+        inspection = CreativeOSRunInspector(runs_root=FIXTURE_RUNS_ROOT).inspect("creative-os-jungle-001")
         dashboard = render_rich_dashboard(inspection, view="overview", focus="cli")
         self.assertIn("CONTENT MASCHINE LIVE", dashboard)
+        self.assertIn("fixture/demo", dashboard)
         self.assertIn("SYSTEM STATUS", dashboard)
         self.assertIn("PIPELINE MAP", dashboard)
         self.assertIn("ACTIVE WORKSPACE", dashboard)
@@ -153,6 +171,7 @@ class CreativeOSStatusTests(unittest.TestCase):
         self.assertIn("scene_01", dashboard)
         self.assertIn("READY FOR LTX", dashboard)
         self.assertIn("Stage output:", dashboard)
+        self.assertIn("TECHNICAL FLOW", dashboard)
         self.assertIn("SKILL HEALTH", dashboard)
         self.assertIn("ARTIFACTS", dashboard)
         self.assertIn("ISSUES", dashboard)
@@ -161,7 +180,7 @@ class CreativeOSStatusTests(unittest.TestCase):
         self.assertNotIn("ETA", dashboard)
 
     def test_rich_missing_package_falls_back_to_plain(self) -> None:
-        inspection = CreativeOSRunInspector().inspect("creative-os-jungle-001")
+        inspection = CreativeOSRunInspector(runs_root=FIXTURE_RUNS_ROOT).inspect("creative-os-jungle-001")
         real_import = __import__
 
         def fake_import(name, *args, **kwargs):
@@ -197,6 +216,8 @@ class CreativeOSStatusTests(unittest.TestCase):
                 "cli",
                 "--style",
                 "rich",
+                "--runs-root",
+                str(FIXTURE_RUNS_ROOT),
             ],
             cwd="/workspace",
             text=True,
@@ -218,6 +239,8 @@ class CreativeOSStatusTests(unittest.TestCase):
                 "cli",
                 "--style",
                 "rich",
+                "--runs-root",
+                str(FIXTURE_RUNS_ROOT),
             ],
             cwd="/workspace",
             text=True,

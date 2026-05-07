@@ -1,0 +1,5 @@
+[
+  {"scene_id":"scene_01","source_keyframe_path":"/workspace/tests/fixtures/creative_os_runs/creative-os-jungle-001/creative_os/keyframes/scene_01.png","camera_motion":"slow canopy push-in, sunrise haze, stable jungle frame"},
+  {"scene_id":"scene_02","source_keyframe_path":"/workspace/tests/fixtures/creative_os_runs/creative-os-jungle-001/creative_os/keyframes/scene_02.png","camera_motion":"controlled suspense forward glide, no new creature"},
+  {"scene_id":"scene_03","source_keyframe_path":"/workspace/tests/fixtures/creative_os_runs/creative-os-jungle-001/creative_os/keyframes/scene_03.png","camera_motion":"calm golden path reveal, stable forward motion"}
+]
