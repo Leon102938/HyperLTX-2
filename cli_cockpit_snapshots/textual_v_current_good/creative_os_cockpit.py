@@ -24,17 +24,6 @@ def main() -> int:
         default="/workspace/agent_runs",
         help="Root containing disposable Creative OS run artifacts. Use /workspace/tests/fixtures/creative_os_runs for design checks.",
     )
-    parser.add_argument(
-        "--watch",
-        action="store_true",
-        help="Reload run artifacts read-only on a timer.",
-    )
-    parser.add_argument(
-        "--refresh-sec",
-        type=float,
-        default=2.0,
-        help="Watch-mode refresh interval in seconds.",
-    )
     args = parser.parse_args()
 
     os.environ.setdefault("COLORTERM", "truecolor")
@@ -51,10 +40,8 @@ def main() -> int:
 
     if not args.job_id:
         parser.error("--job-id is required unless --theme-preview is used")
-    if args.refresh_sec <= 0:
-        parser.error("--refresh-sec must be greater than 0")
 
-    run_cockpit(args.job_id, args.runs_root, watch=args.watch, refresh_sec=args.refresh_sec)
+    run_cockpit(args.job_id, args.runs_root)
     return 0
 
 

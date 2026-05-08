@@ -1,5 +1,41 @@
 # HANDOFF.md
 
+## 2026-05-07 Final Closeout Cockpit Semantics + Video Proof
+- Cockpit-Semantik ist final verengt: Director-Fallback, Director inactive, `final.mp4 missing`, Run missing/unknown gehoeren in Issues/Next; Skill Health zeigt keine Runtime-Probleme mehr.
+- Issues Tile nutzt Severity-Klassen: `issues-none`, `issues-warning`, `issues-error`; Border bleibt im bestehenden Look, nur Severity-Farbe wechselt.
+- Finaler Proof-Run: `cockpit-video-smoke-001` unter `/workspace/agent_runs`, ohne `--stop-after`, `director_mode=llm_augmented`, `director_llm_active=true`, `final.mp4` vorhanden.
+- Cockpit V0.4 Watch gegen den Proof-Run zeigte `FINAL MP4 ✓ present`, `agent_core`, Watch on, keine Director-Fallback-Issue und Skill Health `✓ ok`.
+- Keine neue Architektur, kein Redesign, keine n8n-/Settings-/Pipeline-Integration.
+
+## 2026-05-07 Director 8011 Restore + Cockpit Smoke
+- Director 8011 ist wieder erreichbar. Fix war kein Rebuild: `ensure_llama_cpp.sh` reparierte vorhandene `llama.cpp`-Runtime, danach startete `init.sh` den `llama-server`.
+- Vorher: `/v1/models` auf 8011 nicht erreichbar, kein `llama-server` Prozess; `llama-server` hatte kein Execute-Bit und lokale `.so.0`-Links fehlten.
+- Nachher: `check_director_llm.py` meldet `director_llm_active=true` fuer `Qwen_Qwen3.6-35B-A3B-Q4_K_M.gguf`.
+- Neuer Smoke-Run: `cockpit-realrun-smoke-002`, Agent-Core-Root-Artefakte vorhanden, `director_mode=llm_augmented`, `director_llm_active=true`, kein `final.mp4`, weil bewusst mit `--stop-after model_prompts` gelaufen.
+- Cockpit V0.4 Watch gegen den Run bleibt read-only; kein Director-Fallback-Issue sichtbar, `final.mp4 missing` bleibt korrekt sichtbar.
+
+## 2026-05-07 Textual Cockpit V0.4
+- Cockpit-State erkennt jetzt `creative_os`, `agent_core`, `missing` und `unknown` Run-Typen.
+- Agent-Core-Runs werden read-only direkt aus `/workspace/agent_runs/<job-id>` gelesen; es ist kein `creative_os/` Unterordner noetig, damit Header/Artifacts/Issues sinnvolle Daten zeigen.
+- Sichtbar gemappte Agent-Core-Dateien: `result.json`, `state.json`, `plan.json`, `scene_plan.json`, `model_prompts.json`, `prompt_audit.json`, `director_output.json`, `final.mp4`.
+- `rule_based_fallback`, `director_llm_active=false` und fehlendes `final.mp4` erscheinen als Issues mit Next-Hinweis auf Director 8011 bzw. unvollstaendigen Final Output.
+- Creative-OS-Fixture-Start bleibt kompatibel; keine Layout-/Theme-Aenderung, keine Pipeline-Integration, kein Render, kein LTX, kein Director-Fix.
+
+## 2026-05-07 Textual Cockpit V0.3
+- Cockpit ist jetzt fuer echte Run-Artefakte read-only vorbereitet: `python3 /workspace/scripts/creative_os_cockpit.py --job-id <job-id>` nutzt defaultmaessig `/workspace/agent_runs`.
+- Fixture/Demo bleibt unveraendert: `--runs-root /workspace/tests/fixtures/creative_os_runs` zeigt `Session fixture/demo`.
+- Watch Mode: `--watch --refresh-sec 2` liest State/Inspector-Daten periodisch neu; `r` bleibt manueller Refresh, `q` beendet.
+- Fehlende Runs zeigen einen Missing-State im Workspace statt Python-Traceback.
+- `/workspace/agent_runs` bleibt fluechtig und nur Datenquelle; das Cockpit schreibt dort nichts und integriert keine Pipeline-/Render-Aktionen.
+- Naechste sinnvolle Phase: Real-Run-Watch mit einem aktuellen echten Run visuell pruefen und danach gezielt entscheiden, welche Run-Artefakte zusaetzlich angezeigt werden sollen.
+
+## 2026-05-07 Textual Cockpit Panel V0.2
+- Textual Cockpit ist intern modularisiert unter `agent_core/creative_os/cockpit/`.
+- Hauptmodule: `app.py`, `theme.py`, `layout.py`, `panel_registry.py`, `panel_types.py`, `state_adapter.py`, plus `panels/` fuer Header, System Status, Pipeline Map, Active Workspace, Skill Health, Artifacts, Issues und Next.
+- `agent_core/creative_os/textual_cockpit.py` bleibt als Kompatibilitaetsimport fuer Script/Tests erhalten.
+- Sichtbarer Look wurde bewusst beibehalten; keine echte Pipeline-Integration, kein Stage 8, kein Render, kein LTX, kein Video, keine API und kein n8n.
+- Naechste sinnvolle Phase: Real-Run-/Watch-/Integration entwerfen, ohne die Panel-Registry wieder hart mit Pipeline-Ausfuehrung zu koppeln.
+
 ## 2026-05-06 Creative OS Textual Cockpit V0.1
 - Textual-TUI-Prototyp ist gebaut: `scripts/creative_os_cockpit.py`.
 - Startbefehl: `python3 /workspace/scripts/creative_os_cockpit.py --job-id creative-os-jungle-001 --runs-root /workspace/tests/fixtures/creative_os_runs`.

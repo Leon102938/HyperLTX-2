@@ -28,6 +28,8 @@
 - noch leer
 
 ## DONE
+- Final Closeout 2026-05-07: Textual Cockpit Issue-Semantik fixiert, Skill Health von Runtime-Issues getrennt, Issues Severity/Border umgesetzt.
+- Finaler Video-Proof `cockpit-video-smoke-001`: `director_mode=llm_augmented`, `director_llm_active=true`, `final.mp4` vorhanden und im Cockpit als present sichtbar.
 - Creative OS CLI Dashboard V1 gebaut: read-only `scripts/creative_os_status.py` mit Views `overview`, `skills`, `stages`, `artifacts`, `issues`, `next`, `all`.
 - Dashboard-Beleg `creative-os-jungle-001`: `ready_for_stage_8`, Stage 01-08 passed, Stage 09 pending, none blocking.
 - Dashboard-Tests gruen: `python3 -m unittest /workspace/tests/test_creative_os_status.py -v`.

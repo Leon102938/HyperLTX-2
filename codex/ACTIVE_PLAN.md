@@ -26,6 +26,8 @@ Eine kleine Director-/Brain-Schicht vor dem bestehenden Planner bauen, die Jobs 
 Den bereits vorbereiteten Director-Layer produktiv an ein echtes lokales Director-Modell anbinden, bevorzugt Qwen3.6-35B-A3B in praktikabler quantisierter Form als GGUF `Q4_K_M`, ohne Fake-Integration, ohne neuen Mega-Stack und mit sauberem Fallback auf den bisherigen regelbasierten Flow.
 
 ## Aktueller Operativer Fokus
+- Final Closeout 2026-05-07 abgeschlossen: Textual Cockpit V0.4 trennt Skill Health von Runtime-/Director-/final.mp4-Issues; Issues Severity ist sichtbar; `cockpit-video-smoke-001` belegt `llm_augmented` plus `final.mp4 present` im Cockpit.
+- Naechster sinnvoller Schritt: nach Pod-Restore Archiv wieder einspielen, Director 8011 kurz pruefen und dann erst gezielt entscheiden, ob ein separater Publish-/Quality-Gate-Schritt bearbeitet wird.
 - Creative OS CLI Dashboard V1 ist gebaut. Aktueller read-only Inspect-Befehl: `python3 /workspace/scripts/creative_os_status.py --job-id creative-os-jungle-001 --view overview`.
 - Dashboard-Status fuer `creative-os-jungle-001`: `ready_for_stage_8`, Stage 01-08 passed, Stage 09 pending, keine blockierenden Issues.
 - Creative OS Stage 7 ist gebaut und real fuer `creative-os-jungle-001` gelaufen: 3 passed Keyframes -> 3 LTX Motion Prompts -> Audit passed; kein LTX-Render gestartet.
