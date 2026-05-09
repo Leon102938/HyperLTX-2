@@ -16,25 +16,21 @@ def render_brand(_state: CockpitState) -> Text:
 
 def render_details(state: CockpitState) -> Text:
     data = state.header
+    mode = _shorten(data.mode + " · " + data.topic, 76)
+    format_line = f"{data.orientation} · {data.resolution} · {data.duration}s · {data.scene_count} scenes"
     rows = [
-        (("JOB", data.job_id), ("PIPELINE", data.pipeline)),
-        None,
-        (("MODE", _shorten(data.mode + " · " + data.topic, 78)),),
-        (("FORMAT", f"{data.orientation} · {data.resolution} · {data.duration}s · {data.scene_count} scenes"),),
-        None,
-        (("STATUS", data.status), ("FOCUS", "CLI cockpit refinement")),
-        (("RENDER", data.render_state),),
+        ("JOB", data.job_id),
+        ("MODE", mode),
+        ("FORMAT", format_line),
+        ("PIPELINE", data.pipeline),
+        ("STATUS", data.status),
+        ("RENDER", data.render_state),
+        ("FOCUS", "CLI cockpit refinement"),
     ]
     details = Text()
-    for row in rows:
-        if row is None:
-            details.append("\n")
-            continue
-        for index, (label, value) in enumerate(row):
-            if index:
-                details.append("     ")
-            details.append(f"{label:<9}", style="bold #67E8F9")
-            details.append(f"{str(value):<36}", style="#E5E7EB")
+    for label, value in rows:
+        details.append(f"{label:<9}  ", style="bold #67E8F9")
+        details.append(_shorten(str(value), 76), style="#E5E7EB")
         details.append("\n")
     return details
 

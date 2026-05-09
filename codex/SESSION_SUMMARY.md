@@ -1,42 +1,54 @@
-# Session Summary - Creative OS CLI Cockpit V1.6
+# Panel Session Backup 2026-05-08
 
-## Gebaut
-- Creative OS CLI Cockpit V1.6 als finaler Rich-Design-Pass.
-- `--style rich` zeigt ein sauberes Operator-Cockpit mit Header, linker Sidebar, Pipeline Map, Active Workspace, Scene Jobs und Bottom Grid.
-- `--style plain` bleibt stabil und Default.
+## Datum
+- 2026-05-08
 
-## Geaenderte Dateien
-- `/workspace/agent_core/creative_os/dashboard.py`
-- `/workspace/tests/test_creative_os_status.py`
-- `/workspace/codex/HANDOFF.md`
-- `/workspace/codex/PROJECT_STATE.md`
-- `/workspace/codex/CHANGELOG.md`
-- `/workspace/codex/ACTIVE_PLAN.md`
-- `/workspace/codex/TASK_BOARD.md`
+## Was heute gemacht wurde
+- Cockpit-/Panel-Design iterativ verfeinert.
+- Header-Metadaten stabilisiert und lesbarer strukturiert.
+- Active Workspace CURRENT POSITION stabilisiert.
+- PROMPTS / IMAGE JOBS als gemeinsamer Job-Board-Bereich mit Preview-Zone, Status-Zone und vorbereitetem Expanded/Collapsed-Renderpfad ausgebaut.
+- Keine Runs, kein Render, keine API-/n8n-/Pipeline-Integration gebaut.
 
-## Tests
-- `python3 -m unittest /workspace/tests/test_creative_os_status.py -v`
-- Ergebnis: 12 Tests OK.
+## Gesicherte Dateien
 
-## CLI Snapshots
-- `/workspace/cli_cockpit_snapshots/overview_rich_cli.txt`
-- `/workspace/cli_cockpit_snapshots/all_rich_cli.txt`
-- `/workspace/cli_cockpit_snapshots/overview_plain_cli.txt`
+### Codex-Dokumente
+- docs/CHANGELOG.md
+- docs/HANDOFF.md
+- docs/PROJECT_STATE.md
 
-## Bewusst Nicht Gebaut
-- Kein Stage 8 Render.
-- Kein LTX-Render.
-- Kein Video.
-- Kein Backend-Aufruf.
-- Kein n8n.
-- Keine API.
-- Keine neuen Creative-OS-Stages.
-- Kein Textual.
-- Keine Mutation von Creative-OS-Run-Artefakten.
+### Cockpit-/Panel-Code
+- code/agent_core/creative_os/cockpit/panels/active_workspace_panel.py
+- code/agent_core/creative_os/cockpit/panels/header_panel.py
+- code/agent_core/creative_os/cockpit/state_adapter.py
+- code/tests/test_creative_os_cockpit.py
 
-## Archivstatus
-- Archivordner enthaelt Code, Tests, Doku, Snapshots, diese Session Summary und zusaetzliche bereits getrackte geaenderte Dateien aus `git diff --name-only`.
-- Vollstaendig: ja.
+## Geändert, aber bewusst nicht gesichert
+- init.sh
+- scripts/agent_core_cli.py
+- scripts/check_director_llm.py
+- scripts/creative_os_cockpit.py
+- scripts/creative_os_status.py
+- scripts/download_director_model.py
+- scripts/download_qwen3_vl_model.py
+- scripts/ensure_llama_cpp.sh
+- scripts/ensure_qwen3_vl_review_runtime.sh
+- scripts/qwen3_vl_review_subprocess.py
+- scripts/serve_director_llm.sh
+- tools/llama.cpp/build/bin/llama-cli
+- tools/llama.cpp/build/bin/llama-server
+- ACE-Step-1.5/acestep/third_parts/nano-vllm/nano_vllm.egg-info/
+- ACE-Step-1.5/checkpoints/
+- LTX-2/checkpoints/
+- fastapi.log
+- jupyter.log
+- venvs/
 
-## Naechster Enger Schritt
-- Design visuell vom Operator pruefen.
+Diese Dateien sind nicht Teil dieses kleinen Panel-Backups, weil sie Runtime-, Script-, Binary-, Modell-, Log- oder Environment-Bezug haben oder untracked Artefakte sind.
+
+## Vollstaendigkeit
+- Das Backup ist fuer den heutigen Panel-/Codex-Stand vollstaendig.
+- Es ist kein vollstaendiges Projektarchiv.
+
+## Naechster enger Schritt
+- Expand/Collapse-Auswahl im bestehenden Textual-Cockpit minimal bedienbar machen.

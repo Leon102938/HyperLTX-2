@@ -6,6 +6,16 @@ Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E, 3A, 3B, 4A, 4B und
 - Kanonische Capability-Uebersicht: `/workspace/codex/CAPABILITY_MAP.md`
 
 ## Verifizierte Fakten
+- 2026-05-08 Textual Cockpit Header/Active-Workspace Ref-Pass: oberer Header ist jetzt als Brand-/Command-Banner-/Meta-Spalte strukturiert, ohne Grundfarben oder Hauptlayout umzubauen.
+- Active Workspace nutzt innere Boxen fuer Current Position + Pipeline Path, Prompts/Image Jobs und Pipeline Flow; die bisherige einfache Scene-Card-Liste wurde durch kompakte Job-Zeilen ersetzt.
+- Fixture-Startcheck lief ohne Traceback; `cockpit-video-smoke-001` war in `/workspace/agent_runs` nicht vorhanden, daher kein Real-Run-Startcheck.
+- Tests gruen: `python3 -m unittest /workspace/tests/test_creative_os_cockpit.py -v` und `python3 -m unittest /workspace/tests/test_creative_os_status.py -v`.
+- Keine Runtime-/Director-Arbeit, keine neuen Runs, kein Render, keine LTX-/Pipeline-/API-/n8n-Integration.
+- 2026-05-08 Textual Cockpit Active Workspace Detail Pass: nur das bestehende Active-Workspace-Panel wurde enger nutzbar gemacht; Status-Zone, Stage Output, Scene Cards und Run Notes zeigen mehr vorhandene Artefaktdaten read-only.
+- Agent-Core-Runs zeigen im Active Workspace jetzt final.mp4 present/missing, scene count, director_mode, optional stop_after und gekuerzte Scene-/Model-Prompt-Zusammenfassungen.
+- Creative-OS-Fixture bleibt sichtbar kompatibel: 3 Scene Cards bleiben kompakt im bestehenden dunklen blau-schwarzen Look mit bestehenden Borders/Farben.
+- Tests gruen: `python3 -m unittest /workspace/tests/test_creative_os_cockpit.py -v` und `python3 -m unittest /workspace/tests/test_creative_os_status.py -v`.
+- Keine neuen Runs, kein Render, keine LTX-/Pipeline-/API-/n8n-Integration.
 - 2026-05-07 Final Closeout: Cockpit trennt Runtime-/Director-/final.mp4-Issues von Skill Health; Skill Health bleibt auf Skill-System-Zustand beschraenkt.
 - Issues Severity im Textual Cockpit: `none` -> cyan/blau, `warning` -> amber, `error` -> rot.
 - Finaler Video-Smoke-Run `/workspace/agent_runs/cockpit-video-smoke-001`: `director_mode=llm_augmented`, `director_llm_active=true`, `final.mp4` vorhanden, `result.json.final_phase=assembled`, `state.json.current_phase=done`.

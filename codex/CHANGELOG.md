@@ -1,5 +1,19 @@
 # CHANGELOG.md
 
+## 2026-05-08 Textual Cockpit Header / Active Workspace Reference Pass
+- Header oben naeher an Kommandozentrale-Struktur gebracht: linke CM-Brand-/Titelzone, mittlere Command-Banner-Metadaten und rechte Time/Session/Operator/Run-Type/Watch-Spalte.
+- Active Workspace oben in klare innere Subbereiche gegliedert: `CURRENT POSITION AND PIPELINE PATH`, `PROMPTS / IMAGE JOBS` und `PIPELINE FLOW`.
+- Alte Scene-Card-Liste im Active Workspace durch kompakte Prompt-/Image-Job-Zeilen ersetzt; Texte werden gekuerzt, Source/Keyframe und Status bleiben sichtbar.
+- Pipeline Path und Flow sind statisch/read-only aus Run-Typ und vorhandenen Artefaktdaten abgeleitet; keine Fake-Livechecks, keine ETA, keine Prozentwerte.
+- Keine Render-, LTX-, API-, n8n- oder Pipeline-Integration und keine neuen Runs.
+
+## 2026-05-08 Textual Cockpit Active Workspace Detail Pass
+- Active Workspace im bestehenden Textual Cockpit verdichtet: zweispaltige Status-Zone mit Current Step, Last Passed, Next Technical, Operator Focus, Render Paused, Run Type, Final MP4 und Director Mode.
+- Stage Output zeigt jetzt read-only kompakte Run-Ausgaben fuer Creative-OS-Fixtures und Agent-Core-Runs, inklusive Scene Count, final.mp4 Status, stop_after und director_mode falls vorhanden.
+- Scene Cards bleiben im bestehenden Look, zeigen fuer Agent-Core-Runs read-only Scene-Plan-/Model-Prompt-Zusammenfassungen und gekuerzte Texte innerhalb der festen Card-Breite.
+- Run Notes ergaenzt: Session, Watch-Status und Hinweis auf no live backend calls/read-only view.
+- Keine Pipeline-Integration, keine API-/n8n-Integration, kein Render und keine neuen Runs.
+
 ## 2026-05-07 Final Closeout Cockpit Semantics + Video Proof
 - Textual Cockpit Issue-Semantik verengt: Director-/Runtime-Probleme und `final.mp4`-Status bleiben im Issues/Next-Kontext; Skill Health zeigt nur Skill-System-Zustand.
 - Issues Panel hat jetzt abgeleitete Severity `none|warning|error` und passende Border-Farben: cyan/blau fuer keine Issues, amber fuer Fallback/Degraded, rot fuer Blocking/Error.

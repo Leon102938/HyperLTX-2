@@ -33,16 +33,43 @@ class CreativeOSCockpitTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(FIXTURE_RUNS_ROOT / "creative-os-jungle-001", app.state.data_source_path)
             self.assertTrue(app.state.run_found)
             self.assertFalse(app.state.watch_enabled)
-            text = app.query_one("#workspace").renderable
-            self.assertIn("SCENE JOBS", str(text))
+            text = _widget_text(app.query_one("#workspace"))
+            self.assertIn("CURRENT POSITION", str(text))
+            self.assertNotIn("PIPELINE PATH", str(text))
+            self.assertIn("PROMPTS / IMAGE JOBS", str(text))
+            self.assertNotIn("PIPELINE FLOW", str(text))
+            self.assertNotIn("RUN NOTES", str(text))
+            self.assertIn("FINAL MP4", str(text))
+            self.assertIn("DIRECTOR MODE", str(text))
+            self.assertIn("CURRENT STEP", str(text))
+            self.assertIn("OPERATOR FOCUS", str(text))
+            self.assertIn("RENDER PAUSED", str(text))
+            self.assertIn("LAST PASSED", str(text))
+            self.assertIn("NEXT TECHNICAL", str(text))
+            self.assertIn("RUN TYPE", str(text))
+            self.assertIn("not_checked", str(text))
             self.assertIn("scene_01", str(text))
             self.assertIn("scene_03", str(text))
-            self.assertIn("READY FOR LTX", str(text))
-            brand = str(app.query_one("#header-brand").renderable)
+            self.assertIn("ready", str(text))
+            self.assertIn("PREVIEW", str(text))
+            self.assertIn("JOB / PROMPT", str(text))
+            self.assertIn("STATUS", str(text))
+            self.assertIn("details", str(text))
+            self.assertIn("prompt:", str(text))
+            self.assertIn("source:", str(text))
+            self.assertIn(">", str(text))
+            self.assertIn("v", str(text))
+            self.assertNotIn("negative_prompt", str(text))
+            brand = _widget_text(app.query_one("#header-brand"))
             self.assertIn("CONTENT MASCHINE LIVE", brand)
             self.assertNotIn("▛", brand)
-            self.assertIn("fixture/demo", str(app.query_one("#header-meta").renderable))
-            self.assertIn("Watch off", str(app.query_one("#keybar").renderable))
+            header_details = _widget_text(app.query_one("#header-details"))
+            self.assertIn("JOB        creative-os-jungle-001", header_details)
+            self.assertIn("PIPELINE   shortform_storyboard_v1", header_details)
+            self.assertNotIn("JOBcreative-os-jungle-001", header_details)
+            self.assertNotIn("PIPELINEshortform_storyboard_v1", header_details)
+            self.assertIn("fixture/demo", _widget_text(app.query_one("#header-meta")))
+            self.assertIn("Watch off", _widget_text(app.query_one("#keybar")))
             await pilot.press("h")
             self.assertTrue(app.query_one("#help-panel").has_class("visible"))
             await pilot.press("r")
@@ -60,11 +87,11 @@ class CreativeOSCockpitTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual("missing", app.state.session_mode)
             self.assertEqual(default_root / missing_job, app.state.data_source_path)
             self.assertFalse(app.state.run_found)
-            workspace = str(app.query_one("#workspace").renderable)
+            workspace = _widget_text(app.query_one("#workspace"))
             self.assertIn("Run not found", workspace)
             self.assertIn(f"searched: {default_root / missing_job}", workspace)
             self.assertIn("use --runs-root for fixture/demo data or create a real run first", workspace)
-            self.assertIn("missing", str(app.query_one("#header-meta").renderable))
+            self.assertIn("missing", _widget_text(app.query_one("#header-meta")))
 
         self.assertFalse(missing_path.exists())
 
@@ -150,15 +177,68 @@ class CreativeOSCockpitTests(unittest.IsolatedAsyncioTestCase):
                 self.assertTrue(app.query_one("#issues-tile").has_class("issues-warning"))
                 self.assertIn("✓ result.json", [line for line, _ok in app.state.artifacts.lines])
                 self.assertIn("○ final.mp4", [line for line, _ok in app.state.artifacts.lines])
-                workspace = str(app.query_one("#workspace").renderable)
+                workspace = _widget_text(app.query_one("#workspace"))
+                self.assertIn("CURRENT POSITION", workspace)
+                self.assertIn("PROMPTS / IMAGE JOBS", workspace)
+                self.assertNotIn("PIPELINE PATH", workspace)
+                self.assertNotIn("PIPELINE FLOW", workspace)
+                self.assertIn("PREVIEW", workspace)
+                self.assertIn("JOB / PROMPT", workspace)
+                self.assertIn("details", workspace)
                 self.assertIn("scene_01", workspace)
                 self.assertIn("compact agent-core scene", workspace)
-                self.assertIn("AGENT CORE PLAN", workspace)
+                self.assertIn("FINAL MP4", workspace)
+                self.assertIn("○ missing", workspace)
+                self.assertIn("DIRECTOR MODE", workspace)
+                self.assertIn("rule_based_fallback", workspace)
                 self.assertNotIn("READY FOR LTX", workspace)
-                self.assertIn("agent_core", str(app.query_one("#header-meta").renderable))
+                self.assertIn("agent_core", _widget_text(app.query_one("#header-meta")))
 
             after = sorted(path.relative_to(run_dir) for path in run_dir.rglob("*"))
             self.assertEqual(before, after)
+
+    async def test_agent_core_final_mp4_present_is_shown_in_active_workspace(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            runs_root = Path(temp_dir)
+            run_dir = runs_root / "cockpit-agent-core-final"
+            run_dir.mkdir()
+            self._write_json(run_dir / "result.json", {"job_id": "cockpit-agent-core-final", "success": True, "final_phase": "assembled"})
+            self._write_json(run_dir / "state.json", {"job_id": "cockpit-agent-core-final", "status": "done", "current_phase": "done"})
+            self._write_json(
+                run_dir / "plan.json",
+                {
+                    "job_id": "cockpit-agent-core-final",
+                    "selected_pipeline": "ti2vid",
+                    "director_output": {"mode": "llm_augmented", "llm_active": True},
+                },
+            )
+            self._write_json(
+                run_dir / "scene_plan.json",
+                {
+                    "scene_count": 1,
+                    "scenes": [{"scene_id": "scene_01", "description": "simple completed scene"}],
+                },
+            )
+            self._write_json(
+                run_dir / "director_output.json",
+                {
+                    "director_mode": "llm_augmented",
+                    "director_llm_active": True,
+                },
+            )
+            self._write_json(run_dir / "model_prompts.json", {"scenes": [{"scene_id": "scene_01", "model_prompt": "short model prompt summary"}]})
+            (run_dir / "final.mp4").write_bytes(b"fake mp4 marker for read-only UI test")
+
+            app = CreativeOSCockpitApp(CockpitArgs(job_id="cockpit-agent-core-final", runs_root=runs_root))
+            async with app.run_test():
+                workspace = _widget_text(app.query_one("#workspace"))
+                self.assertIn("✓ present", workspace)
+                self.assertIn("FINAL MP4", workspace)
+                self.assertIn("llm_augmented", workspace)
+                self.assertIn("short model prompt summary", workspace)
+                self.assertEqual(tuple(), app.state.issues.blocking_issues)
+                self.assertEqual("none", app.state.issues.severity)
+                self.assertEqual("ok", app.state.skill_health.status)
 
     def test_panel_registry_imports_default_modules(self) -> None:
         expected = {
@@ -218,7 +298,7 @@ class CreativeOSCockpitTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual("#050B12", app.query_one("#theme-preview-root").styles.background.hex)
             self.assertEqual("#07111F", app.query_one("#theme-preview-header").styles.background.hex)
             self.assertEqual("#0B1628", app.query_one("#theme-preview-workspace").styles.background.hex)
-            self.assertIn("Scene Card Sample", str(app.query_one("#theme-preview-workspace").renderable))
+            self.assertIn("Scene Card Sample", _widget_text(app.query_one("#theme-preview-workspace")))
 
     def test_scene_card_long_motion_stays_inside_fixed_width(self) -> None:
         card = _scene_card_text(
@@ -241,8 +321,38 @@ class CreativeOSCockpitTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("ETA", str(card))
         self.assertNotIn("%", str(card))
 
+    def test_agent_core_long_scene_summary_is_shortened_in_scene_card(self) -> None:
+        card = _scene_card_text(
+            {
+                "scene_id": "scene_01",
+                "keyframe": "agent-core scene plan",
+                "summary": (
+                    "This agent-core scene plan contains an intentionally long prompt summary with many "
+                    "details about camera placement, subject motion, environment continuity, lighting, "
+                    "and output constraints that should be compacted inside the fixed scene card."
+                ),
+                "state_label": "READ-ONLY PLAN",
+                "status": "final output missing",
+            }
+        )
+        lines = str(card).splitlines()
+        self.assertTrue(all(len(line) == 68 for line in lines))
+        self.assertIn("…", str(card))
+        self.assertIn("READ-ONLY PLAN", str(card))
+        self.assertIn("final output missing", str(card))
+
     def _write_json(self, path: Path, data: object) -> None:
         path.write_text(json.dumps(data), encoding="utf-8")
+
+
+def _widget_text(widget: object) -> str:
+    renderable = getattr(widget, "renderable", None)
+    if renderable is not None:
+        return str(renderable)
+    render = getattr(widget, "render", None)
+    if callable(render):
+        return str(render())
+    return str(widget)
 
 
 if __name__ == "__main__":

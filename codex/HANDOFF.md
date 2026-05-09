@@ -1,5 +1,20 @@
 # HANDOFF.md
 
+## 2026-05-08 Textual Cockpit Header / Active Workspace Reference Pass
+- Header ist naeher an Referenz-/Command-Center-Struktur: links CM-Brand + `CONTENT MASCHINE LIVE`, mittig Job/Pipeline/Mode/Format/Status, rechts Time UTC/Session/Operator/Run Type/Watch.
+- Active Workspace oben hat jetzt echte innere Subbereiche: `CURRENT POSITION AND PIPELINE PATH`, `PROMPTS / IMAGE JOBS`, `PIPELINE FLOW`.
+- Prompt/Image-Jobs ersetzen dort die alte einfache Scene-Card-Liste; pro Zeile stehen Nummer, Scene-ID, gekuerzte Summary, Source/Keyframe und Status.
+- Flow-Streifen ist statisch und read-only; keine Fake-Livechecks, keine Fake-ETA, keine Prozentwerte, kein Render und keine neuen Runs.
+- Verifikation: Cockpit- und Status-Unit-Tests gruen; Fixture-Startcheck ohne Traceback; `cockpit-video-smoke-001` nicht vorhanden.
+
+## 2026-05-08 Textual Cockpit Active Workspace Detail Pass
+- Active Workspace wurde gezielt verbessert, ohne Redesign: Status-Zone ist kompakter, Stage Output aussagekraeftiger, Scene Cards bleiben im bestehenden Stil und Run Notes nennen Session/Watch/read-only.
+- Creative-OS-Fixture zeigt weiterhin 3 kompakte Scene Cards; Agent-Core-Runs zeigen Scene Count, final.mp4 present/missing, director_mode, optional stop_after und gekuerzte Scene-/Prompt-Zusammenfassungen.
+- Skill Health / Issues Semantik bleibt unveraendert: Runtime-/Director-/final.mp4-Probleme gehoeren nicht in Skill Health.
+- Verifikation: `python3 -m unittest /workspace/tests/test_creative_os_cockpit.py -v` und `python3 -m unittest /workspace/tests/test_creative_os_status.py -v` waren gruen.
+- Startcheck Fixture lief ohne Traceback; `cockpit-video-smoke-001` war in `/workspace/agent_runs` nicht vorhanden.
+- Nicht gebaut: Redesign, neue Runs, Render, LTX-Ausbau, n8n, API-Integration oder Pipeline-Integration.
+
 ## 2026-05-07 Final Closeout Cockpit Semantics + Video Proof
 - Cockpit-Semantik ist final verengt: Director-Fallback, Director inactive, `final.mp4 missing`, Run missing/unknown gehoeren in Issues/Next; Skill Health zeigt keine Runtime-Probleme mehr.
 - Issues Tile nutzt Severity-Klassen: `issues-none`, `issues-warning`, `issues-error`; Border bleibt im bestehenden Look, nur Severity-Farbe wechselt.
