@@ -105,6 +105,9 @@ class CockpitState:
     artifacts: ArtifactsData
     issues: IssuesData
     next_panel: NextData
+    selected_stage: str = "09"
+    selected_image_job: int = 2
+    expanded_image_jobs: tuple[int, ...] = (2,)
 
 
 class CockpitStateAdapter:

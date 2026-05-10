@@ -1,5 +1,28 @@
 # HANDOFF.md
 
+## 2026-05-09 Cockpit Panel Completion V0.2
+- Active Workspace Stage-Panels 00-15 sind als read-only Operator-Oberflaechen vorhanden.
+- Stage 00 enthaelt den read-only Command Composer mit sichtbaren Eingabe-/Preview-Feldern und dem deaktivierten `Run planned / disabled in V0.2` Aktionshinweis; er startet keine Commands.
+- 04-08 decken Strategy, Beat/Hook, Judge, Scene Contracts und Image Prompt Compiler mit stage-spezifischen Feldern ab; 10-15 decken Keyframe Review, LTX Motion Prompts, Video Generation, Video Review, Assembly und Final Output ab.
+- Stage 09 wurde nicht neu redesignt und bleibt das Image-Job-Card-Panel mit Preview-Slots, Expanded Image 2 und Unicode-Progressbar.
+- Snapshots: `/workspace/cockpit_snapshots_2026-05-09_v02/`; Archive: `/workspace/session_archive_2026-05-09_cockpit_presprint/` und `/workspace/session_archive_2026-05-09_cockpit_final/`.
+- Verifikation: Cockpit-Tests und Status-Tests gruen; Fixture- und Missing-Run-Startchecks ohne Traceback.
+- Nicht gebaut: Render, API/n8n, neue Runs, Pipeline-Integration oder Command Execution.
+
+## 2026-05-09 Textual Cockpit Stage 09 Image Jobs Pass
+- Nur Stage 09 im Active Workspace weitergebaut: `PROMPTS / IMAGE JOBS` besteht jetzt aus einzelnen Image-Job-Bloecken mit Preview-Slot, Job/Prompt, Status und Expand-Pfeil.
+- In Stage 09 waehlt j/k den Image Job, Enter/Space toggelt Expand/Collapse. Pfeil hoch/runter bleibt fuer Stage-Auswahl.
+- Fixture-Demo: scene_01 ready mit Preview, scene_02 generating mit `demo progress` 62%, elapsed/backend, scene_03 in queue.
+- Verifikation: Cockpit-Tests und Status-Tests gruen; Fixture-Startcheck ohne Traceback und mit sichtbaren Image Jobs.
+- Nicht gebaut: Live-Pipeline, echte CLI-Eingabe, Job-Submit, Render, API/n8n, neue Runs oder globale Layoutaenderung.
+
+## 2026-05-09 Textual Cockpit Stage Router V0.1
+- Pipeline Map V1 ist die neue Operator-Sicht im Textual Cockpit: 00 Command Center bis 15 Final Output.
+- Active Workspace routet anhand `selected_stage`; Default bleibt Stage 09, damit das bestehende Prompts/Image-Jobs-Panel beim normalen Start sichtbar bleibt.
+- Stage 00-03 sind als initiale read-only Views gebaut, Stage 04-15 als funktionale Platzhalter mit Status/Purpose/Artifacts/Next Action.
+- Auswahl ist per Pfeil hoch/runter und j/k stabil; Klick-Handler ist vorbereitet. Keine Live-Pipeline-Integration, keine CLI-Eingabe, kein Job-Submit, kein Render, keine API-/n8n-Aufrufe.
+- Verifikation: Cockpit- und Status-Unit-Tests gruen; Fixture- und Missing-Run-Startchecks liefen ohne Traceback. `cockpit-video-smoke-001` war nicht vorhanden.
+
 ## 2026-05-08 Textual Cockpit Header / Active Workspace Reference Pass
 - Header ist naeher an Referenz-/Command-Center-Struktur: links CM-Brand + `CONTENT MASCHINE LIVE`, mittig Job/Pipeline/Mode/Format/Status, rechts Time UTC/Session/Operator/Run Type/Watch.
 - Active Workspace oben hat jetzt echte innere Subbereiche: `CURRENT POSITION AND PIPELINE PATH`, `PROMPTS / IMAGE JOBS`, `PIPELINE FLOW`.

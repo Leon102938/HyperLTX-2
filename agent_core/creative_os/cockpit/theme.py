@@ -109,7 +109,7 @@ Vertical {
 }
 
 #system-status {
-    height: 11;
+    height: 8;
     border: round #38BDF8;
 }
 

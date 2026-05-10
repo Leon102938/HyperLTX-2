@@ -7,6 +7,7 @@ from pathlib import Path
 
 from agent_core.creative_os.textual_cockpit import CockpitArgs, CreativeOSCockpitApp, ThemePreviewApp, _scene_card_text
 from agent_core.creative_os.cockpit.panel_registry import PANEL_CONFIG, PANEL_REGISTRY, enabled_panels
+from agent_core.creative_os.cockpit.stage_registry import STAGE_DEFINITIONS, stage_ids
 from agent_core.creative_os.cockpit.state_adapter import CockpitStateAdapter
 from agent_core.creative_os.cockpit.panels import (
     active_workspace_panel,
@@ -51,12 +52,16 @@ class CreativeOSCockpitTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("scene_01", str(text))
             self.assertIn("scene_03", str(text))
             self.assertIn("ready", str(text))
-            self.assertIn("PREVIEW", str(text))
-            self.assertIn("JOB / PROMPT", str(text))
-            self.assertIn("STATUS", str(text))
-            self.assertIn("details", str(text))
-            self.assertIn("prompt:", str(text))
-            self.assertIn("source:", str(text))
+            self.assertIn("Image 1 / scene_01", str(text))
+            self.assertIn("Image 2 / scene_02", str(text))
+            self.assertIn("Image 3 / scene_03", str(text))
+            self.assertIn("╭", str(text))
+            self.assertIn("╰", str(text))
+            self.assertNotIn("IMAGE JOB 01", str(text))
+            self.assertNotIn("JOB / PROMPT", str(text))
+            self.assertNotIn("details  ", str(text))
+            self.assertIn("Prompt:", str(text))
+            self.assertIn("source", str(text))
             self.assertIn(">", str(text))
             self.assertIn("v", str(text))
             self.assertNotIn("negative_prompt", str(text))
@@ -75,6 +80,121 @@ class CreativeOSCockpitTests(unittest.IsolatedAsyncioTestCase):
             await pilot.press("r")
             self.assertEqual("ready_for_ltx_i2v_takes", app.inspection.status)
             self.assertNotIn("/workspace/agent_runs", str(app.inspection.run_dir))
+
+    def test_stage_registry_contains_pipeline_map_v1(self) -> None:
+        self.assertEqual(tuple(f"{index:02d}" for index in range(16)), stage_ids())
+        self.assertEqual("Command Center", STAGE_DEFINITIONS[0].title)
+        self.assertEqual("Pipeline wählen", STAGE_DEFINITIONS[1].title)
+        self.assertEqual("Mode & Style", STAGE_DEFINITIONS[2].title)
+        self.assertEqual("Skills laden", STAGE_DEFINITIONS[3].title)
+        self.assertEqual("Image / Keyframe Generation", STAGE_DEFINITIONS[9].title)
+        self.assertEqual("Final Output", STAGE_DEFINITIONS[15].title)
+
+    async def test_pipeline_map_v1_renders_all_stages_and_selection(self) -> None:
+        app = CreativeOSCockpitApp(CockpitArgs(job_id="creative-os-jungle-001", runs_root=FIXTURE_RUNS_ROOT))
+        async with app.run_test() as pilot:
+            pipeline = _widget_text(app.query_one("#pipeline-map"))
+            for stage in STAGE_DEFINITIONS:
+                self.assertIn(f"{stage.stage_id} {stage.title}", pipeline)
+            self.assertEqual("09", app.state.selected_stage)
+            self.assertIn("▸ 09 Image / Keyframe Generation", pipeline)
+            await pilot.press("down")
+            self.assertEqual("10", app.state.selected_stage)
+            self.assertIn("▸ 10 Keyframe Review", _widget_text(app.query_one("#pipeline-map")))
+            await pilot.press("k")
+            self.assertEqual("09", app.state.selected_stage)
+
+    async def test_active_workspace_stage_router_views(self) -> None:
+        app = CreativeOSCockpitApp(CockpitArgs(job_id="creative-os-jungle-001", runs_root=FIXTURE_RUNS_ROOT))
+        async with app.run_test():
+            expected = {
+                "00": ("COMMAND CENTER", "COMMAND COMPOSER", "Run planned / disabled in V0.2", "COMMAND PREVIEW"),
+                "01": ("PIPELINE WÄHLEN", "Creative OS / storyboard pipeline"),
+                "02": ("MODE & STYLE", "visual_adventure"),
+                "03": ("SKILLS LADEN", "Skill Health"),
+            }
+            for stage_id, needles in expected.items():
+                app._select_stage(stage_id)
+                workspace = _widget_text(app.query_one("#workspace"))
+                for needle in needles:
+                    self.assertIn(needle, workspace)
+
+            for stage_id in tuple(f"{index:02d}" for index in range(4, 16)):
+                app._select_stage(stage_id)
+                workspace = _widget_text(app.query_one("#workspace"))
+                if stage_id == "09":
+                    self.assertIn("PROMPTS / IMAGE JOBS", workspace)
+                else:
+                    self.assertIn(STAGE_DEFINITIONS[int(stage_id)].title.upper(), workspace)
+                    self.assertIn("Current Status", workspace)
+                    self.assertIn("Expected Output", workspace)
+                    self.assertIn("Next Action", workspace)
+
+            app._select_stage("09")
+            workspace = _widget_text(app.query_one("#workspace"))
+            self.assertIn("CURRENT POSITION", workspace)
+            self.assertIn("PROMPTS / IMAGE JOBS", workspace)
+            self.assertIn("Image 1 / scene_01", workspace)
+            self.assertIn("Image 2 / scene_02", workspace)
+            self.assertIn("Image 3 / scene_03", workspace)
+            self.assertIn("v", workspace)
+
+    async def test_stage09_image_jobs_expand_and_keyboard_selection(self) -> None:
+        app = CreativeOSCockpitApp(CockpitArgs(job_id="creative-os-jungle-001", runs_root=FIXTURE_RUNS_ROOT))
+        async with app.run_test() as pilot:
+            workspace = _widget_text(app.query_one("#workspace"))
+            self.assertIn("Image 1 / scene_01", workspace)
+            self.assertIn("Image 2 / scene_02", workspace)
+            self.assertIn("Image 3 / scene_03", workspace)
+            self.assertIn("[img] scene_01.png", workspace)
+            self.assertIn("[work] preview", workspace)
+            self.assertIn("[empty] slot", workspace)
+            self.assertIn("ready", workspace)
+            self.assertIn("generating", workspace)
+            self.assertIn("in queue", workspace)
+            self.assertIn("62%", workspace)
+            self.assertIn("00:18 demo", workspace)
+            self.assertIn("████", workspace)
+            self.assertIn("░░", workspace)
+            self.assertNotIn("#", workspace)
+
+            self.assertEqual(2, app.state.selected_image_job)
+            await pilot.press("j")
+            self.assertEqual(3, app.state.selected_image_job)
+            workspace = _widget_text(app.query_one("#workspace"))
+            self.assertIn("▸ [empty] slot", workspace)
+            await pilot.press("space")
+            workspace = _widget_text(app.query_one("#workspace"))
+            self.assertIn("Image 3", workspace)
+            self.assertIn("waiting", workspace)
+            self.assertNotIn("IMAGE JOB 01", workspace)
+            self.assertNotIn("Enter/Space expands", workspace)
+            self.assertNotIn("····", workspace)
+            self.assertNotIn("negative_prompt", workspace)
+
+    async def test_stage_detail_panels_cover_non_image_stages(self) -> None:
+        app = CreativeOSCockpitApp(CockpitArgs(job_id="creative-os-jungle-001", runs_root=FIXTURE_RUNS_ROOT))
+        async with app.run_test():
+            expected = {
+                "04": ("STRATEGY READOUT", "Hook", "Core Idea", "Director"),
+                "05": ("BEAT / HOOK PLAN", "Beats", "Escalation", "Payoff"),
+                "06": ("CREATIVE JUDGE", "Decision", "Rationale", "Selected"),
+                "07": ("SCENE CONTRACTS", "Scenes", "Environment", "Risk Controls"),
+                "08": ("IMAGE PROMPT COMPILER", "Provider", "Prompt Count", "Audit"),
+                "10": ("KEYFRAME REVIEW", "Reviewed", "Passed", "Reviewer"),
+                "11": ("LTX MOTION PROMPT COMPILER", "Motion Prompts", "Audit", "Render Started"),
+                "12": ("LTX VIDEO GENERATION", "Takes Manifest", "Render", "Gate"),
+                "13": ("VIDEO REVIEW", "Review Artifact", "Findings", "Reviewer"),
+                "14": ("FINAL ASSEMBLY", "Final MP4", "Voice", "Subtitles"),
+                "15": ("FINAL OUTPUT", "Final Verdict", "Final MP4", "Postable"),
+            }
+            for stage_id, needles in expected.items():
+                app._select_stage(stage_id)
+                workspace = _widget_text(app.query_one("#workspace"))
+                self.assertNotIn("Detailed panel planned", workspace)
+                self.assertNotIn("PROMPTS / IMAGE JOBS", workspace)
+                for needle in needles:
+                    self.assertIn(needle, workspace)
 
     async def test_missing_real_run_is_read_only_and_does_not_crash(self) -> None:
         missing_job = "definitely-missing-run"
@@ -182,9 +302,7 @@ class CreativeOSCockpitTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIn("PROMPTS / IMAGE JOBS", workspace)
                 self.assertNotIn("PIPELINE PATH", workspace)
                 self.assertNotIn("PIPELINE FLOW", workspace)
-                self.assertIn("PREVIEW", workspace)
-                self.assertIn("JOB / PROMPT", workspace)
-                self.assertIn("details", workspace)
+                self.assertIn("Prompt:", workspace)
                 self.assertIn("scene_01", workspace)
                 self.assertIn("compact agent-core scene", workspace)
                 self.assertIn("FINAL MP4", workspace)

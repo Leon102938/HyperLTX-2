@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from dataclasses import replace
 from pathlib import Path
 
 from rich.text import Text
@@ -11,6 +12,7 @@ from textual.widgets import Static
 
 from agent_core.creative_os.cockpit.layout import compose_layout, panel_update_targets
 from agent_core.creative_os.cockpit.panels import issues_panel
+from agent_core.creative_os.cockpit.stage_registry import DEFAULT_STAGE_ID, normalize_stage_id, stage_ids
 from agent_core.creative_os.cockpit.state_adapter import CockpitStateAdapter
 from agent_core.creative_os.cockpit.theme import (
     BG_PANEL,
@@ -44,6 +46,11 @@ class CreativeOSCockpitApp(App[None]):
         Binding("q", "quit", "Quit", show=True),
         Binding("r", "refresh", "Refresh", show=True),
         Binding("h", "toggle_help", "Help", show=True),
+        Binding("down", "select_next_stage", "Next Stage", show=False),
+        Binding("up", "select_previous_stage", "Prev Stage", show=False),
+        Binding("j", "select_next_image_job", "Next Image Job", show=False),
+        Binding("k", "select_previous_image_job", "Prev Image Job", show=False),
+        Binding("enter,space", "open_selected_stage", "Open Stage", show=False),
     ]
 
     def __init__(self, args: CockpitArgs) -> None:
@@ -55,7 +62,10 @@ class CreativeOSCockpitApp(App[None]):
             watch_enabled=args.watch,
             refresh_sec=args.refresh_sec,
         )
-        self.state = self.state_adapter.load()
+        self.selected_stage = DEFAULT_STAGE_ID
+        self.selected_image_job = 2
+        self.expanded_image_jobs = (2,)
+        self.state = self._state_with_selected_stage(self.state_adapter.load())
         self.inspector = self.state_adapter.inspector
         self.inspection = self.state.inspection
 
@@ -74,6 +84,40 @@ class CreativeOSCockpitApp(App[None]):
         help_panel = self.query_one("#help-panel", Static)
         help_panel.toggle_class("visible")
 
+    def action_select_next_stage(self) -> None:
+        self._move_selected_stage(1)
+
+    def action_select_previous_stage(self) -> None:
+        self._move_selected_stage(-1)
+
+    def action_open_selected_stage(self) -> None:
+        if self.selected_stage == "09":
+            self._toggle_selected_image_job()
+            return
+        self._update_panels()
+
+    def action_select_next_image_job(self) -> None:
+        if self.selected_stage == "09":
+            self._move_selected_image_job(1)
+            return
+        self._move_selected_stage(1)
+
+    def action_select_previous_image_job(self) -> None:
+        if self.selected_stage == "09":
+            self._move_selected_image_job(-1)
+            return
+        self._move_selected_stage(-1)
+
+    def on_click(self, event: object) -> None:
+        widget = getattr(event, "widget", None)
+        if getattr(widget, "id", None) != "pipeline-map":
+            return
+        y = int(getattr(event, "y", -1))
+        stage_index = y - 1
+        ids = stage_ids()
+        if 0 <= stage_index < len(ids):
+            self._select_stage(ids[stage_index])
+
     def _update_panels(self) -> None:
         for selector, panel in panel_update_targets():
             self.query_one(selector, Static).update(panel.render(self.state))
@@ -85,8 +129,41 @@ class CreativeOSCockpitApp(App[None]):
         self._reload_state()
 
     def _reload_state(self) -> None:
-        self.state = self.state_adapter.load()
+        self.state = self._state_with_selected_stage(self.state_adapter.load())
         self.inspection = self.state.inspection
+        self._update_panels()
+
+    def _move_selected_stage(self, offset: int) -> None:
+        ids = stage_ids()
+        current = ids.index(normalize_stage_id(self.selected_stage))
+        self._select_stage(ids[(current + offset) % len(ids)])
+
+    def _select_stage(self, stage_id: str) -> None:
+        self.selected_stage = normalize_stage_id(stage_id)
+        self.state = self._state_with_selected_stage(self.state)
+        self._update_panels()
+
+    def _state_with_selected_stage(self, state: object) -> object:
+        return replace(
+            state,
+            selected_stage=normalize_stage_id(self.selected_stage),
+            selected_image_job=self.selected_image_job,
+            expanded_image_jobs=self.expanded_image_jobs,
+        )
+
+    def _move_selected_image_job(self, offset: int) -> None:
+        self.selected_image_job = ((self.selected_image_job - 1 + offset) % 3) + 1
+        self.state = self._state_with_selected_stage(self.state)
+        self._update_panels()
+
+    def _toggle_selected_image_job(self) -> None:
+        expanded = set(self.expanded_image_jobs)
+        if self.selected_image_job in expanded:
+            expanded.remove(self.selected_image_job)
+        else:
+            expanded.add(self.selected_image_job)
+        self.expanded_image_jobs = tuple(sorted(expanded))
+        self.state = self._state_with_selected_stage(self.state)
         self._update_panels()
 
 

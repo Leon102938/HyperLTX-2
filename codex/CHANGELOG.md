@@ -1,5 +1,23 @@
 # CHANGELOG.md
 
+## 2026-05-09 Cockpit Panel Completion V0.2
+- Active Workspace Stage-Panels 00-15 als read-only Stage-Oberflaechen vervollstaendigt: 04-08 und 10-15 zeigen jetzt Stage-spezifische Status-, Artifact-, Expected-Output- und Next-Action-Informationen statt generischer Placeholder.
+- Stage 00-03 bleiben als Command Center, Pipeline wählen, Mode & Style und Skills laden ausgearbeitet; Stage 00 enthaelt jetzt einen read-only Command Composer mit sichtbaren Topic/Format/Mode/Style/Duration/Voice/Music/Subtitles/Storyboard/Output-Feldern, Command Preview und deaktiviertem V0.2-Run-Hinweis.
+- Stage 09 Image Jobs bleibt im bestehenden Card-Look mit Preview-Slots, Expanded Image 2 und Unicode-Progressbar erhalten; V0.2-Snapshots liegen unter `/workspace/cockpit_snapshots_2026-05-09_v02/`.
+- Keine Render-, API-, n8n-, Run-, Command-Execution- oder Pipeline-Integration und kein globales Redesign.
+
+## 2026-05-09 Textual Cockpit Stage 09 Image Jobs Pass
+- Active Workspace Stage 09 erweitert: `PROMPTS / IMAGE JOBS` zeigt jetzt drei einzelne Image-Job-Bloecke mit Preview-Zone, Job/Prompt-Zeile, Status und Expand-Pfeil.
+- Lokale Bedienung vorbereitet: j/k waehlt Image Jobs in Stage 09, Enter/Space klappt den selektierten Job auf/zu; Pfeil hoch/runter bleibt fuer Stage-Auswahl.
+- Fixture-Demo zeigt sauber gekennzeichnete Job-Zustaende: Image 1 ready, Image 2 generating mit Demo-Progress/%/elapsed/backend, Image 3 in queue.
+- Kein globales Layout, keine Sidebar, keine Header-/Bottom-Panel-Aenderung, keine Pipeline-Integration, kein Render und keine API-/n8n-Arbeit.
+
+## 2026-05-09 Textual Cockpit Stage Router V0.1
+- Stage-Cockpit V0.1 eingebaut: Pipeline Map V1 zeigt die Operator-Stages 00-15 von Command Center bis Final Output.
+- Pipeline Map ist auswählbar: Tastatur-Fallback ueber Pfeil hoch/runter sowie j/k, selected Stage ist sichtbar markiert; Klick-Handler fuer Pipeline-Map-Auswahl ist vorbereitet.
+- Active Workspace routet anhand der selected Stage: 00-03 haben initiale read-only Views, 04-15 funktionale Platzhalter; Stage 09 nutzt weiter das bestehende Prompts/Image-Jobs-Panel.
+- Keine Live-Pipeline-Integration, keine echte CLI-Eingabe, kein Job-Submit, kein Render, keine API-/n8n-Aufrufe und keine Fake-Livewerte.
+
 ## 2026-05-08 Textual Cockpit Header / Active Workspace Reference Pass
 - Header oben naeher an Kommandozentrale-Struktur gebracht: linke CM-Brand-/Titelzone, mittlere Command-Banner-Metadaten und rechte Time/Session/Operator/Run-Type/Watch-Spalte.
 - Active Workspace oben in klare innere Subbereiche gegliedert: `CURRENT POSITION AND PIPELINE PATH`, `PROMPTS / IMAGE JOBS` und `PIPELINE FLOW`.
