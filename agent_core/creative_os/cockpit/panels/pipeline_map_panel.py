@@ -12,8 +12,12 @@ def render(state: CockpitState) -> Text:
     timeline = Text()
     selected = selected_stage_id(state)
     current = current_stage_id(state)
+    if selected == "08":
+        current = selected
     for stage in STAGE_DEFINITIONS:
         status = status_for_stage(state, stage)
+        if selected == "08" and stage.stage_id != selected and status == "current":
+            status = "pending"
         marker = _marker(stage.stage_id, status, selected, current)
         line_style = _stage_style(stage.stage_id, status, selected, current)
         timeline.append(f"{marker} {stage.stage_id} {stage.title}\n", style=line_style)

@@ -109,21 +109,77 @@ class CreativeOSCockpitTests(unittest.IsolatedAsyncioTestCase):
         async with app.run_test():
             expected = {
                 "00": ("COMMAND CENTER", "COMMAND COMPOSER", "Run planned / disabled in V0.2", "COMMAND PREVIEW"),
-                "01": ("PIPELINE WÄHLEN", "Creative OS / storyboard pipeline"),
-                "02": ("MODE & STYLE", "visual_adventure"),
-                "03": ("SKILLS LADEN", "Skill Health"),
+                "01": ("PIPELINE WÄHLEN", "PIPELINE PURPOSE / OVERVIEW", "PIPELINE FLOW", "PIPELINE ASSETS"),
+                "02": ("MODE & STYLE", "visual_adventure", "MODE INTENT / STYLE LANGUAGE / HANDOFF"),
+                "03": ("SKILLS LADEN", "SKILL TREE V1", "SKILL LOADING PROGRESS"),
             }
             for stage_id, needles in expected.items():
                 app._select_stage(stage_id)
                 workspace = _widget_text(app.query_one("#workspace"))
                 for needle in needles:
                     self.assertIn(needle, workspace)
+                if stage_id == "01":
+                    self.assertNotIn("CURRENT POSITION", workspace)
+                if stage_id == "03":
+                    self.assertNotIn("Pipeline Skills", workspace)
 
             for stage_id in tuple(f"{index:02d}" for index in range(4, 16)):
                 app._select_stage(stage_id)
                 workspace = _widget_text(app.query_one("#workspace"))
                 if stage_id == "09":
                     self.assertIn("PROMPTS / IMAGE JOBS", workspace)
+                elif stage_id == "04":
+                    self.assertIn("CREATIVE STRATEGY", workspace)
+                    self.assertIn("INPUT CONTEXT", workspace)
+                    self.assertIn("STRATEGY BUILD / JSON PREVIEW", workspace)
+                    self.assertIn("STRATEGY READOUT / OUTPUT SUMMARY", workspace)
+                    self.assertIn("creative_strategy.json", workspace)
+                elif stage_id == "05":
+                    self.assertIn("BEAT / HOOK PLANNER", workspace)
+                    self.assertIn("HOOK OPTIONS / BEAT CANDIDATES", workspace)
+                    self.assertIn("SELECTED BEAT PLAN", workspace)
+                    self.assertIn("OUTPUT PREVIEW / HANDOFF", workspace)
+                    self.assertIn("beat_hook_plan.json", workspace)
+                    self.assertNotIn("planned visual", workspace)
+                    self.assertNotIn("concept frame", workspace)
+                elif stage_id == "06":
+                    self.assertIn("CREATIVE JUDGE", workspace)
+                    self.assertIn("JUDGE INPUT", workspace)
+                    self.assertIn("CREATIVE CHECKS", workspace)
+                    self.assertIn("FINAL CREATIVE DECISION", workspace)
+                    self.assertIn("OUTPUT PREVIEW / RISKS / HANDOFF", workspace)
+                elif stage_id == "07":
+                    self.assertIn("SCENE CONTRACTS", workspace)
+                    self.assertIn("CURRENT POSITION", workspace)
+                    self.assertIn("Status", workspace)
+                    self.assertNotIn("HANDOFF PATH", workspace)
+                    self.assertNotIn("06 Creative Judge ->", workspace)
+                elif stage_id == "08":
+                    self.assertIn("PROMPT COMPILER", workspace)
+                    self.assertIn("IMAGE COMPILER", workspace)
+                    self.assertIn("SCENE CONTRACT INPUTS", workspace)
+                    self.assertIn("SCENE PROMPT SUMMARIES", workspace)
+                    self.assertIn("FINAL PROMPT PAYLOAD", workspace)
+                    self.assertIn("VIDEO COMPILER", workspace)
+                    self.assertIn("AUDIO COMPILER", workspace)
+                    self.assertIn("MUSIC COMPILER", workspace)
+                    self.assertNotIn("Input Readiness", workspace)
+                    self.assertNotIn("Output Readiness", workspace)
+                    self.assertNotIn("A) ", workspace)
+                    self.assertNotIn("B) ", workspace)
+                    self.assertNotIn("C) ", workspace)
+                    self.assertNotIn("MODEL RULES", workspace)
+                    self.assertNotIn("ARTIFACT POLICY", workspace)
+                    self.assertNotIn("COMPILER FAMILY / BRANCHES", workspace)
+                    self.assertNotIn("OUTPUT / NEXT", workspace)
+                    self.assertNotIn("|", workspace)
+                    self.assertIn("╭─ IMAGE COMPILER (ACTIVE)", workspace)
+                    self.assertNotIn("╭─ SCENE CONTRACT INPUTS", workspace)
+                    self.assertNotIn("╭─ SCENE PROMPT SUMMARIES", workspace)
+                    self.assertNotIn("╭─ FINAL PROMPT PAYLOAD", workspace)
+                    pipeline = _widget_text(app.query_one("#pipeline-map"))
+                    self.assertIn("▸ 08 Image Prompt Compiler", pipeline)
+                    self.assertIn("○ 12 LTX Video Generation", pipeline)
                 else:
                     self.assertIn(STAGE_DEFINITIONS[int(stage_id)].title.upper(), workspace)
                     self.assertIn("Current Status", workspace)
@@ -179,8 +235,8 @@ class CreativeOSCockpitTests(unittest.IsolatedAsyncioTestCase):
                 "04": ("STRATEGY READOUT", "Hook", "Core Idea", "Director"),
                 "05": ("BEAT / HOOK PLAN", "Beats", "Escalation", "Payoff"),
                 "06": ("CREATIVE JUDGE", "Decision", "Rationale", "Selected"),
-                "07": ("SCENE CONTRACTS", "Scenes", "Environment", "Risk Controls"),
-                "08": ("IMAGE PROMPT COMPILER", "Provider", "Prompt Count", "Audit"),
+                "07": ("SCENE CONTRACTS", "scene_count", "Environment", "Text/Glyph Risk"),
+                "08": ("PROMPT COMPILER", "IMAGE COMPILER", "SCENE PROMPT SUMMARIES", "VIDEO COMPILER", "AUDIO COMPILER", "MUSIC COMPILER"),
                 "10": ("KEYFRAME REVIEW", "Reviewed", "Passed", "Reviewer"),
                 "11": ("LTX MOTION PROMPT COMPILER", "Motion Prompts", "Audit", "Render Started"),
                 "12": ("LTX VIDEO GENERATION", "Takes Manifest", "Render", "Gate"),
@@ -464,6 +520,10 @@ class CreativeOSCockpitTests(unittest.IsolatedAsyncioTestCase):
 
 
 def _widget_text(widget: object) -> str:
+    if getattr(widget, "id", None) == "workspace":
+        query_one = getattr(widget, "query_one", None)
+        if callable(query_one):
+            return _widget_text(query_one("#workspace-content"))
     renderable = getattr(widget, "renderable", None)
     if renderable is not None:
         return str(renderable)

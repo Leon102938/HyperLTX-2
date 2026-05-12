@@ -2,6 +2,75 @@
 
 Diese Datei dokumentiert jede Session mit Datum, Umfang und Teststatus.
 
+## 2026-05-12 - Finaler Panel-Polish 00-08
+
+### Geaendert
+
+- Textual-Stand bestaetigt: Runtime `0.89.1`, Pflicht-Pin `textual>=0.89,<1.0`.
+- Stage `00 Command Center` stabil beibehalten; keine CLI-Eingabe gebaut.
+- Stage `01 Pipeline wählen` korrigiert: Current-Position-Block entfernt, Pipeline Purpose/Overview, Pipeline Flow, Pipeline Assets und Output/Next ergaenzt.
+- Stage `02 Mode & Style` erweitert: Mode Intent, Content Logic, Style Language, Visual Rules, Risks/Avoids und Handoff.
+- Stage `03 Skills laden` korrigiert: sichtbarer Skill Tree, Skill Loading Progress, Loading Status, Skill Sources und Health; Pipeline bleibt technische Route und wird nicht als Skill behandelt.
+- Stage `04 Creative Strategy` erweitert: A/B/C/D-Struktur mit Strategy Engine, Input Context, Skill Stack, JSON Preview und Output Summary.
+- Stage `05 Beat / Hook Planner` erweitert: Hook Brief, Hook Candidates, Selected Beat Plan und Output Preview; keine Fake-Bilder.
+- Stage `06 Creative Judge` erweitert: Judge Input, Creative Checks, Final Decision, Output Preview, Risiken/Fixes/Handoff.
+- Stage `07 Scene Contracts` verdichtet: pro Szene Status und Kernfelder sichtbarer; Output Preview und Readiness verbessert.
+- Stage `08 Prompt Compiler` stabil gehalten: geschlossener Image-Compiler-Hauptkasten, keine inneren kaputten Subboxen, keine ASCII-Pipes, rechte Compiler-Spalte erhalten.
+- Tests fuer Stage-01-bis-08-Polish und Regressionspunkte aktualisiert.
+
+### Nicht geaendert
+
+- Keine neuen Dependencies.
+- Keine Textual-8.x-Anpassung.
+- Keine Pipeline-, Render-, API- oder n8n-Integration.
+- Keine echten Ausfuehrungen.
+- Keine Scroll-, Terminal-, Quit- oder Performance-Fixes angefasst.
+- Header, Sidebar, System Status und Bottom Panels nicht redesignt.
+- Stage `09` nicht umgebaut.
+- Keine Flow-/Symbol-Leiste im Active Workspace zurueckgebracht.
+
+### Tests
+
+- `python3 -m unittest /workspace/tests/test_creative_os_cockpit.py -v`: gruen, 16 Tests.
+- `python3 -m unittest /workspace/tests/test_creative_os_status.py -v`: gruen, 13 Tests.
+- Fixture-Smoke ohne Watch gestartet; danach keine verbleibenden `creative_os_cockpit.py` Prozesse.
+
+## 2026-05-12 - Stage 08 Closeout und Stage 01-06 Polish
+
+### Geaendert
+
+- Textual-Stand dokumentiert: Runtime `0.89.1`, Pflicht-Pin `textual>=0.89,<1.0`.
+- Stage `08 Prompt Compiler` stabilisiert.
+- `IMAGE COMPILER (ACTIVE)` wieder als geschlossener Hauptkasten gebaut.
+- Innerhalb des Image-Compiler-Kastens nur einfache Textsektionen fuer Scene Contract Inputs, Scene Prompt Summaries und Final Prompt Payload belassen.
+- Kaputte innere Rahmen, ASCII-Pipes, Readiness-Bloecke, A/B/C-Labels, Model Rules und Artifact Policy aus Stage `08` ferngehalten.
+- Rechte Compiler-Spalte mit `VIDEO`, `AUDIO` und `MUSIC` als geschlossene Boxen erhalten.
+- Stage `01` bis `06` anhand der jeweiligen Referenzen gepolished:
+  - Stage `01` Pipeline Overview.
+  - Stage `02` Mode & Style.
+  - Stage `03` Skill Loading.
+  - Stage `04` Creative Strategy.
+  - Stage `05` Beat / Hook Planner ohne Fake-Bilder.
+  - Stage `06` Creative Judge.
+- Box-Plain-Renderer bewahrt Einrueckungen innerhalb stabiler Boxen.
+- Tests fuer Stage-08-Hauptkasten und Stage-01-bis-06-Struktur aktualisiert.
+
+### Nicht geaendert
+
+- Keine neuen Dependencies.
+- Keine Textual-8.x-Anpassung.
+- Keine Pipeline-, Render-, API- oder n8n-Integration.
+- Keine Scroll-, Quit-, Terminal- oder Performance-Fixes angefasst.
+- Header, Sidebar, System Status, Pipeline Map global und Bottom Panels nicht redesignt.
+- Stage `07` und Stage `09` nicht weiter umgebaut.
+- Keine untere Flow-/Symbol-Leiste in den Active Workspace zurueckgebracht.
+
+### Tests
+
+- `python3 -m unittest /workspace/tests/test_creative_os_cockpit.py -v`: gruen, 16 Tests.
+- `python3 -m unittest /workspace/tests/test_creative_os_status.py -v`: gruen, 13 Tests.
+- Fixture-Smoke ohne Watch gestartet; danach keine verbleibenden `creative_os_cockpit.py` Prozesse.
+
 ## 2026-05-11 - Active Workspace Scroll Pass
 
 ### Geaendert

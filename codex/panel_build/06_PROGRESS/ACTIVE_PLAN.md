@@ -1,65 +1,49 @@
 # Active Plan
 
-Stand: 2026-05-11, Active-Workspace-Scroll-Pass abgeschlossen.
+Stand: 2026-05-12, finaler Panel-Polish Stage 00-08 abgeschlossen.
 
 ## Aktueller Build-Stand
 
-Der enge Build-Schritt wurde korrigiert: Stage `07 Scene Contracts` ist jetzt ein eigenstaendiges Active-Workspace-Panel und folgt der verifizierten Bildanalyse unter `01_VISUAL_REFERENCES/pipeline_panels/panel_07_scene_contracts/visual_analysis_verified.md`.
+Textual bleibt fest auf der stabilen 0.89.x-Linie. Im Pod ist `textual==0.89.1` aktiv, und der Pin `textual>=0.89,<1.0` bleibt Pflicht. Keine neuen Dependency-Experimente und keine Textual-8.x-Anpassungen.
 
-Nach dem ersten Visual-Correction-Pass wurde das Layout noch einmal stabilisiert:
+Der heutige Abschluss-Polish hat Stage `00` bis `08` im Active Workspace als stabile Content-Maschine-Panels nachgeschaerft:
 
-- A/B/C-Spalten haben jetzt fixe, gemessene Breiten.
-- Jede Stage-07-Box-Zeile wird auf 132 Zeichen begrenzt.
-- Current Position nutzt zwei kompakte Reihen mit kurzen Labels.
-- Lange Werte werden vor der Border gekuerzt.
-- Sidebar wurde minimal verdichtet, damit der Workspace visuell dominanter bleibt.
+- klare geschlossene Panels
+- bessere Platznutzung
+- mehr innere Struktur
+- keine ASCII-Pipe-Trenner
+- keine offenen Rahmen
+- lange Texte werden gekuerzt
+- Stage Map bleibt konsistent zur gewaehlten Stage
 
-Zusaetzlich wurde der Active Workspace als generischer Scroll-Host umgesetzt:
+## Stage 00-08 Status
 
-- Der aeussere `ACTIVE WORKSPACE` Rahmen bleibt erhalten.
-- `#workspace` ist jetzt ein `ScrollableContainer`.
-- Der renderbare Stage-Inhalt liegt in `#workspace-content`.
-- Alle Stage-Views `00` bis `15` laufen durch denselben Scrollbereich.
-- Der Scroll-Host ist nicht fokussierbar, damit Stage-Navigation und Stage-09-Toggle erhalten bleiben.
+- Stage `00 Command Center`: stabiler Kontroll-/Statusbereich beibehalten; keine CLI-Eingabe gebaut.
+- Stage `01 Pipeline wählen`: Current-Position-Block entfernt; Pipeline Purpose/Overview, Pipeline Flow, Pipeline Assets und Output/Next sichtbar.
+- Stage `02 Mode & Style`: bestehende Struktur erhalten und mit Mode Intent, Style Language, Visual Rules, Risks/Avoids und Handoff ergaenzt.
+- Stage `03 Skills laden`: Skill Tree V1 als sichtbarer Tree, Skill Loading Progress, Loading Status, Skill Sources und Health; Pipeline selbst wird nicht als Skill behandelt.
+- Stage `04 Creative Strategy`: A/B/C/D-Struktur mit Strategy Engine, Input Context, Skill Stack, JSON Preview und Output Summary.
+- Stage `05 Beat / Hook Planner`: Hook Brief, textbasierte Hook Candidates, Selected Beat Plan und Output Preview; keine Fake-Bilder.
+- Stage `06 Creative Judge`: Judge Input, Creative Checks, Final Creative Decision, Output Preview, Risiken/Fixes/Handoff.
+- Stage `07 Scene Contracts`: A/B/C-Struktur erhalten; pro Szene Status, Visual Anchor, Environment, Action, Camera/Lighting, Allowed/Forbidden Visuals und Risk sichtbarer; Readiness verbessert.
+- Stage `08 Prompt Compiler`: stabiler geschlossener `IMAGE COMPILER (ACTIVE)` Hauptkasten bleibt erhalten; rechte Video/Audio/Music-Compiler-Spalte bleibt erhalten.
 
-Gebaut wurde nur im engen Scope:
+## Nicht Geaendert
 
-- Active Workspace Stage `07`
-- `ACTIVE WORKSPACE / STAGE 07: SCENE CONTRACTS`
-- `CURRENT POSITION AND PIPELINE PATH`
-- `A) CONTRACT INPUTS`
-- `B) SCENE CONTRACTS`
-- `C) OUTPUT PREVIEW / READINESS`
-- `HANDOFF PATH`
-- Cockpit-Tests fuer Stage 07 sowie Stage-08-/Stage-09-Erhalt aktualisiert
-
-Nicht geaendert:
-
-- keine Stage-ID-Neuordnung
-- kein Cockpit-Redesign
-- keine neue Pipeline-Integration
-- keine Render-, API- oder n8n-Arbeit
-- Header und Bottom Panels unveraendert
-- System Status und Pipeline Map nur minimal in Hoehe/Padding verdichtet
-- Stage `08` Prompt Compiler bleibt erhalten
-- Stage `09` Image Cards bleiben erhalten
-
-## Was Stage 07 jetzt sichtbar macht
-
-- Stage `07` ist nicht mehr das generische Detailpanel.
-- Current Position zeigt Scene Contracts, Creative-Judge-Vorstufe und Stage-08-Handoff.
-- Contract Inputs zeigen Creative Strategy, Beat/Hook, Creative Judge, Mode/Style, Risk Policy und Artifact Policy.
-- Drei Scene-Contract-Cards zeigen `scene_01`, `scene_02`, `scene_03` mit Visual Anchor, Environment, Action, Camera/Lighting, erlaubten und verbotenen Visuals.
-- Output Preview zeigt kompakt `scene_contracts.json` und `ready_for: image_prompt_compiler`.
-- Handoff Path erklaert den Uebergang von Creative Judge zu Stage `08 Image Prompt Compiler`.
-
-Fehlende Details bleiben `missing` oder `not_checked`. Fixture-/Demo-Szenenwerte werden als Demo-Kontext dargestellt, nicht als echte Livewerte. Stage 07 zeigt keine finalen Image Prompts, keine echten Bilder, keine Image Generation Cards und keine Compiler-Branches.
+- Stage `09` nicht umgebaut.
+- Header, Sidebar, System Status und Bottom Panels nicht redesignt.
+- Active-Workspace-Scroll bleibt.
+- Keine Pipeline-, Render-, API- oder n8n-Integration.
+- Keine echten Ausfuehrungen.
+- Keine Scroll-, Terminal-, Quit- oder Performance-Fixes angefasst.
+- Keine Flow-/Symbol-Leiste im Active Workspace zurueckgebracht.
 
 ## Teststatus
 
-- `python3 -m unittest /workspace/tests/test_creative_os_cockpit.py -v`: gruen, 19 Tests
-- `python3 -m unittest /workspace/tests/test_creative_os_status.py -v`: gruen, 13 Tests
+- `python3 -m unittest /workspace/tests/test_creative_os_cockpit.py -v`: gruen, 16 Tests.
+- `python3 -m unittest /workspace/tests/test_creative_os_status.py -v`: gruen, 13 Tests.
+- Fixture-Smoke ohne Watch gestartet; danach wurden verbleibende `creative_os_cockpit.py` Prozesse beendet und geprueft.
 
 ## Naechster enger Build-Schritt
 
-Stage `07` im laufenden Textual-Cockpit visuell gegen `reference.png` pruefen.
+Stage `00` bis `08` in einem frischen interaktiven Terminal einmal durchklicken und nur konkrete Text-/Spacing-Abweichungen notieren.

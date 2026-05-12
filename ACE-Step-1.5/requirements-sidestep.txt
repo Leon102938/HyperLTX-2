@@ -10,7 +10,7 @@
 rich>=13.0.0
 
 # ── Required for Side-Step TUI ────────────────────────────────
-textual>=0.47.0
+textual>=0.89,<1.0
 
 # ── Optional: 8-bit optimizers (saves ~30-40% optimizer VRAM) ─
 # Uncomment to enable AdamW8bit in the optimizer selector.

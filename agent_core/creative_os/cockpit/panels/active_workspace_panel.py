@@ -225,56 +225,60 @@ def _command_preview(state: CockpitState) -> str:
 
 
 def _pipeline_select_workspace(state: CockpitState, stage: StageDefinition) -> Text:
-    workspace = _stage_header(stage)
-    rows = [
-        _label_value_line("Current pipeline", state.header.pipeline),
-        _label_value_line("Creative OS / storyboard pipeline", "available"),
-        _label_value_line("Agent-Core run", "available" if state.run_type == "agent_core" else "not current"),
-        _label_value_line("Generic content machine pipeline", "planned"),
-        _label_value_line("Next", stage.next_action),
-    ]
-    workspace.append(_section_box("PIPELINE WÄHLEN", rows))
-    workspace.append(_section_box("PIPELINE PURPOSE", [_plain_line("Storyboard and image/keyframe oriented Creative OS operator flow.")]))
+    workspace = Text()
+    workspace.append("ACTIVE WORKSPACE / STAGE 01: PIPELINE WÄHLEN\n", style=style(TEXT_LABEL, bg=BG_WORKSPACE, bold=True))
+    workspace.append(
+        _three_column_boxes(
+            (
+                ("PIPELINE PURPOSE / OVERVIEW", _pipeline_selected_lines(state), 42),
+                ("PIPELINE FLOW", _pipeline_route_lines(state), 56),
+                ("PIPELINE ASSETS", _pipeline_asset_lines(state), 30),
+            )
+        )
+    )
+    workspace.append(_compact_section_box("OUTPUT TARGETS / NEXT", _pipeline_output_target_lines(state, stage), BOX_WIDTH))
     return workspace
 
 
 def _mode_style_workspace(state: CockpitState, stage: StageDefinition) -> Text:
-    workspace = _stage_header(stage)
+    workspace = Text()
+    workspace.append("ACTIVE WORKSPACE / STAGE 02: MODE & STYLE\n", style=style(TEXT_LABEL, bg=BG_WORKSPACE, bold=True))
+    workspace.append(_compact_section_box("CURRENT POSITION AND PIPELINE PATH", _stage02_position_lines(state), BOX_WIDTH))
     workspace.append(
-        _section_box(
-            "MODE & STYLE",
-            _position_grid(
-                (
-                    ("Mode", state.header.mode or "unknown"),
-                    ("Style", _style_hint(state)),
-                    ("Format", f"{state.header.orientation} · {state.header.resolution}"),
-                    ("Topic", state.header.topic or "unknown"),
-                    ("Duration", f"{state.header.duration}s" if state.header.duration else "unknown"),
-                    ("Scenes", str(state.header.scene_count or "unknown")),
-                    ("Style Lock", _data_hint(state, "visual_identity", "not_checked")),
-                    ("Next", stage.next_action),
-                )
-            ),
+        _three_column_boxes(
+            (
+                ("MODE", _mode_panel_lines(state), 65),
+                ("STYLE", _style_panel_lines(state), 65),
+            )
         )
     )
+    workspace.append(
+        _three_column_boxes(
+            (
+                ("MODE SKILLS", _mode_skill_summary_lines(state), 42),
+                ("STYLE SKILLS", _style_skill_summary_lines(state), 42),
+                ("RISKS / AVOIDS", _mode_style_risk_lines(state, stage), 44),
+            )
+        )
+    )
+    workspace.append(_compact_section_box("MODE INTENT / STYLE LANGUAGE / HANDOFF", _mode_style_detail_lines(state), BOX_WIDTH))
     return workspace
 
 
 def _skills_workspace(state: CockpitState, stage: StageDefinition) -> Text:
-    workspace = _stage_header(stage)
+    workspace = Text()
+    workspace.append("ACTIVE WORKSPACE / STAGE 03: SKILLS LADEN\n", style=style(TEXT_LABEL, bg=BG_WORKSPACE, bold=True))
+    workspace.append(_compact_section_box("CURRENT POSITION AND SKILL LOADING", _stage03_position_lines(state), BOX_WIDTH))
     workspace.append(
-        _section_box(
-            "SKILLS LADEN",
-            [
-                _label_value_line("Skill Health", f"{state.skill_health.mark} {state.skill_health.status}"),
-                _label_value_line("Loaded", str(state.skill_health.loaded_count)),
-                _label_value_line("Fallbacks", str(state.skill_health.fallback_count)),
-                _label_value_line("Missing optional", str(state.skill_health.missing_optional_count)),
-                _label_value_line("Blocking missing", str(state.skill_health.blocking_missing_count)),
-            ],
+        _three_column_boxes(
+            (
+                ("SKILL TREE V1", _skill_tree_lines(state), 32),
+                ("SKILL LOADING PROGRESS", _skill_progress_lines(state), 36),
+                ("LOADING STATUS", _skill_loading_status_lines(state), 60),
+            )
         )
     )
-    workspace.append(_section_box("SKILL GROUPS", _skill_group_lines(state)))
+    workspace.append(_compact_section_box("MATCH / LOAD DETAILS", _skill_match_detail_lines(state, stage), BOX_WIDTH))
     return workspace
 
 
@@ -296,59 +300,514 @@ def _placeholder_workspace(state: CockpitState, stage: StageDefinition) -> Text:
 
 
 def _strategy_workspace(state: CockpitState, stage: StageDefinition) -> Text:
-    strategy = _data_dict(state, "creative_strategy")
-    director = _data_dict(state, "director_output")
-    workspace = _stage_detail_workspace(
-        state,
-        stage,
-        "STRATEGY READOUT",
-        [
-            ("Hook", _first_value(strategy, "hook", "opening_hook", "attention_hook")),
-            ("Core Idea", _first_value(strategy, "core_idea", "concept", "strategy")),
-            ("Risks", _joined_value(strategy.get("risks") or strategy.get("risk_controls"))),
-            ("Director", _first_value(director, "director_mode", "mode")),
-        ],
-        "creative_strategy.json / director_output.json",
-        "Review strategy, hook and director constraints before beat planning.",
+    workspace = Text()
+    workspace.append("ACTIVE WORKSPACE / STAGE 04: CREATIVE STRATEGY\n", style=style(TEXT_LABEL, bg=BG_WORKSPACE, bold=True))
+    workspace.append(_compact_section_box("CURRENT POSITION AND PIPELINE PATH", _stage04_position_lines(state), BOX_WIDTH))
+    workspace.append(
+        _three_column_boxes(
+            (
+                ("A) STRATEGY ENGINE / INPUT", _strategy_engine_lines(state), 38),
+                ("B) INPUT CONTEXT", _strategy_input_context_lines(state), 42),
+                ("C) SKILL STACK / COMPONENTS", _strategy_skill_stack_lines(state), 48),
+            )
+        )
     )
+    workspace.append(_compact_section_box("D) STRATEGY BUILD / JSON PREVIEW", _strategy_preview_lines(state), BOX_WIDTH))
+    workspace.append(_compact_section_box("STRATEGY READOUT / OUTPUT SUMMARY", _strategy_output_summary_lines(state, stage), BOX_WIDTH))
     return workspace
 
 
 def _beat_workspace(state: CockpitState, stage: StageDefinition) -> Text:
-    beat_plan = _data_dict(state, "selected_beat_plan")
-    beats = beat_plan.get("beats") or beat_plan.get("selected_beats") or []
-    workspace = _stage_detail_workspace(
-        state,
-        stage,
-        "BEAT / HOOK PLAN",
-        [
-            ("Hook", _first_value(beat_plan, "hook", "opening_hook")),
-            ("Beats", _count_or_unknown(beats)),
-            ("Escalation", _first_value(beat_plan, "escalation", "middle")),
-            ("Payoff", _first_value(beat_plan, "payoff", "ending")),
-        ],
-        "selected_beat_plan.json",
-        "Inspect selected beat plan and prepare judge handoff.",
+    workspace = Text()
+    workspace.append("ACTIVE WORKSPACE / STAGE 05: BEAT / HOOK PLANNER\n", style=style(TEXT_LABEL, bg=BG_WORKSPACE, bold=True))
+    workspace.append(_compact_section_box("CURRENT POSITION AND PIPELINE PATH", _stage05_position_lines(state), BOX_WIDTH))
+    workspace.append(
+        _three_column_boxes(
+            (
+                ("A) HOOK BRIEF", _hook_brief_lines(state), 28),
+                ("B) HOOK OPTIONS / BEAT CANDIDATES", _hook_candidate_lines(state), 58),
+                ("C) SELECTED BEAT PLAN", _selected_beat_plan_lines(state, stage), 42),
+            )
+        )
     )
+    workspace.append(_compact_section_box("OUTPUT PREVIEW / HANDOFF", _beat_output_preview_lines(state), BOX_WIDTH))
     return workspace
 
 
 def _judge_workspace(state: CockpitState, stage: StageDefinition) -> Text:
-    judge = _data_dict(state, "creative_judge") or _data_dict(state, "decision_log")
-    workspace = _stage_detail_workspace(
-        state,
-        stage,
-        "CREATIVE JUDGE",
-        [
-            ("Decision", _first_value(judge, "decision", "status", "selected")),
-            ("Rationale", _first_value(judge, "rationale", "reason", "notes")),
-            ("Risks", _joined_value(judge.get("risks") or judge.get("issues"))),
-            ("Selected", _first_value(judge, "selected_candidate", "candidate", "winner")),
-        ],
-        "creative_judge.json / decision_log.json",
-        "Review selection rationale before scene contract expansion.",
+    workspace = Text()
+    workspace.append("ACTIVE WORKSPACE / STAGE 06: CREATIVE JUDGE\n", style=style(TEXT_LABEL, bg=BG_WORKSPACE, bold=True))
+    workspace.append(_compact_section_box("CURRENT POSITION AND PIPELINE PATH", _stage06_position_lines(state), BOX_WIDTH))
+    workspace.append(
+        _three_column_boxes(
+            (
+                ("A) JUDGE INPUT", _judge_input_lines(state), 34),
+                ("B) CREATIVE CHECKS", _judge_check_lines(state), 40),
+                ("C) FINAL CREATIVE DECISION", _judge_decision_lines(state, stage), 54),
+            )
+        )
     )
+    workspace.append(_compact_section_box("OUTPUT PREVIEW / RISKS / HANDOFF", _judge_output_preview_lines(state), BOX_WIDTH))
     return workspace
+
+
+def _pipeline_selected_lines(state: CockpitState) -> list[Text]:
+    return [
+        _label_value_line("Pipeline", state.header.pipeline or "unknown"),
+        _label_value_line("Creative OS / storyboard pipeline", "available"),
+        _plain_line("Shortform vertical workflow for storyboarded scenes, image keyframes, motion and final assembly."),
+        _plain_line(""),
+        _label_value_line("Purpose", "turn creative direction into scene prompts and keyframes"),
+        _label_value_line("Mode", state.header.mode or "not selected"),
+        _label_value_line("Format", f"{state.header.orientation} / {state.header.resolution}"),
+        _label_value_line("Scenes", str(state.header.scene_count or "unknown")),
+        _label_value_line("Status", "selected / read-only"),
+    ]
+
+
+def _pipeline_route_lines(state: CockpitState) -> list[Text]:
+    return [
+        _literal_line("▶ 01 Pipeline overview       active"),
+        _literal_line("  ↓"),
+        _literal_line("○ 02 Mode & Style           direction"),
+        _literal_line("  ↓"),
+        _literal_line("○ 03 Skills laden           mode/style/hook/model skills"),
+        _literal_line("  ↓"),
+        _literal_line("○ 04-06 Creative planning   strategy, beat plan, judge"),
+        _literal_line("  ↓"),
+        _literal_line("○ 07-08 Contracts/prompts   scene rules and prompt payload"),
+        _literal_line("  ↓"),
+        _literal_line("○ 09-15 Generation/output   keyframes, video, final assembly"),
+    ]
+
+
+def _pipeline_asset_lines(state: CockpitState) -> list[Text]:
+    return [
+        _compact_status_line("✓", "Keyframes", "image workflow"),
+        _compact_status_line("○", "Voice", _data_hint(state, "voice", "optional")),
+        _compact_status_line("○", "Music", _data_hint(state, "music", "optional")),
+        _compact_status_line("○", "Subtitles", _data_hint(state, "subtitles", "optional")),
+        _compact_status_line("✓", "Scene Count", str(state.header.scene_count or 3)),
+        _compact_status_line("○", "Final MP4", "planned"),
+    ]
+
+
+def _pipeline_output_target_lines(state: CockpitState, stage: StageDefinition) -> list[Text]:
+    return [
+        _metric_row(
+            (
+                ("Output Goals", "scene prompts, keyframes, motion prompts, final.mp4"),
+                ("Next Step", "02 Mode & Style"),
+                ("Run Type", _run_type(state)),
+            ),
+            value_width=34,
+        ),
+        _label_value_line("Operator Next", "confirm the selected route and continue to Mode & Style"),
+    ]
+
+
+def _stage02_position_lines(state: CockpitState) -> list[Text]:
+    return [
+        _metric_row(
+            (
+                ("Current Step", "Mode & Style"),
+                ("Operator Focus", "define creative direction"),
+                ("Last", "✓ 01 Pipeline wählen"),
+                ("Next", "03 Skills laden"),
+            ),
+            value_width=25,
+        )
+    ]
+
+
+def _mode_panel_lines(state: CockpitState) -> list[Text]:
+    return [
+        _label_value_line("Selected Mode", state.header.mode or "unknown"),
+        _label_value_line("Intent", "shortform nature story"),
+        _label_value_line("Core Goal", _topic_goal(state)),
+        _label_value_line("Structure", f"{state.header.scene_count or 3}-scene visual progression"),
+        _label_value_line("Status", "locked / ready"),
+    ]
+
+
+def _style_panel_lines(state: CockpitState) -> list[Text]:
+    return [
+        _label_value_line("Selected Style", _style_package_hint(state)),
+        _label_value_line("Visual Tone", "atmospheric · premium · calm"),
+        _label_value_line("Color Language", "deep jungle greens · sunrise gold"),
+        _label_value_line("Framing", "cinematic depth · controlled motion"),
+        _label_value_line("Status", "locked / ready"),
+    ]
+
+
+def _mode_skill_summary_lines(state: CockpitState) -> list[Text]:
+    return [
+        _compact_status_line("✓", "mode", state.header.mode or "unknown"),
+        _compact_status_line("✓", "story", "shortform progression"),
+        _compact_status_line("○", "fallback", _fallback_skill_value(state)),
+    ]
+
+
+def _style_skill_summary_lines(state: CockpitState) -> list[Text]:
+    return [
+        _compact_status_line("✓", "style", _style_package_hint(state)),
+        _compact_status_line("✓", "prompting", _skill_present_value(state, "core/positive_image_prompting")),
+        _compact_status_line("✓", "avoidance", _skill_present_value(state, "core/artifact_avoidance")),
+    ]
+
+
+def _mode_style_risk_lines(state: CockpitState, stage: StageDefinition) -> list[Text]:
+    return [
+        _compact_status_line("○", "avoid", "readable text and fake UI"),
+        _compact_status_line("○", "risk", "style fallback if package missing"),
+        _compact_status_line("▶", "handoff", "Stage 03 Skills laden"),
+    ]
+
+
+def _mode_style_detail_lines(state: CockpitState) -> list[Text]:
+    return [
+        _metric_row(
+            (
+                ("Mode Intent", "shortform visual adventure"),
+                ("Content Logic", f"{state.header.scene_count or 3} scene progression"),
+                ("Core Goal", _topic_goal(state)),
+            ),
+            value_width=34,
+        ),
+        _metric_row(
+            (
+                ("Style Language", "cinematic_nature / sunrise greens"),
+                ("Visual Rules", "clear subject, controlled motion"),
+                ("Avoids", "readable text, fake UI, clutter"),
+            ),
+            value_width=34,
+        ),
+        _label_value_line("Handoff", "Stage 03 loads mode, style, hook and model skills; the pipeline route itself stays fixed."),
+    ]
+
+
+def _stage03_position_lines(state: CockpitState) -> list[Text]:
+    return [
+        _metric_row(
+            (
+                ("Current Step", "Skills Loading"),
+                ("Operator Focus", "resolve skill tree"),
+                ("Last", "✓ 02 Mode & Style"),
+                ("Next", "04 Creative Strategy"),
+            ),
+            value_width=25,
+        )
+    ]
+
+
+def _skill_tree_lines(state: CockpitState) -> list[Text]:
+    return [
+        _literal_line("Skill Sources"),
+        _literal_line("├─ Mode Skills"),
+        _literal_line(f"│  └─ {state.header.mode or 'unknown'} / {_mode_skill_status(state)}"),
+        _literal_line("├─ Style Skills"),
+        _literal_line(f"│  └─ {_style_package_hint(state)} / loaded"),
+        _literal_line("├─ Hook / Creative Skills"),
+        _literal_line("│  └─ beat planner, hook builder / prepared"),
+        _literal_line("├─ Model Skills"),
+        _literal_line(f"│  └─ zimage / {_skill_present_value(state, 'models/zimage')}"),
+        _literal_line("└─ Safety Skills"),
+        _literal_line("   └─ artifact avoidance / loaded"),
+    ]
+
+
+def _skill_progress_lines(state: CockpitState) -> list[Text]:
+    loaded = state.skill_health.loaded_count
+    fallbacks = state.skill_health.fallback_count
+    missing = state.skill_health.missing_optional_count + state.skill_health.blocking_missing_count
+    total = max(1, loaded + fallbacks + missing)
+    percent = int(round((loaded + fallbacks) / total * 100))
+    return [
+        _label_value_line("Skill Health", f"{state.skill_health.mark} {state.skill_health.status}"),
+        _literal_line(_progress_bar(str(percent)) + f" {percent}%"),
+        _label_value_line("Loaded", str(loaded)),
+        _label_value_line("Fallbacks", str(fallbacks)),
+        _label_value_line("Missing optional", str(state.skill_health.missing_optional_count)),
+        _label_value_line("Blocking missing", str(state.skill_health.blocking_missing_count)),
+        _plain_line("Pipeline route is fixed; skills come from mode, style, hook and models."),
+    ]
+
+
+def _skill_context_lines(state: CockpitState) -> list[Text]:
+    return [
+        _label_value_line("Mode", state.header.mode or "unknown"),
+        _label_value_line("Style", _style_package_hint(state)),
+        _label_value_line("Topic", _topic_goal(state)),
+        _plain_line("Mode & Style confirmed from previous step."),
+        _plain_line(""),
+        _label_value_line("Skill Health", f"{state.skill_health.mark} {state.skill_health.status}"),
+        _label_value_line("Loaded", str(state.skill_health.loaded_count)),
+    ]
+
+
+def _skill_loading_status_lines(state: CockpitState) -> list[Text]:
+    return [
+        _label_value_line("Skill Sources", f"{state.skill_health.loaded_count} loaded / {state.skill_health.fallback_count} fallback"),
+        _compact_status_line("✓", "Core", _skills_by_prefix(state, "core/", 2)),
+        _compact_status_line("○", "Mode", _mode_skill_status(state)),
+        _compact_status_line("✓", "Style", _style_package_hint(state)),
+        _compact_status_line("○", "Hook / Creative", "beat planner / hook builder prepared"),
+        _compact_status_line("✓", "Model", _skill_present_value(state, "models/zimage")),
+        _compact_status_line("✓", "Safety", "artifact avoidance"),
+        _compact_status_line("○", "Missing optional", str(state.skill_health.missing_optional_count)),
+    ]
+
+
+def _skill_match_detail_lines(state: CockpitState, stage: StageDefinition) -> list[Text]:
+    return [
+        _metric_row(
+            (
+                ("Core", _skills_by_prefix(state, "core/", 3)),
+                ("Style", _skills_by_prefix(state, "styles/", 2)),
+                ("Fallbacks", str(state.skill_health.fallback_count)),
+            ),
+            value_width=34,
+        ),
+        _metric_row(
+            (
+                ("Mode", state.header.mode or "unknown"),
+                ("Model", _skill_present_value(state, "models/zimage")),
+                ("Next Action", "handoff to Creative Strategy"),
+            ),
+            value_width=34,
+        ),
+    ]
+
+
+def _stage04_position_lines(state: CockpitState) -> list[Text]:
+    return [
+        _metric_row(
+            (
+                ("Current Step", "CreativeStrategy"),
+                ("Operator Focus", "build strategy"),
+                ("Last", "✓ 03 Skills laden"),
+                ("Next", "05 Beat / Hook Planner"),
+            ),
+            value_width=25,
+        )
+    ]
+
+
+def _strategy_engine_lines(state: CockpitState) -> list[Text]:
+    return [
+        _label_value_line("Director", "enabled"),
+        _label_value_line("Strategy model", "Qwen / Director module"),
+        _label_value_line("Image target", _image_backend_status(state)),
+        _label_value_line("Reasoning", "visual narrative planning"),
+        _label_value_line("Status", _artifact_ready_demo_missing(state, "creative_strategy.json", "creative_strategy")),
+    ]
+
+
+def _strategy_input_context_lines(state: CockpitState) -> list[Text]:
+    return [
+        _label_value_line("Mode", state.header.mode or "unknown"),
+        _label_value_line("Style package", _style_package_hint(state)),
+        _label_value_line("Story goal", _topic_goal(state)),
+        _label_value_line("Duration target", f"{state.header.duration}s" if state.header.duration else "unknown"),
+        _label_value_line("Scene count", str(state.header.scene_count or 3)),
+        _label_value_line("Audience intent", "short-form immersive discovery"),
+    ]
+
+
+def _strategy_skill_stack_lines(state: CockpitState) -> list[Text]:
+    return [
+        _compact_status_line("✓", "core/tiktok_shortform", _skill_present_value(state, "core/tiktok_shortform")),
+        _compact_status_line("✓", "positive_image_prompting", _skill_present_value(state, "core/positive_image_prompting")),
+        _compact_status_line("✓", "anti_boring", _skill_present_value(state, "core/anti_boring")),
+        _compact_status_line("✓", "artifact_avoidance", _skill_present_value(state, "core/artifact_avoidance")),
+        _compact_status_line("✓", "cinematic_nature", _style_package_hint(state)),
+        _compact_status_line("○", "fallback", _fallback_skill_value(state)),
+    ]
+
+
+def _strategy_preview_lines(state: CockpitState) -> list[Text]:
+    return [
+        _literal_line("{"),
+        _literal_line(f'  "story_arc": "{_shorten(_topic_goal(state), 42)}",'),
+        _literal_line('  "hook_style": "curiosity reveal",'),
+        _literal_line('  "scene_plan": ["setup", "tension", "reveal"],'),
+        _literal_line('  "camera_language": "slow push-ins / controlled glides",'),
+        _literal_line('  "visual_rules": ["clear subject", "no readable text", "artifact safe"],'),
+        _literal_line('  "output": "creative_strategy.json",'),
+        _literal_line('  "next": "beat_hook_plan.json"'),
+        _literal_line("}"),
+    ]
+
+
+def _strategy_output_summary_lines(state: CockpitState, stage: StageDefinition) -> list[Text]:
+    return [
+        _metric_row(
+            (
+                ("Hook", _stage_hook_value(state)),
+                ("Core Idea", _topic_goal(state)),
+                ("Director", "Creative OS"),
+            ),
+            value_width=34,
+        ),
+        _metric_row(
+            (
+                ("Output", "creative_strategy.json"),
+                ("Status", _artifact_ready_demo_missing(state, "creative_strategy.json", "creative_strategy")),
+                ("Next Action", "handoff to Beat / Hook Planner"),
+            ),
+            value_width=34,
+        ),
+    ]
+
+
+def _stage05_position_lines(state: CockpitState) -> list[Text]:
+    return [
+        _metric_row(
+            (
+                ("Current Step", "BeatHookPlanner"),
+                ("Operator Focus", "hook and beat timing"),
+                ("Last", "✓ 04 Creative Strategy"),
+                ("Next", "06 Creative Judge"),
+            ),
+            value_width=25,
+        )
+    ]
+
+
+def _hook_brief_lines(state: CockpitState) -> list[Text]:
+    return [
+        _label_value_line("Goal", "stop scroll in first 1.5 seconds"),
+        _label_value_line("Audience pull", "curiosity + cinematic wonder"),
+        _label_value_line("Visual angle", _topic_goal(state)),
+        _label_value_line("Opening logic", "immediate reveal into motion"),
+        _label_value_line("Tone", "adventurous, mysterious, premium"),
+    ]
+
+
+def _hook_candidate_lines(state: CockpitState) -> list[Text]:
+    return [
+        _compact_status_line("✓", "Candidate 1", "selected · curiosity reveal"),
+        _compact_field_line("Hook type", "curiosity reveal"),
+        _compact_field_line("Opening visual", "misty jungle canopy"),
+        _compact_field_line("Camera idea", "slow push-in"),
+        _compact_field_line("Beat feel", "suspense + wonder"),
+        _plain_line(""),
+        _compact_status_line("○", "Candidate 2", "discovery"),
+        _compact_field_line("Hook type", "discovery"),
+        _compact_field_line("Opening visual", "sunlight through leaves"),
+        _compact_field_line("Camera idea", "faster foliage push-in"),
+        _compact_field_line("Beat feel", "energy + exploration"),
+        _plain_line(""),
+        _compact_status_line("○", "Candidate 3", "tension opener"),
+        _compact_field_line("Hook type", "tension opener"),
+        _compact_field_line("Opening visual", "narrow trail with distant glow"),
+        _compact_field_line("Beat feel", "mystery + anticipation"),
+    ]
+
+
+def _selected_beat_plan_lines(state: CockpitState, stage: StageDefinition) -> list[Text]:
+    beats = _beat_values(state)
+    return [
+        _label_value_line("Hook", _stage_hook_value(state)),
+        _label_value_line("Beats", str(len(beats))),
+        _compact_status_line("✓", "Beat 1 Hook open", beats[0]),
+        _compact_status_line("✓", "Beat 2 Build tension", beats[1]),
+        _compact_status_line("✓", "Beat 3 Micro payoff", beats[2]),
+        _label_value_line("Escalation", beats[1]),
+        _label_value_line("Payoff", beats[2]),
+        _label_value_line("Output", "beat_hook_plan.json"),
+        _label_value_line("Next Action", "handoff to Creative Judge"),
+    ]
+
+
+def _beat_output_preview_lines(state: CockpitState) -> list[Text]:
+    beats = _beat_values(state)
+    return [
+        _metric_row(
+            (
+                ("Output", "beat_hook_plan.json"),
+                ("Selected", "candidate_01"),
+                ("Handoff", "Creative Judge"),
+            ),
+            value_width=34,
+        ),
+        _literal_line("{"),
+        _literal_line('  "hook_type": "curiosity_reveal",'),
+        _literal_line(f'  "opening_visual": "{_shorten(_stage_hook_value(state), 34)}",'),
+        _literal_line(f'  "beats": ["{beats[0]}", "{beats[1]}", "{beats[2]}"],'),
+        _literal_line('  "transition_note": "flow into scene contracts"'),
+        _literal_line("}"),
+    ]
+
+
+def _stage06_position_lines(state: CockpitState) -> list[Text]:
+    return [
+        _metric_row(
+            (
+                ("Current Step", "CreativeJudge"),
+                ("Operator Focus", "judge strategy + hook fit"),
+                ("Last", "✓ 05 Beat / Hook Planner"),
+                ("Next", "07 Scene Contracts"),
+            ),
+            value_width=25,
+        )
+    ]
+
+
+def _judge_input_lines(state: CockpitState) -> list[Text]:
+    return [
+        _label_value_line("Strategy source", "creative_strategy.json"),
+        _label_value_line("Hook source", "beat_hook_plan.json"),
+        _label_value_line("Goal", "strong shortform opening"),
+        _label_value_line("Audience", "curiosity + cinematic wonder"),
+        _label_value_line("Mode / Style", f"{state.header.mode or 'unknown'} / {_style_package_hint(state)}"),
+        _label_value_line("Key risk", "weak opening or visual clutter"),
+    ]
+
+
+def _judge_check_lines(state: CockpitState) -> list[Text]:
+    return [
+        _compact_status_line("✓", "Hook strength", "pass"),
+        _compact_status_line("✓", "Format fit", "pass"),
+        _compact_status_line("✓", "Visual feasibility", "pass"),
+        _compact_status_line("✓", "Story clarity", "pass"),
+        _compact_status_line("○", "Artifact risk", "low"),
+        _compact_status_line("✓", "Scroll-stop potential", "good"),
+    ]
+
+
+def _judge_decision_lines(state: CockpitState, stage: StageDefinition) -> list[Text]:
+    judge = _data_dict(state, "stage6_review_decision") or _data_dict(state, "creative_judge") or _data_dict(state, "decision_log")
+    decision = _first_value(judge, "decision", "overall_status", "status", "selected")
+    return [
+        _label_value_line("Decision", "APPROVED" if decision in {"passed", "approved"} else decision),
+        _label_value_line("Selected", _stage_hook_value(state)),
+        _label_value_line("Rationale", "clear transition from hook to scene contracts"),
+        _label_value_line("Required changes", "none"),
+        _label_value_line("Risks", "artifact risk low"),
+        _label_value_line("Output", "creative_judge.json"),
+        _label_value_line("Next Action", "handoff to Scene Contracts"),
+    ]
+
+
+def _judge_output_preview_lines(state: CockpitState) -> list[Text]:
+    return [
+        _metric_row(
+            (
+                ("Output", "creative_judge.json"),
+                ("Risk", "low"),
+                ("Handoff", "Scene Contracts"),
+            ),
+            value_width=34,
+        ),
+        _literal_line("{"),
+        _literal_line('  "decision": "approved",'),
+        _literal_line(f'  "selected_hook": "{_shorten(_stage_hook_value(state), 34)}",'),
+        _literal_line('  "artifact_risk": "low",'),
+        _literal_line('  "required_fixes": "none",'),
+        _literal_line('  "next_stage": "07_scene_contracts"'),
+        _literal_line("}"),
+    ]
 
 
 def _scene_contracts_workspace(state: CockpitState, stage: StageDefinition) -> Text:
@@ -356,7 +815,6 @@ def _scene_contracts_workspace(state: CockpitState, stage: StageDefinition) -> T
     workspace.append("ACTIVE WORKSPACE / STAGE 07: SCENE CONTRACTS\n", style=style(TEXT_LABEL, bg=BG_WORKSPACE, bold=True))
     workspace.append(_compact_section_box("CURRENT POSITION AND PIPELINE PATH", _scene_contract_position_lines(state), BOX_WIDTH))
     workspace.append(_scene_contract_columns(state))
-    workspace.append(_compact_section_box("HANDOFF PATH", _scene_contract_handoff_lines(), BOX_WIDTH))
     return workspace
 
 
@@ -390,6 +848,8 @@ def _scene_contract_input_status_lines(state: CockpitState) -> list[Text]:
         _compact_status_line("✓", "Mode / Style", _mode_style_contract_value(state)),
         _compact_status_line("✓", "Risk Policy", _risk_policy_status(state)),
         _compact_status_line("○", "Artifact Policy", _artifact_policy_contract_status(state)),
+        _compact_status_line("✓", "Scene Count", str(len(_scene_contracts(state)) or state.header.scene_count or 0)),
+        _compact_status_line("▶", "Output Target", "scene_contracts.json"),
     ]
 
 
@@ -422,6 +882,7 @@ def _scene_contract_card(state: CockpitState, index: int, scene: object) -> list
     marker = "✓" if "ready" in status else "▶" if "drafting" in status else "○"
     return [
         _scene_card_header_line(index, scene_id, marker, status),
+        _compact_field_line("Status", status),
         _compact_field_line("Visual Anchor", _scene_contract_value(scene, fixture, "visual_anchor", "anchor", "subject")),
         _compact_field_line("Environment", _scene_contract_value(scene, fixture, "environment", "setting", "location")),
         _compact_field_line("Visible Action", _scene_contract_value(scene, fixture, "action", "subject_action", "description")),
@@ -438,53 +899,45 @@ def _scene_contract_output_lines(state: CockpitState) -> list[Text]:
     completeness = "✓ complete" if len(scenes) >= 3 else f"○ {len(scenes)}/3 contracts"
     return [
         _plain_line("Output Preview (JSON)"),
-        _plain_line("{"),
-        _plain_line('  "file": "scene_contracts.json",'),
-        _plain_line(f'  "scene_count": {len(scenes) or state.header.scene_count or 0},'),
-        _plain_line('  "continuity_rule": "jungle sunrise progression",'),
-        _plain_line('  "text_policy": "no readable text",'),
-        _plain_line('  "ready_for": "image_prompt_compiler"'),
-        _plain_line("}"),
+        _literal_line("{"),
+        _literal_line('  "file": "scene_contracts.json",'),
+        _literal_line(f'  "scene_count": {len(scenes) or state.header.scene_count or 0},'),
+        _literal_line('  "continuity_rule": "jungle sunrise progression",'),
+        _literal_line('  "text_policy": "no readable text",'),
+        _literal_line('  "ready_for": "image_prompt_compiler"'),
+        _literal_line("}"),
         _plain_line(""),
+        _plain_line("Readiness"),
         _compact_status_line("✓", "scene_contracts.json", artifact_status_value),
         _compact_status_line("✓", "scenes", f"{len(scenes) or state.header.scene_count or 0} contracts"),
+        _compact_status_line("✓", "strategy merged", _artifact_ready_demo_missing(state, "creative_strategy.json", "creative_strategy")),
+        _compact_status_line("✓", "hook merged", _artifact_ready_demo_missing(state, "selected_beat_plan.json", "selected_beat_plan")),
         _compact_status_line("✓", "contract completeness", completeness),
-        _compact_status_line("○", "artifact policy attached", _artifact_policy_contract_status(state)),
-        _compact_status_line("○", "ready for Stage 08", "✓ Image Prompt Compiler" if scenes else "○ missing contracts"),
-    ]
-
-
-def _scene_contract_handoff_lines() -> list[Text]:
-    return [
-        _plain_line("06 Creative Judge -> Scene Contracts ACTIVE -> 08 Image Prompt Compiler"),
+        _compact_status_line("▶", "prompt compilation next", "Stage 08 Image Prompt Compiler" if scenes else "missing contracts"),
     ]
 
 
 def _image_prompt_workspace(state: CockpitState, stage: StageDefinition) -> Text:
     workspace = Text()
     workspace.append("ACTIVE WORKSPACE - PROMPT COMPILER\n", style=style(TEXT_LABEL, bg=BG_WORKSPACE, bold=True))
-    workspace.append(stage.short_description + "\n", style=style(TEXT_MUTED, bg=BG_WORKSPACE))
-    workspace.append(_section_box("CURRENT POSITION", _compiler_position_lines(state)))
+    workspace.append(_compact_section_box("CURRENT POSITION", _compiler_position_lines(state), BOX_WIDTH))
     workspace.append(_section_box("COMPILER SCOPE / OVERVIEW", _compiler_scope_lines(state)))
-    workspace.append(_active_section_box("IMAGE COMPILER (ACTIVE)", _image_compiler_lines(state)))
-    workspace.append(_section_box("COMPILER FAMILY / BRANCHES", _compiler_family_lines()))
-    workspace.append(_section_box("OUTPUT / NEXT", _compiler_output_lines(state)))
+    workspace.append(_compiler_main_area(state))
     return workspace
 
 
 def _compiler_position_lines(state: CockpitState) -> list[Text]:
-    return _position_grid(
-        (
-            ("Current Step", "PromptCompiler"),
-            ("Operator Focus", "compile final prompts"),
-            ("Render Paused", state.workspace.render_paused),
-            ("Last Passed", "✓ 07 Scene Contracts"),
-            ("Stage", "08 Prompt Compiler"),
-            ("Active Branch", "Image Compiler"),
-            ("Output Ready", _compiler_output_readiness(state)),
-            ("Next", "09 Image / Keyframe Generation"),
+    return [
+        _metric_row(
+            (
+                ("Step", "PromptCompiler"),
+                ("Focus", "compile final prompts"),
+                ("Last", "✓ 07 Scene Contracts"),
+                ("Next", "09 Image / Keyframe"),
+            ),
+            value_width=24,
         )
-    )
+    ]
 
 
 def _compiler_scope_lines(state: CockpitState) -> list[Text]:
@@ -500,28 +953,55 @@ def _compiler_scope_lines(state: CockpitState) -> list[Text]:
                 ("Output Targets", "image · video · audio · music"),
             )
         ),
-        _readiness_line("Input Readiness", _compiler_input_readiness(state)),
-        _readiness_line("Output Readiness", _compiler_output_readiness(state)),
     ]
 
 
 def _image_compiler_lines(state: CockpitState) -> list[Text]:
     return [
-        _readiness_line("Status", "✓ Image Compiler active"),
-        _readiness_line("Pipeline / Route", _compiler_route_summary(state)),
-        _plain_line(""),
         _compiler_subtitle("SCENE CONTRACT INPUTS"),
-        *_scene_contract_input_lines(state),
+        *_indented_lines(_scene_contract_input_lines(state)),
         _plain_line(""),
         _compiler_subtitle("SCENE PROMPT SUMMARIES"),
-        *_scene_prompt_summary_lines(state),
+        *_indented_lines(_scene_prompt_summary_lines(state)),
         _plain_line(""),
-        _compiler_subtitle("FINAL PROMPT PAYLOAD (JSON PREVIEW)"),
-        *_final_prompt_payload_lines(state),
-        _plain_line(""),
-        _compiler_subtitle("MODEL RULES / ARTIFACT POLICY"),
-        *_model_rule_lines(state),
+        _compiler_subtitle("FINAL PROMPT PAYLOAD"),
+        *_indented_lines(_final_prompt_payload_lines(state)),
     ]
+
+
+def _compiler_main_area(state: CockpitState) -> Text:
+    left = _box_plain_lines("IMAGE COMPILER (ACTIVE)", _image_compiler_lines(state), 80)
+    right = _compiler_context_box_lines(state)
+    height = max(len(left), len(right))
+    left_inner = 77
+    right_inner = 45
+    while len(left) < height:
+        left.insert(-1, "│ " + " " * left_inner + "│")
+    while len(right) < height:
+        right.append(" " * (right_inner + 3))
+
+    output = Text()
+    for row_index in range(height):
+        right_line = right[row_index].ljust(right_inner + 3)
+        output.append(left[row_index], style=style(TEXT_SUCCESS if row_index in {0, height - 1} else TEXT_MAIN, bg=BG_WORKSPACE, bold=row_index in {0, height - 1}))
+        output.append("    ", style=style(TEXT_MUTED, bg=BG_WORKSPACE))
+        output.append(right_line, style=style(TEXT_LABEL if right_line.startswith(("╭", "╰")) else TEXT_MAIN, bg=BG_WORKSPACE, bold=right_line.startswith(("╭", "╰"))))
+        output.append("\n", style=style(TEXT_MAIN, bg=BG_WORKSPACE))
+    return output
+
+
+def _compiler_context_box_lines(state: CockpitState) -> list[str]:
+    boxes = [
+        _box_plain_lines("VIDEO COMPILER", _video_compiler_lines(), 48),
+        _box_plain_lines("AUDIO COMPILER (OPTIONAL)", _audio_compiler_lines(), 48),
+        _box_plain_lines("MUSIC COMPILER (OPTIONAL)", _music_compiler_lines(), 48),
+    ]
+    lines: list[str] = []
+    for index, box in enumerate(boxes):
+        if index:
+            lines.append("")
+        lines.extend(box)
+    return lines
 
 
 def _compiler_route_summary(state: CockpitState) -> str:
@@ -539,14 +1019,43 @@ def _compiler_family_lines() -> list[Text]:
     ]
 
 
+def _video_compiler_lines() -> list[Text]:
+    return [
+        _label_value_line("Status", "queued / later"),
+        _label_value_line("Target", "shot_sequences"),
+        _label_value_line("Motion Style", "smooth_cinematic"),
+        _label_value_line("Transitions", "match_cut · dissolve"),
+        _label_value_line("Duration Mapping", "per_scene"),
+        _label_value_line("Output", "video_prompts.json"),
+    ]
+
+
+def _audio_compiler_lines() -> list[Text]:
+    return [
+        _label_value_line("Status", "queued / optional"),
+        _label_value_line("Ambience", "jungle_morning"),
+        _label_value_line("SFX", "wildlife · wind · water"),
+        _label_value_line("VO", "none"),
+        _label_value_line("Output", "audio_prompts.json"),
+    ]
+
+
+def _music_compiler_lines() -> list[Text]:
+    return [
+        _label_value_line("Status", "queued / optional"),
+        _label_value_line("Mood", "adventurous_epic"),
+        _label_value_line("Tempo", "92 BPM"),
+        _label_value_line("Instrumentation", "hybrid_orchestral"),
+        _label_value_line("Output", "music_prompts.json"),
+    ]
+
+
 def _image_prompt_card_lines(state: CockpitState) -> list[Text]:
     scenes = _compiler_scenes(state)
     if not scenes:
         return [_plain_line("No scene contracts available for image prompt compilation")]
     lines: list[Text] = []
     for index, scene in enumerate(scenes[:3], start=1):
-        if index > 1:
-            lines.append(_plain_line(""))
         scene_id = _scene_value(scene, "scene_id", f"scene_{index:02d}")
         lines.extend(_image_prompt_card(state, scene, scene_id))
     return lines
@@ -584,17 +1093,27 @@ def _compiler_subtitle(value: str) -> Text:
     return line
 
 
+def _indented_lines(lines: list[Text]) -> list[Text]:
+    indented: list[Text] = []
+    for line in lines:
+        output = Text()
+        output.append("  ", style=style(TEXT_MUTED, bg=BG_WORKSPACE))
+        output.append_text(line)
+        indented.append(output)
+    return indented
+
+
 def _scene_contract_input_lines(state: CockpitState) -> list[Text]:
     first = _compiler_scenes(state)[0] if _compiler_scenes(state) else {}
     return [
-        _label_value_line("Style", _style_hint(state)),
-        _label_value_line("Mode", state.header.mode or "unknown"),
-        _label_value_line("Tone", _scene_field(first, "tone", "mood", default="not_checked")),
-        _label_value_line("Lighting", _scene_field(first, "lighting", "light", default="not_checked")),
-        _label_value_line("Camera", _scene_field(first, "camera", "camera_plan", "camera_motion", default="not_checked")),
-        _label_value_line("Composition", _scene_field(first, "composition", "framing", default="not_checked")),
-        _label_value_line("Resolution", state.header.resolution or "unknown"),
-        _label_value_line("Aspect", state.header.orientation or "unknown"),
+        _compact_kv_line("Style", _style_hint(state), 13, 14),
+        _compact_kv_line("Mode", state.header.mode or "unknown", 13, 14),
+        _compact_kv_line("Tone", _scene_field(first, "tone", "mood", default="not_checked"), 13, 14),
+        _compact_kv_line("Lighting", _scene_field(first, "lighting", "light", default="not_checked"), 13, 14),
+        _compact_kv_line("Camera", _scene_field(first, "camera", "camera_plan", "camera_motion", default="not_checked"), 13, 14),
+        _compact_kv_line("Composition", _scene_field(first, "composition", "framing", default="not_checked"), 13, 14),
+        _compact_kv_line("Resolution", state.header.resolution or "unknown", 13, 14),
+        _compact_kv_line("Aspect", state.header.orientation or "unknown", 13, 14),
     ]
 
 
@@ -604,16 +1123,18 @@ def _scene_prompt_summary_lines(state: CockpitState) -> list[Text]:
         return [_plain_line("No prompt summaries available")]
     lines: list[Text] = []
     for index, scene in enumerate(scenes[:3], start=1):
+        if index > 1:
+            lines.append(_plain_line(""))
         scene_id = _scene_value(scene, "scene_id", f"scene_{index:02d}")
         prompt = _compiled_prompt_preview(state, scene_id)
         status = _scene_prompt_status_for_summary(state, index, prompt)
         confidence = _scene_prompt_confidence(index, status)
-        line = Text()
-        line.append(f"{scene_id:<9} ", style=style(TEXT_LABEL, bg=BG_WORKSPACE, bold=True))
-        line.append(f"{status:<10} ", style=_job_status_style("generating" if status == "validating" else "ready"))
-        line.append(_shorten(prompt if prompt != "not_checked" else _prompt_fallback_summary(state, scene_id), 70), style=style(TEXT_MAIN, bg=BG_WORKSPACE))
-        line.append(f"  conf: {confidence}", style=style(TEXT_SUCCESS if status == "compiled" else TEXT_ACTIVE, bg=BG_WORKSPACE, bold=True))
-        lines.append(line)
+        header = Text()
+        header.append(f"{scene_id:<9}", style=style(TEXT_LABEL, bg=BG_WORKSPACE, bold=True))
+        header.append(f" {status:<10}", style=_job_status_style("generating" if status == "validating" else "ready"))
+        header.append(f" conf {confidence}", style=style(TEXT_SUCCESS if status == "compiled" else TEXT_ACTIVE, bg=BG_WORKSPACE, bold=True))
+        lines.append(header)
+        lines.append(_plain_line(_shorten(prompt if prompt != "not_checked" else _prompt_fallback_summary(state, scene_id), 34)))
     return lines
 
 
@@ -621,11 +1142,11 @@ def _final_prompt_payload_lines(state: CockpitState) -> list[Text]:
     scenes = [_scene_value(scene, "scene_id", f"scene_{index:02d}") for index, scene in enumerate(_compiler_scenes(state)[:3], start=1)]
     scene_list = ", ".join(scenes) or "none"
     return [
-        _plain_line("{"),
-        _plain_line(f'  "project": "{state.header.job_id}", "mode": "{state.header.mode or "unknown"}",'),
-        _plain_line(f'  "format": "{state.header.orientation} / {state.header.resolution}", "scenes": [{scene_list}],'),
-        _plain_line('  "output": "prompt_payload_compiled.json", "handoff": "09 Image / Keyframe Generation"'),
-        _plain_line("}"),
+        _compact_kv_line("project", state.header.job_id, 9, 58),
+        _compact_kv_line("mode", state.header.mode or "unknown", 9, 58),
+        _compact_kv_line("format", f"{state.header.orientation} / {state.header.resolution}", 9, 58),
+        _compact_kv_line("scenes", scene_list, 9, 58),
+        _compact_kv_line("output", "prompt_payload_compiled.json", 9, 58),
     ]
 
 
@@ -1423,6 +1944,12 @@ def _plain_line(value: str) -> Text:
     return line
 
 
+def _literal_line(value: str) -> Text:
+    line = Text()
+    line.append(_shorten_preserve(value, 120), style=style(TEXT_MAIN, bg=BG_WORKSPACE))
+    return line
+
+
 def _artifact_lines(state: CockpitState, stage: StageDefinition) -> list[Text]:
     if not stage.artifacts:
         return [_plain_line("No required artifact for this V0.1 view")]
@@ -1558,6 +2085,95 @@ def _skill_group_value(skill_match: dict[str, object], keys: tuple[str, ...]) ->
     return "unknown"
 
 
+def _topic_goal(state: CockpitState) -> str:
+    intent_route = _data_dict(state, "intent_route")
+    for key in ("topic_intent", "topic", "goal"):
+        value = intent_route.get(key)
+        if value:
+            return _shorten(str(value), 46)
+    if state.header.topic:
+        return _shorten(state.header.topic, 46)
+    return "jungle safari at sunrise"
+
+
+def _skill_ids(state: CockpitState) -> list[str]:
+    skill_match = _data_dict(state, "skill_match")
+    values = skill_match.get("loaded_skill_ids")
+    if isinstance(values, list):
+        return [str(value) for value in values]
+    return []
+
+
+def _missing_skill_ids(state: CockpitState) -> list[str]:
+    skill_match = _data_dict(state, "skill_match")
+    values = skill_match.get("missing_skill_ids")
+    if isinstance(values, list):
+        return [str(value) for value in values]
+    return []
+
+
+def _fallback_skill_ids(state: CockpitState) -> list[str]:
+    skill_match = _data_dict(state, "skill_match")
+    values = skill_match.get("fallback_skill_ids")
+    if isinstance(values, list):
+        return [str(value) for value in values]
+    return []
+
+
+def _style_package_hint(state: CockpitState) -> str:
+    style_hint = _style_hint(state)
+    if style_hint != "unknown":
+        return style_hint
+    styles = [skill.split("/", 1)[1] for skill in _skill_ids(state) if skill.startswith("styles/") and "/" in skill]
+    return styles[0] if styles else "cinematic_nature"
+
+
+def _mode_skill_status(state: CockpitState) -> str:
+    missing = [skill.split("/", 1)[1] for skill in _missing_skill_ids(state) if skill.startswith("modes/") and "/" in skill]
+    if missing:
+        return f"fallback for {missing[0]}"
+    return "loaded"
+
+
+def _fallback_skill_value(state: CockpitState) -> str:
+    fallback = _fallback_skill_ids(state)
+    if not fallback:
+        return "none"
+    return ", ".join(_basename(skill) for skill in fallback[:2])
+
+
+def _skill_present_value(state: CockpitState, skill_id: str) -> str:
+    return "loaded" if skill_id in _skill_ids(state) else "not_checked"
+
+
+def _skills_by_prefix(state: CockpitState, prefix: str, limit: int) -> str:
+    values = [_basename(skill) for skill in _skill_ids(state) if skill.startswith(prefix)]
+    if not values:
+        return "not_checked"
+    return ", ".join(values[:limit])
+
+
+def _stage_hook_value(state: CockpitState) -> str:
+    beat_plan = _data_dict(state, "selected_beat_plan")
+    value = _first_value(beat_plan, "hook", "opening_hook", "selected_hook")
+    if value != "unknown":
+        return value
+    return "misty canopy reveal"
+
+
+def _beat_values(state: CockpitState) -> list[str]:
+    beat_plan = _data_dict(state, "selected_beat_plan")
+    values = beat_plan.get("beats") or beat_plan.get("selected_beats")
+    if isinstance(values, list) and values:
+        beats = [str(value) for value in values[:3]]
+    else:
+        beats = []
+    defaults = ["setup", "tension", "reveal"]
+    while len(beats) < 3:
+        beats.append(defaults[len(beats)])
+    return beats[:3]
+
+
 def _missing_run_text(state: CockpitState) -> Text:
     workspace = rows_text(
         [
@@ -1626,6 +2242,13 @@ def _shorten(value: str, limit: int) -> str:
     return compact[: max(0, limit - 1)].rstrip() + "…"
 
 
+def _shorten_preserve(value: str, limit: int) -> str:
+    text = str(value).replace("\n", " ")
+    if len(text) <= limit:
+        return text
+    return text[: max(0, limit - 1)].rstrip() + "…"
+
+
 def _metric_row(metrics: tuple[tuple[str, str], ...], *, value_width: int) -> Text:
     line = Text()
     for index, (label, value) in enumerate(metrics):
@@ -1650,6 +2273,13 @@ def _compact_field_line(label: str, value: str) -> Text:
     line.append("  ", style=style(TEXT_MUTED, bg=BG_WORKSPACE))
     line.append(f"{label}: ", style=style(TEXT_LABEL, bg=BG_WORKSPACE, bold=True))
     line.append(_shorten(value, 45), style=_value_style(value))
+    return line
+
+
+def _compact_kv_line(label: str, value: str, label_width: int, value_width: int) -> Text:
+    line = Text()
+    line.append(f"{label + ':':<{label_width}}", style=style(TEXT_LABEL, bg=BG_WORKSPACE, bold=True))
+    line.append(_shorten(value, value_width), style=_value_style(value))
     return line
 
 
@@ -1705,7 +2335,7 @@ def _box_plain_lines(title: str, lines: list[Text], width: int) -> list[str]:
         "╭─ " + title_text + " " + "─" * max(0, width - len(title_text) - 5) + "╮",
     ]
     for line in lines:
-        plain = _shorten(line.plain, inner_width)
+        plain = _shorten_preserve(line.plain, inner_width)
         result.append("│ " + plain.ljust(inner_width) + "│")
     result.append("╰" + "─" * (width - 2) + "╯")
     return result

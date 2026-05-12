@@ -76,6 +76,9 @@ class CreativeOSCockpitApp(App[None]):
         if self.args.watch:
             self.set_interval(self.args.refresh_sec, self._watch_refresh)
 
+    def action_quit(self) -> None:
+        self.exit()
+
     def action_refresh(self) -> None:
         self._reload_state()
         self.notify("Cockpit data reloaded", timeout=1.5)
@@ -125,8 +128,19 @@ class CreativeOSCockpitApp(App[None]):
         issues_tile.remove_class("issues-none", "issues-warning", "issues-error")
         issues_tile.add_class(issues_panel.severity_class(self.state))
 
+    def _update_selection_panels(self) -> None:
+        selection_selectors = {"#pipeline-map", "#workspace-content"}
+        for selector, panel in panel_update_targets():
+            if selector in selection_selectors:
+                self.query_one(selector, Static).update(panel.render(self.state))
+
     def _watch_refresh(self) -> None:
-        self._reload_state()
+        loaded_state = self._state_with_selected_stage(self.state_adapter.load())
+        if loaded_state == self.state:
+            return
+        self.state = loaded_state
+        self.inspection = self.state.inspection
+        self._update_panels()
 
     def _reload_state(self) -> None:
         self.state = self._state_with_selected_stage(self.state_adapter.load())
@@ -141,7 +155,7 @@ class CreativeOSCockpitApp(App[None]):
     def _select_stage(self, stage_id: str) -> None:
         self.selected_stage = normalize_stage_id(stage_id)
         self.state = self._state_with_selected_stage(self.state)
-        self._update_panels()
+        self._update_selection_panels()
 
     def _state_with_selected_stage(self, state: object) -> object:
         return replace(
@@ -154,7 +168,7 @@ class CreativeOSCockpitApp(App[None]):
     def _move_selected_image_job(self, offset: int) -> None:
         self.selected_image_job = ((self.selected_image_job - 1 + offset) % 3) + 1
         self.state = self._state_with_selected_stage(self.state)
-        self._update_panels()
+        self._update_selection_panels()
 
     def _toggle_selected_image_job(self) -> None:
         expanded = set(self.expanded_image_jobs)
@@ -164,7 +178,7 @@ class CreativeOSCockpitApp(App[None]):
             expanded.add(self.selected_image_job)
         self.expanded_image_jobs = tuple(sorted(expanded))
         self.state = self._state_with_selected_stage(self.state)
-        self._update_panels()
+        self._update_selection_panels()
 
 
 class ThemePreviewApp(App[None]):
