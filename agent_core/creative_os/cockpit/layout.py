@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 
 from textual.app import ComposeResult
-from textual.containers import Container, Horizontal, Vertical
+from textual.containers import Container, Horizontal, ScrollableContainer, Vertical
 from textual.widgets import Static
 
 from agent_core.creative_os.cockpit.panel_registry import PANEL_REGISTRY
@@ -22,7 +22,9 @@ def compose_layout(state: CockpitState) -> ComposeResult:
             with Vertical(id="sidebar"):
                 yield _build_panel(PANEL_REGISTRY["system_status"], state)
                 yield _build_panel(PANEL_REGISTRY["pipeline_map"], state)
-            yield _build_panel(PANEL_REGISTRY["active_workspace"], state)
+            with _active_workspace_host() as workspace:
+                workspace.border_title = PANEL_REGISTRY["active_workspace"].title
+                yield Static(PANEL_REGISTRY["active_workspace"].render(state), id="workspace-content")
         with Horizontal(id="bottom-area"):
             yield _build_panel(PANEL_REGISTRY["skill_health"], state)
             yield _build_panel(PANEL_REGISTRY["artifacts"], state)
@@ -40,6 +42,9 @@ def panel_update_targets() -> Iterator[tuple[str, PanelDefinition]]:
     yield "#help-panel", _HeaderPart("help_panel", _keybar_text)
     yield "#keybar", _HeaderPart("keybar", _keybar_text)
     for panel in PANEL_REGISTRY.values():
+        if panel.panel_id == "active_workspace":
+            yield "#workspace-content", panel
+            continue
         yield f"#{panel.widget_id}", panel
 
 
@@ -48,6 +53,14 @@ def _build_panel(panel: PanelDefinition, state: CockpitState) -> CockpitPanel:
     if panel.panel_id == "issues":
         classes = f"tile {issues_panel.severity_class(state)}"
     return CockpitPanel(panel.title, panel.render(state), panel_id=panel.widget_id, classes=classes)
+
+
+class ActiveWorkspaceScrollHost(ScrollableContainer, can_focus=False):
+    """Scrollable stage host that leaves keyboard stage navigation to the app."""
+
+
+def _active_workspace_host() -> ActiveWorkspaceScrollHost:
+    return ActiveWorkspaceScrollHost(id=PANEL_REGISTRY["active_workspace"].widget_id)
 
 
 class _HeaderPart:

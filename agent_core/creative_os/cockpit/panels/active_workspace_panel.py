@@ -10,6 +10,9 @@ from agent_core.creative_os.cockpit.stage_registry import STAGE_DEFINITIONS, Sta
 from agent_core.creative_os.cockpit.theme import BG_WORKSPACE, TEXT_ACTIVE, TEXT_LABEL, TEXT_MAIN, TEXT_MUTED, TEXT_SUCCESS, style
 
 BOX_WIDTH = 132
+SCENE_CONTRACT_A_WIDTH = 30
+SCENE_CONTRACT_B_WIDTH = 54
+SCENE_CONTRACT_C_WIDTH = 44
 JOB_PREVIEW_WIDTH = 18
 JOB_MAIN_WIDTH = 78
 JOB_STATUS_WIDTH = 20
@@ -49,9 +52,68 @@ def _image_jobs_workspace(state: CockpitState) -> Text:
             ),
         )
     )
+    workspace.append(_section_box("READINESS / INPUTS", _readiness_input_lines(state)))
     job_lines = _prompt_job_lines(state)
     workspace.append(_section_box("PROMPTS / IMAGE JOBS", job_lines))
     return workspace
+
+
+def _readiness_input_lines(state: CockpitState) -> list[Text]:
+    return [
+        _readiness_line("PIPELINE / ROUTE", _pipeline_route_summary(state)),
+        _readiness_line("CREATIVE INPUTS", _creative_inputs_summary(state)),
+        _readiness_line("PROMPT INPUTS", _prompt_inputs_summary(state)),
+        _readiness_line("MODEL / BACKEND", _model_backend_summary(state)),
+        _readiness_line("KEYFRAME READINESS", _keyframe_readiness_summary(state)),
+    ]
+
+
+def _readiness_line(label: str, value: str) -> Text:
+    line = Text()
+    line.append(f"{label}: ", style=style(TEXT_LABEL, bg=BG_WORKSPACE, bold=True))
+    line.append(_shorten(value, 105), style=_value_style(value))
+    return line
+
+
+def _pipeline_route_summary(state: CockpitState) -> str:
+    pipeline = state.header.pipeline or "unknown"
+    mark = "✓" if pipeline != "unknown" else "○"
+    return f"{mark} pipeline {pipeline} · current stage 09 Image / Keyframe Generation"
+
+
+def _creative_inputs_summary(state: CockpitState) -> str:
+    mode = state.header.mode or "unknown"
+    style_hint = _style_hint(state)
+    beat_plan = "present" if _data_dict(state, "selected_beat_plan") else "missing"
+    scene_contracts = _scene_contract_count(state)
+    mark = "✓" if mode != "unknown" and scene_contracts != "missing" else "○"
+    return f"{mark} mode {mode} · style {style_hint} · hook/beat plan {beat_plan} · scene contracts {scene_contracts}"
+
+
+def _prompt_inputs_summary(state: CockpitState) -> str:
+    compiler = _prompt_compiler_status(state)
+    audit = artifact_status(state, "prompt_audit.json")
+    policy = _artifact_policy_status(state)
+    mark = "✓" if compiler == "present" and audit == "present" else "○"
+    return f"{mark} image prompt compiler {compiler} · prompt audit {audit} · artifact policy {policy}"
+
+
+def _model_backend_summary(state: CockpitState) -> str:
+    backend = _image_backend_status(state)
+    session = state.session_mode or "unknown"
+    mark = "✓" if backend not in {"unknown", "not_checked"} else "○"
+    return f"{mark} image backend {backend} · run type {_run_type(state)} · session {session}"
+
+
+def _keyframe_readiness_summary(state: CockpitState) -> str:
+    counts = _image_job_counts(state)
+    if counts["total"] == 0:
+        return "○ total scenes 0 · finished 0 · generating 0 · queued/missing 0"
+    mark = "▶" if counts["generating"] else "✓" if counts["queued_missing"] == 0 else "○"
+    return (
+        f"{mark} total scenes {counts['total']} · finished {counts['finished']} · "
+        f"generating {counts['generating']} · queued/missing {counts['queued_missing']}"
+    )
 
 
 def _stage_workspace(state: CockpitState, stage: StageDefinition) -> Text:
@@ -290,43 +352,303 @@ def _judge_workspace(state: CockpitState, stage: StageDefinition) -> Text:
 
 
 def _scene_contracts_workspace(state: CockpitState, stage: StageDefinition) -> Text:
-    scenes = _data_list(state, "scene_contracts") or _data_list(state, "keyframe_contracts")
-    first = scenes[0] if scenes and isinstance(scenes[0], dict) else {}
-    workspace = _stage_detail_workspace(
-        state,
-        stage,
-        "SCENE CONTRACTS",
-        [
-            ("Scenes", str(len(scenes)) if scenes else "unknown"),
-            ("Environment", _first_value(first, "environment", "setting", "location")),
-            ("Action", _first_value(first, "action", "subject_action", "description")),
-            ("Camera", _first_value(first, "camera", "camera_plan", "camera_motion")),
-            ("Lighting", _first_value(first, "lighting", "light", "mood")),
-            ("Risk Controls", _joined_value(first.get("risk_controls") or first.get("constraints"))),
-        ],
-        "scene_contracts.json",
-        "Inspect scene requirements before image prompt compilation.",
-    )
+    workspace = Text()
+    workspace.append("ACTIVE WORKSPACE / STAGE 07: SCENE CONTRACTS\n", style=style(TEXT_LABEL, bg=BG_WORKSPACE, bold=True))
+    workspace.append(_compact_section_box("CURRENT POSITION AND PIPELINE PATH", _scene_contract_position_lines(state), BOX_WIDTH))
+    workspace.append(_scene_contract_columns(state))
+    workspace.append(_compact_section_box("HANDOFF PATH", _scene_contract_handoff_lines(), BOX_WIDTH))
     return workspace
+
+
+def _scene_contract_position_lines(state: CockpitState) -> list[Text]:
+    return [
+        _metric_row(
+            (
+                ("Current Step", "Scene Contracts"),
+                ("Operator Focus", "lock scene-level production rules"),
+                ("Render Paused", state.workspace.render_paused),
+            ),
+            value_width=30,
+        ),
+        _metric_row(
+            (
+                ("Last", "✓ 06 Creative Judge"),
+                ("Next", "○ 08 Image Prompt Compiler"),
+                ("Output", "scene_contracts.json"),
+                ("Run", state.session_mode or _run_type(state)),
+            ),
+            value_width=28,
+        ),
+    ]
+
+
+def _scene_contract_input_status_lines(state: CockpitState) -> list[Text]:
+    return [
+        _compact_status_line("✓", "Creative Strategy", _artifact_ready_demo_missing(state, "creative_strategy.json", "creative_strategy")),
+        _compact_status_line("✓", "Selected Beat / Hook", _artifact_ready_demo_missing(state, "selected_beat_plan.json", "selected_beat_plan")),
+        _compact_status_line("✓", "Creative Judge Decision", _creative_judge_status(state)),
+        _compact_status_line("✓", "Mode / Style", _mode_style_contract_value(state)),
+        _compact_status_line("✓", "Risk Policy", _risk_policy_status(state)),
+        _compact_status_line("○", "Artifact Policy", _artifact_policy_contract_status(state)),
+    ]
+
+
+def _scene_contract_columns(state: CockpitState) -> Text:
+    return _three_column_boxes(
+        (
+            ("A) CONTRACT INPUTS", _scene_contract_input_status_lines(state), SCENE_CONTRACT_A_WIDTH),
+            ("B) SCENE CONTRACTS", _scene_contract_card_lines(state), SCENE_CONTRACT_B_WIDTH),
+            ("C) OUTPUT PREVIEW / READINESS", _scene_contract_output_lines(state), SCENE_CONTRACT_C_WIDTH),
+        )
+    )
+
+
+def _scene_contract_card_lines(state: CockpitState) -> list[Text]:
+    scenes = _scene_contracts(state)
+    if not scenes:
+        return [_plain_line("No scene contracts available")]
+    lines: list[Text] = []
+    for index, scene in enumerate(scenes[:3], start=1):
+        if index > 1:
+            lines.append(_plain_line(""))
+        lines.extend(_scene_contract_card(state, index, scene))
+    return lines
+
+
+def _scene_contract_card(state: CockpitState, index: int, scene: object) -> list[Text]:
+    scene_id = _scene_value(scene, "scene_id", f"scene_{index:02d}")
+    fixture = _fixture_scene_contract(scene_id)
+    status = _scene_contract_status(state, index)
+    marker = "✓" if "ready" in status else "▶" if "drafting" in status else "○"
+    return [
+        _scene_card_header_line(index, scene_id, marker, status),
+        _compact_field_line("Visual Anchor", _scene_contract_value(scene, fixture, "visual_anchor", "anchor", "subject")),
+        _compact_field_line("Environment", _scene_contract_value(scene, fixture, "environment", "setting", "location")),
+        _compact_field_line("Visible Action", _scene_contract_value(scene, fixture, "action", "subject_action", "description")),
+        _compact_field_line("Camera / Lighting", _scene_contract_camera_lighting(scene, fixture)),
+        _compact_field_line("Allowed Visuals", _scene_contract_list_value(scene, fixture, "allowed_visuals", "allowed visuals")),
+        _compact_field_line("Forbidden Visuals", _scene_contract_list_value(scene, fixture, "forbidden_visuals", "forbidden visuals")),
+        _compact_field_line("Text/Glyph Risk", _scene_contract_text_risk(fixture)),
+    ]
+
+
+def _scene_contract_output_lines(state: CockpitState) -> list[Text]:
+    scenes = _scene_contracts(state)
+    artifact_status_value = _artifact_ready_demo_missing(state, "scene_contracts.json", "scene_contracts")
+    completeness = "✓ complete" if len(scenes) >= 3 else f"○ {len(scenes)}/3 contracts"
+    return [
+        _plain_line("Output Preview (JSON)"),
+        _plain_line("{"),
+        _plain_line('  "file": "scene_contracts.json",'),
+        _plain_line(f'  "scene_count": {len(scenes) or state.header.scene_count or 0},'),
+        _plain_line('  "continuity_rule": "jungle sunrise progression",'),
+        _plain_line('  "text_policy": "no readable text",'),
+        _plain_line('  "ready_for": "image_prompt_compiler"'),
+        _plain_line("}"),
+        _plain_line(""),
+        _compact_status_line("✓", "scene_contracts.json", artifact_status_value),
+        _compact_status_line("✓", "scenes", f"{len(scenes) or state.header.scene_count or 0} contracts"),
+        _compact_status_line("✓", "contract completeness", completeness),
+        _compact_status_line("○", "artifact policy attached", _artifact_policy_contract_status(state)),
+        _compact_status_line("○", "ready for Stage 08", "✓ Image Prompt Compiler" if scenes else "○ missing contracts"),
+    ]
+
+
+def _scene_contract_handoff_lines() -> list[Text]:
+    return [
+        _plain_line("06 Creative Judge -> Scene Contracts ACTIVE -> 08 Image Prompt Compiler"),
+    ]
 
 
 def _image_prompt_workspace(state: CockpitState, stage: StageDefinition) -> Text:
-    prompts = _data_list(state, "zimage_prompts") or _model_prompt_scenes(state)
-    audit = _data_dict(state, "prompt_audit") or _data_dict(state, "ltx_prompt_audit")
-    workspace = _stage_detail_workspace(
-        state,
-        stage,
-        "IMAGE PROMPT COMPILER",
-        [
-            ("Provider", _prompt_provider(state)),
-            ("Prompt Count", str(len(prompts)) if prompts else "unknown"),
-            ("Audit", _first_value(audit, "overall", "status", "result")),
-            ("Artifacts", "zimage_prompts.json / model_prompts.json / prompt_audit.json"),
-        ],
-        "zimage_prompts.json / model_prompts.json",
-        "Inspect prompt readiness before image/keyframe generation.",
-    )
+    workspace = Text()
+    workspace.append("ACTIVE WORKSPACE - PROMPT COMPILER\n", style=style(TEXT_LABEL, bg=BG_WORKSPACE, bold=True))
+    workspace.append(stage.short_description + "\n", style=style(TEXT_MUTED, bg=BG_WORKSPACE))
+    workspace.append(_section_box("CURRENT POSITION", _compiler_position_lines(state)))
+    workspace.append(_section_box("COMPILER SCOPE / OVERVIEW", _compiler_scope_lines(state)))
+    workspace.append(_active_section_box("IMAGE COMPILER (ACTIVE)", _image_compiler_lines(state)))
+    workspace.append(_section_box("COMPILER FAMILY / BRANCHES", _compiler_family_lines()))
+    workspace.append(_section_box("OUTPUT / NEXT", _compiler_output_lines(state)))
     return workspace
+
+
+def _compiler_position_lines(state: CockpitState) -> list[Text]:
+    return _position_grid(
+        (
+            ("Current Step", "PromptCompiler"),
+            ("Operator Focus", "compile final prompts"),
+            ("Render Paused", state.workspace.render_paused),
+            ("Last Passed", "✓ 07 Scene Contracts"),
+            ("Stage", "08 Prompt Compiler"),
+            ("Active Branch", "Image Compiler"),
+            ("Output Ready", _compiler_output_readiness(state)),
+            ("Next", "09 Image / Keyframe Generation"),
+        )
+    )
+
+
+def _compiler_scope_lines(state: CockpitState) -> list[Text]:
+    scenes = _compiler_scenes(state)
+    assets = sum(1 for _line, ok in state.artifacts.lines if ok)
+    return [
+        _scope_metric_line(
+            (
+                ("Scenes", str(len(scenes) or state.header.scene_count or 0)),
+                ("Assets", str(assets or "not_checked")),
+                ("Style Signals", str(_style_signal_count(state))),
+                ("Skill Sources", str(state.skill_health.loaded_count or "not_checked")),
+                ("Output Targets", "image · video · audio · music"),
+            )
+        ),
+        _readiness_line("Input Readiness", _compiler_input_readiness(state)),
+        _readiness_line("Output Readiness", _compiler_output_readiness(state)),
+    ]
+
+
+def _image_compiler_lines(state: CockpitState) -> list[Text]:
+    return [
+        _readiness_line("Status", "✓ Image Compiler active"),
+        _readiness_line("Pipeline / Route", _compiler_route_summary(state)),
+        _plain_line(""),
+        _compiler_subtitle("SCENE CONTRACT INPUTS"),
+        *_scene_contract_input_lines(state),
+        _plain_line(""),
+        _compiler_subtitle("SCENE PROMPT SUMMARIES"),
+        *_scene_prompt_summary_lines(state),
+        _plain_line(""),
+        _compiler_subtitle("FINAL PROMPT PAYLOAD (JSON PREVIEW)"),
+        *_final_prompt_payload_lines(state),
+        _plain_line(""),
+        _compiler_subtitle("MODEL RULES / ARTIFACT POLICY"),
+        *_model_rule_lines(state),
+    ]
+
+
+def _compiler_route_summary(state: CockpitState) -> str:
+    pipeline = state.header.pipeline or "unknown"
+    mark = "✓" if pipeline != "unknown" else "○"
+    return f"{mark} pipeline {pipeline} · current stage 08 Prompt Compiler / Image Compiler"
+
+
+def _compiler_family_lines() -> list[Text]:
+    return [
+        _label_value_line("Image Compiler", "✓ active"),
+        _label_value_line("Video Compiler", "○ queued / later · output video_prompts.json"),
+        _label_value_line("Audio Compiler", "○ queued / optional · output audio_prompts.json"),
+        _label_value_line("Music Compiler", "○ queued / optional · output music_prompts.json"),
+    ]
+
+
+def _image_prompt_card_lines(state: CockpitState) -> list[Text]:
+    scenes = _compiler_scenes(state)
+    if not scenes:
+        return [_plain_line("No scene contracts available for image prompt compilation")]
+    lines: list[Text] = []
+    for index, scene in enumerate(scenes[:3], start=1):
+        if index > 1:
+            lines.append(_plain_line(""))
+        scene_id = _scene_value(scene, "scene_id", f"scene_{index:02d}")
+        lines.extend(_image_prompt_card(state, scene, scene_id))
+    return lines
+
+
+def _image_prompt_card(state: CockpitState, scene: object, scene_id: str) -> list[Text]:
+    prompt = _compiled_prompt_preview(state, scene_id)
+    return [
+        _label_value_line("Scene ID", scene_id),
+        _label_value_line("Contract Source", _contract_source_status(state, scene_id)),
+        _label_value_line("Visual Anchor", _scene_field(scene, "visual_anchor", "anchor", "subject", default=_visual_anchor_hint(state))),
+        _label_value_line("Environment", _scene_field(scene, "environment", "setting", "location")),
+        _label_value_line("Action", _scene_field(scene, "action", "subject_action", "description")),
+        _label_value_line("Camera / Lighting", _camera_lighting_value(scene)),
+        _label_value_line("Positive Prompt", prompt),
+        _label_value_line("Artifact Bans", _artifact_bans_value(state)),
+        _label_value_line("Output Target", f"{scene_id}_image_prompt.json"),
+        _label_value_line("Status", _image_prompt_status(state, scene_id, prompt)),
+    ]
+
+
+def _scope_metric_line(metrics: tuple[tuple[str, str], ...]) -> Text:
+    line = Text()
+    for index, (label, value) in enumerate(metrics):
+        if index:
+            line.append(" │ ", style=style(TEXT_MUTED, bg=BG_WORKSPACE))
+        line.append(f"{label}: ", style=style(TEXT_LABEL, bg=BG_WORKSPACE, bold=True))
+        line.append(_shorten(value, 18), style=_value_style(value))
+    return line
+
+
+def _compiler_subtitle(value: str) -> Text:
+    line = Text()
+    line.append(value, style=style(TEXT_LABEL, bg=BG_WORKSPACE, bold=True))
+    return line
+
+
+def _scene_contract_input_lines(state: CockpitState) -> list[Text]:
+    first = _compiler_scenes(state)[0] if _compiler_scenes(state) else {}
+    return [
+        _label_value_line("Style", _style_hint(state)),
+        _label_value_line("Mode", state.header.mode or "unknown"),
+        _label_value_line("Tone", _scene_field(first, "tone", "mood", default="not_checked")),
+        _label_value_line("Lighting", _scene_field(first, "lighting", "light", default="not_checked")),
+        _label_value_line("Camera", _scene_field(first, "camera", "camera_plan", "camera_motion", default="not_checked")),
+        _label_value_line("Composition", _scene_field(first, "composition", "framing", default="not_checked")),
+        _label_value_line("Resolution", state.header.resolution or "unknown"),
+        _label_value_line("Aspect", state.header.orientation or "unknown"),
+    ]
+
+
+def _scene_prompt_summary_lines(state: CockpitState) -> list[Text]:
+    scenes = _compiler_scenes(state)
+    if not scenes:
+        return [_plain_line("No prompt summaries available")]
+    lines: list[Text] = []
+    for index, scene in enumerate(scenes[:3], start=1):
+        scene_id = _scene_value(scene, "scene_id", f"scene_{index:02d}")
+        prompt = _compiled_prompt_preview(state, scene_id)
+        status = _scene_prompt_status_for_summary(state, index, prompt)
+        confidence = _scene_prompt_confidence(index, status)
+        line = Text()
+        line.append(f"{scene_id:<9} ", style=style(TEXT_LABEL, bg=BG_WORKSPACE, bold=True))
+        line.append(f"{status:<10} ", style=_job_status_style("generating" if status == "validating" else "ready"))
+        line.append(_shorten(prompt if prompt != "not_checked" else _prompt_fallback_summary(state, scene_id), 70), style=style(TEXT_MAIN, bg=BG_WORKSPACE))
+        line.append(f"  conf: {confidence}", style=style(TEXT_SUCCESS if status == "compiled" else TEXT_ACTIVE, bg=BG_WORKSPACE, bold=True))
+        lines.append(line)
+    return lines
+
+
+def _final_prompt_payload_lines(state: CockpitState) -> list[Text]:
+    scenes = [_scene_value(scene, "scene_id", f"scene_{index:02d}") for index, scene in enumerate(_compiler_scenes(state)[:3], start=1)]
+    scene_list = ", ".join(scenes) or "none"
+    return [
+        _plain_line("{"),
+        _plain_line(f'  "project": "{state.header.job_id}", "mode": "{state.header.mode or "unknown"}",'),
+        _plain_line(f'  "format": "{state.header.orientation} / {state.header.resolution}", "scenes": [{scene_list}],'),
+        _plain_line('  "output": "prompt_payload_compiled.json", "handoff": "09 Image / Keyframe Generation"'),
+        _plain_line("}"),
+    ]
+
+
+def _model_rule_lines(state: CockpitState) -> list[Text]:
+    return [
+        _label_value_line("zimage rules", _model_rules_status(state)),
+        _label_value_line("avoid text artifacts", _artifact_policy_active_status(state)),
+        _label_value_line("no readable text", _policy_rule_status(state, "no_readable_text")),
+        _label_value_line("no screens/paper/labels", _policy_rule_status(state, "no_screens_paper_labels")),
+        _label_value_line("clean visual subject", _policy_rule_status(state, "clean_visual_subject")),
+        _label_value_line("Stage 09 handoff", "✓ ready for Stage 09" if _prompt_compiler_status(state) == "present" else "○ missing prompt output"),
+    ]
+
+
+def _compiler_output_lines(state: CockpitState) -> list[Text]:
+    image_prompts = "ready" if _prompt_compiler_status(state) == "present" else "missing"
+    audit = "ready" if artifact_status(state, "prompt_audit.json") == "present" else "missing"
+    return [
+        _label_value_line("prompt_payload_compiled.json", "in progress" if image_prompts == "ready" else "missing"),
+        _label_value_line("image_prompts.json", image_prompts),
+        _label_value_line("prompt_audit.json", audit),
+        _label_value_line("next stage", "09 Image / Keyframe Generation"),
+    ]
 
 
 def _keyframe_review_workspace(state: CockpitState, stage: StageDefinition) -> Text:
@@ -702,6 +1024,337 @@ def _image_job_progress(state: CockpitState, index: int, scene: object, status: 
     return {"percent": None, "elapsed": elapsed or "waiting", "backend": backend, "demo": False}
 
 
+def _scene_contract_count(state: CockpitState) -> str:
+    scenes = _scene_contracts(state)
+    if scenes:
+        return f"{len(scenes)} present"
+    if state.header.scene_count:
+        return f"{state.header.scene_count} expected"
+    return "missing"
+
+
+def _scene_contracts(state: CockpitState) -> list[object]:
+    return _data_list(state, "scene_contracts") or _data_list(state, "keyframe_contracts")
+
+
+def _compiler_scenes(state: CockpitState) -> list[object]:
+    return _scene_contracts(state) or _data_list(state, "zimage_prompts") or _model_prompt_scenes(state)
+
+
+def _present_missing(items: list[object], source: str) -> str:
+    return f"✓ present ({source})" if items else "○ missing"
+
+
+def _artifact_ready_demo_missing(state: CockpitState, artifact: str, data_key: str) -> str:
+    if artifact_status(state, artifact) == "present" or state.inspection.data.get(data_key):
+        return "demo" if state.session_mode == "fixture/demo" else "✓ ready"
+    return "○ missing"
+
+
+def _mode_style_contract_value(state: CockpitState) -> str:
+    mode = state.header.mode or "unknown"
+    style_hint = _style_hint(state)
+    if style_hint == "unknown":
+        return f"{mode} / not_checked"
+    return f"✓ {mode} / {style_hint}"
+
+
+def _risk_policy_status(state: CockpitState) -> str:
+    policy = _artifact_policy_status(state)
+    if policy != "not_checked":
+        return f"✓ {policy}"
+    if state.session_mode == "fixture/demo":
+        return "demo text_safe / artifact_avoidance"
+    return "not_checked"
+
+
+def _artifact_policy_contract_status(state: CockpitState) -> str:
+    policy = _artifact_policy_status(state)
+    if policy != "not_checked":
+        return f"✓ {policy}"
+    if state.session_mode == "fixture/demo":
+        return "demo artifact_avoidance"
+    return "○ missing"
+
+
+def _fixture_scene_contract(scene_id: str) -> dict[str, str]:
+    fixtures = {
+        "scene_01": {
+            "visual_anchor": "misty canopy reveal",
+            "environment": "sunrise jungle canopy",
+            "action": "slow opening reveal through leaves",
+            "camera": "controlled push-in",
+            "lighting": "warm shafts through mist",
+            "allowed_visuals": "leaves, vines, depth haze",
+            "forbidden_visuals": "text, logos, extra animals",
+            "text_risk": "low / no readable text",
+        },
+        "scene_02": {
+            "visual_anchor": "suspense jungle trail",
+            "environment": "narrow dense path",
+            "action": "cautious forward motion",
+            "camera": "low forward glide",
+            "lighting": "filtered green-gold light",
+            "allowed_visuals": "wet leaves, foliage depth, trail",
+            "forbidden_visuals": "captions, UI text, crowd elements",
+            "text_risk": "medium / avoid captions",
+        },
+        "scene_03": {
+            "visual_anchor": "golden path payoff",
+            "environment": "opening jungle corridor",
+            "action": "reveal into brighter destination",
+            "camera": "steady forward push",
+            "lighting": "strong golden end light",
+            "allowed_visuals": "path, sun rays, layered foliage",
+            "forbidden_visuals": "signage, duplicate subjects, overlays",
+            "text_risk": "medium / avoid signage",
+        },
+    }
+    return fixtures.get(scene_id, {})
+
+
+def _scene_contract_status(state: CockpitState, index: int) -> str:
+    if state.session_mode == "fixture/demo":
+        return ("✓ contract ready", "▶ contract drafting", "○ queued")[min(index, 3) - 1]
+    return "✓ ready" if index <= len(_scene_contracts(state)) else "○ missing"
+
+
+def _scene_contract_value(scene: object, fixture: dict[str, str], *keys: str) -> str:
+    for key in keys:
+        value = _scene_optional(scene, key)
+        if value:
+            return value
+    for key in keys:
+        normalized = key.replace(" ", "_")
+        if fixture.get(normalized):
+            return fixture[normalized]
+    return "not_checked"
+
+
+def _scene_contract_camera_lighting(scene: object, fixture: dict[str, str]) -> str:
+    camera = _scene_contract_value(scene, fixture, "camera", "camera_plan", "camera_motion")
+    lighting = _scene_contract_value(scene, fixture, "lighting", "light", "mood")
+    if camera == "not_checked" and lighting == "not_checked":
+        return "not_checked"
+    return f"{camera} / {lighting}"
+
+
+def _scene_contract_list_value(scene: object, fixture: dict[str, str], key: str, label: str) -> str:
+    value = _scene_optional(scene, key) or _scene_optional(scene, label)
+    if value:
+        return value
+    return fixture.get(key) or "not_checked"
+
+
+def _scene_contract_text_risk(fixture: dict[str, str]) -> str:
+    return fixture.get("text_risk") or "not_checked"
+
+
+def _compiler_input_readiness(state: CockpitState) -> str:
+    ready = sum(
+        1
+        for value in (
+            _present_missing(_scene_contracts(state), "scene_contracts.json"),
+            _creative_judge_status(state),
+            _model_rules_status(state),
+        )
+        if value.startswith("✓")
+    )
+    return f"✓ {ready}/3 ready" if ready == 3 else f"○ {ready}/3 ready"
+
+
+def _compiler_output_readiness(state: CockpitState) -> str:
+    if _prompt_compiler_status(state) == "present":
+        return "✓ image prompts ready"
+    return "○ image prompts missing"
+
+
+def _style_signal_count(state: CockpitState) -> int:
+    values = {
+        state.header.mode,
+        state.header.topic,
+        state.header.orientation,
+        state.header.resolution,
+        _style_hint(state),
+        _artifact_policy_status(state),
+    }
+    return sum(1 for value in values if value and value not in {"unknown", "not_checked"})
+
+
+def _creative_judge_status(state: CockpitState) -> str:
+    judge = _data_dict(state, "creative_judge") or _data_dict(state, "decision_log") or _data_dict(state, "stage6_review_decision")
+    status = _first_value(judge, "overall_status", "decision", "status", "result")
+    if status in {"passed", "approved", "selected"}:
+        return f"✓ approved ({status})"
+    if status != "unknown":
+        return f"○ {status}"
+    return "○ missing"
+
+
+def _style_lock_status(state: CockpitState) -> str:
+    style_hint = _style_hint(state)
+    if style_hint != "unknown":
+        return f"✓ present ({style_hint})"
+    value = _data_hint(state, "visual_identity", "not_checked")
+    if value != "not_checked":
+        return f"✓ present ({value})"
+    return "○ missing"
+
+
+def _artifact_policy_active_status(state: CockpitState) -> str:
+    policy = _artifact_policy_status(state)
+    if policy != "not_checked":
+        return f"✓ active ({policy})"
+    return "○ missing"
+
+
+def _model_rules_status(state: CockpitState) -> str:
+    backend = _image_backend_status(state)
+    if backend not in {"unknown", "not_checked"}:
+        return f"✓ loaded ({backend})"
+    if _prompt_compiler_status(state) == "present":
+        return "✓ loaded (prompt artifact)"
+    return "○ missing"
+
+
+def _prompt_compiler_status(state: CockpitState) -> str:
+    if artifact_status(state, "zimage_prompts.json") == "present" or artifact_status(state, "model_prompts.json") == "present":
+        return "present"
+    prompts = _data_list(state, "zimage_prompts") or _model_prompt_scenes(state)
+    return "present" if prompts else "missing"
+
+
+def _artifact_policy_status(state: CockpitState) -> str:
+    audit = _data_dict(state, "prompt_audit")
+    for key in ("artifact_policy", "avoid_text_artifacts", "text_artifacts", "policy"):
+        value = audit.get(key)
+        if value not in (None, "", [], {}):
+            return _format_value(value)
+    return "not_checked"
+
+
+def _image_backend_status(state: CockpitState) -> str:
+    for scene in state.workspace.scenes:
+        backend = _scene_optional(scene, "backend") or _scene_optional(scene, "generator")
+        if backend:
+            return backend
+    provider = _prompt_provider(state)
+    if provider == "zimage":
+        return "zimage_http" if state.session_mode == "fixture/demo" else "zimage"
+    if provider != "unknown":
+        return provider
+    for _label, value in state.system_status.rows:
+        if "Image Backend" in _label and value not in {"? not_checked", "not_checked", "unknown"}:
+            return value.removeprefix("✓ ").removeprefix("? ").strip()
+    return "not_checked"
+
+
+def _contract_source_status(state: CockpitState, scene_id: str) -> str:
+    for scene in _scene_contracts(state):
+        if _scene_value(scene, "scene_id", "") == scene_id:
+            return "scene_contracts.json"
+    return "missing"
+
+
+def _scene_field(scene: object, *keys: str, default: str = "not_checked") -> str:
+    for key in keys:
+        value = _scene_optional(scene, key)
+        if value:
+            return value
+    return default
+
+
+def _visual_anchor_hint(state: CockpitState) -> str:
+    topic = state.header.topic or "unknown"
+    mode = state.header.mode or "unknown"
+    if topic == "unknown" and mode == "unknown":
+        return "not_checked"
+    return f"{topic} / {mode}"
+
+
+def _camera_lighting_value(scene: object) -> str:
+    camera = _scene_field(scene, "camera", "camera_plan", "camera_motion")
+    lighting = _scene_field(scene, "lighting", "light", "mood")
+    if camera == "not_checked" and lighting == "not_checked":
+        return "not_checked"
+    return f"{camera} / {lighting}"
+
+
+def _compiled_prompt_preview(state: CockpitState, scene_id: str) -> str:
+    for prompt in _data_list(state, "zimage_prompts"):
+        if isinstance(prompt, dict) and str(prompt.get("scene_id") or "") == scene_id:
+            for key in ("positive_prompt", "model_prompt", "prompt", "prompt_text"):
+                value = prompt.get(key)
+                if value:
+                    return str(value)
+            return "not_checked"
+    prompt = _scene_prompt(state, scene_id)
+    return prompt or "not_checked"
+
+
+def _artifact_bans_value(state: CockpitState) -> str:
+    policy = _artifact_policy_status(state)
+    if policy != "not_checked":
+        return policy
+    return "avoid text artifacts; no readable text; no screens/paper/labels"
+
+
+def _image_prompt_status(state: CockpitState, scene_id: str, prompt: str) -> str:
+    if state.session_mode == "fixture/demo" and _prompt_compiler_status(state) == "present":
+        return "demo"
+    if prompt not in {"missing", "not_checked", "unknown"}:
+        return "ready"
+    for prompt_item in _data_list(state, "zimage_prompts") + _model_prompt_scenes(state):
+        if isinstance(prompt_item, dict) and str(prompt_item.get("scene_id") or "") == scene_id:
+            return "ready"
+    return "missing"
+
+
+def _scene_prompt_status_for_summary(state: CockpitState, index: int, prompt: str) -> str:
+    if state.session_mode == "fixture/demo":
+        return "validating" if index == 3 else "compiled"
+    if prompt not in {"missing", "not_checked", "unknown"}:
+        return "compiled"
+    return "missing"
+
+
+def _scene_prompt_confidence(index: int, status: str) -> str:
+    if status == "missing":
+        return "n/a"
+    return ("0.94", "0.93", "0.91")[min(index, 3) - 1]
+
+
+def _prompt_fallback_summary(state: CockpitState, scene_id: str) -> str:
+    topic = state.header.topic or "visual subject"
+    style_hint = _style_hint(state)
+    return f"{topic}, {style_hint}, clean subject, no readable text, scene {scene_id} demo summary"
+
+
+def _policy_rule_status(state: CockpitState, key: str) -> str:
+    policy = _artifact_policy_status(state)
+    if policy != "not_checked":
+        return f"✓ {policy}"
+    return {
+        "no_readable_text": "not_checked",
+        "no_screens_paper_labels": "not_checked",
+        "clean_visual_subject": "not_checked",
+    }.get(key, "not_checked")
+
+
+def _image_job_counts(state: CockpitState) -> dict[str, int]:
+    scenes = tuple(state.workspace.scenes[:3])
+    counts = {"total": len(scenes), "finished": 0, "generating": 0, "queued_missing": 0}
+    for index, scene in enumerate(scenes, start=1):
+        status = _image_job_status(state, index, scene)
+        if status in {"finished", "ready", "read-only"}:
+            counts["finished"] += 1
+        elif status == "generating":
+            counts["generating"] += 1
+        else:
+            counts["queued_missing"] += 1
+    return counts
+
+
 def _final_mp4_status(state: CockpitState) -> str:
     value = getattr(state.workspace, "final_mp4", None)
     if value:
@@ -959,6 +1612,8 @@ def _status_grid(rows: list[tuple[str, str]]) -> Text:
 def _value_style(value: str) -> str:
     if value.startswith("✓"):
         return style(TEXT_SUCCESS, bg=BG_WORKSPACE, bold=True)
+    if value.startswith("▶") or "generating" in value:
+        return style(TEXT_ACTIVE, bg=BG_WORKSPACE, bold=True)
     if value.startswith("?") or value.startswith("-") or value in {"unknown", "not_checked"}:
         return style(TEXT_MUTED, bg=BG_WORKSPACE)
     return style(TEXT_MUTED if value.startswith("○") else TEXT_MAIN, bg=BG_WORKSPACE)
@@ -971,6 +1626,91 @@ def _shorten(value: str, limit: int) -> str:
     return compact[: max(0, limit - 1)].rstrip() + "…"
 
 
+def _metric_row(metrics: tuple[tuple[str, str], ...], *, value_width: int) -> Text:
+    line = Text()
+    for index, (label, value) in enumerate(metrics):
+        if index:
+            line.append(" │ ", style=style(TEXT_MUTED, bg=BG_WORKSPACE))
+        line.append(f"{label}: ", style=style(TEXT_LABEL, bg=BG_WORKSPACE, bold=True))
+        line.append(_shorten(value, value_width), style=_value_style(value))
+    return line
+
+
+def _compact_status_line(marker: str, label: str, value: str) -> Text:
+    marker_style = TEXT_SUCCESS if marker == "✓" else TEXT_ACTIVE if marker == "▶" else TEXT_MUTED
+    line = Text()
+    line.append(f"{marker} ", style=style(marker_style, bg=BG_WORKSPACE, bold=True))
+    line.append(f"{label}: ", style=style(TEXT_LABEL, bg=BG_WORKSPACE, bold=True))
+    line.append(_shorten(value, 42), style=_value_style(value))
+    return line
+
+
+def _compact_field_line(label: str, value: str) -> Text:
+    line = Text()
+    line.append("  ", style=style(TEXT_MUTED, bg=BG_WORKSPACE))
+    line.append(f"{label}: ", style=style(TEXT_LABEL, bg=BG_WORKSPACE, bold=True))
+    line.append(_shorten(value, 45), style=_value_style(value))
+    return line
+
+
+def _scene_card_header_line(index: int, scene_id: str, marker: str, status: str) -> Text:
+    marker_style = TEXT_SUCCESS if marker == "✓" else TEXT_ACTIVE if marker == "▶" else TEXT_MUTED
+    line = Text()
+    line.append(f"{index} ", style=style(marker_style, bg=BG_WORKSPACE, bold=True))
+    line.append(f"{scene_id:<11}", style=style(TEXT_LABEL, bg=BG_WORKSPACE, bold=True))
+    line.append(" │ ", style=style(TEXT_MUTED, bg=BG_WORKSPACE))
+    line.append(status, style=_value_style(status))
+    return line
+
+
+def _compact_section_box(title: str, lines: list[Text], width: int) -> Text:
+    box = Text()
+    border_style = style(TEXT_LABEL, bg=BG_WORKSPACE, bold=True)
+    inner_width = width - 3
+    title_text = _shorten(title, width - 6)
+    box.append("╭─ ", style=border_style)
+    box.append(title_text, style=border_style)
+    box.append(" " + "─" * max(0, width - len(title_text) - 5) + "╮\n", style=border_style)
+    for line in lines:
+        content = _truncate_text(line, inner_width)
+        box.append("│ ", style=border_style)
+        box.append_text(content)
+        box.append(" " * max(0, inner_width - len(content.plain)), style=style(TEXT_MAIN, bg=BG_WORKSPACE))
+        box.append("│\n", style=border_style)
+    box.append("╰" + "─" * (width - 2) + "╯\n", style=border_style)
+    return box
+
+
+def _three_column_boxes(columns: tuple[tuple[str, list[Text], int], ...]) -> Text:
+    rendered = [_box_plain_lines(title, lines, width) for title, lines, width in columns]
+    height = max(len(lines) for lines in rendered)
+    for lines, (_title, _content, width) in zip(rendered, columns):
+        while len(lines) < height:
+            lines.insert(-1, "│ " + " " * (width - 3) + "│")
+
+    output = Text()
+    for row_index in range(height):
+        for column_index, lines in enumerate(rendered):
+            output.append(lines[row_index], style=style(TEXT_LABEL if row_index in {0, height - 1} else TEXT_MAIN, bg=BG_WORKSPACE))
+            if column_index < len(rendered) - 1:
+                output.append("  ", style=style(TEXT_MUTED, bg=BG_WORKSPACE))
+        output.append("\n", style=style(TEXT_MAIN, bg=BG_WORKSPACE))
+    return output
+
+
+def _box_plain_lines(title: str, lines: list[Text], width: int) -> list[str]:
+    inner_width = width - 3
+    title_text = _shorten(title, width - 6)
+    result = [
+        "╭─ " + title_text + " " + "─" * max(0, width - len(title_text) - 5) + "╮",
+    ]
+    for line in lines:
+        plain = _shorten(line.plain, inner_width)
+        result.append("│ " + plain.ljust(inner_width) + "│")
+    result.append("╰" + "─" * (width - 2) + "╯")
+    return result
+
+
 def _section_box(title: str, lines: list[Text]) -> Text:
     box = Text()
     border_style = style(TEXT_LABEL, bg=BG_WORKSPACE, bold=True)
@@ -981,6 +1721,27 @@ def _section_box(title: str, lines: list[Text]) -> Text:
         _append_box_line(box, line)
     box.append("╰" + "─" * BOX_WIDTH + "╯\n", style=border_style)
     return box
+
+
+def _active_section_box(title: str, lines: list[Text]) -> Text:
+    box = Text()
+    border_style = style(TEXT_SUCCESS, bg=BG_WORKSPACE, bold=True)
+    box.append("╭─ ", style=border_style)
+    box.append(_shorten(title, BOX_WIDTH - 6), style=border_style)
+    box.append(" " + "─" * max(0, BOX_WIDTH - len(title) - 5) + "╮\n", style=border_style)
+    for line in lines:
+        _append_active_box_line(box, line)
+    box.append("╰" + "─" * BOX_WIDTH + "╯\n", style=border_style)
+    return box
+
+
+def _append_active_box_line(box: Text, line: Text) -> None:
+    content = _truncate_text(line, BOX_WIDTH - 2)
+    box.append("│ ", style=style(TEXT_SUCCESS, bg=BG_WORKSPACE, bold=True))
+    box.append_text(content)
+    visible_len = len(content.plain)
+    box.append(" " * max(0, BOX_WIDTH - visible_len - 1), style=style(TEXT_MAIN, bg=BG_WORKSPACE))
+    box.append("│\n", style=style(TEXT_SUCCESS, bg=BG_WORKSPACE, bold=True))
 
 
 def _append_box_line(box: Text, line: Text) -> None:

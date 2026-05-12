@@ -1,0 +1,193 @@
+# Changelog
+
+Diese Datei dokumentiert jede Session mit Datum, Umfang und Teststatus.
+
+## 2026-05-11 - Active Workspace Scroll Pass
+
+### Geaendert
+
+- Active Workspace als generischen scrollbaren Stage-Host umgesetzt.
+- `#workspace` bleibt der aeussere Active-Workspace-Rahmen und ist jetzt ein `ScrollableContainer`.
+- Stage-Inhalte werden in `#workspace-content` gerendert und aktualisiert.
+- `panel_update_targets()` aktualisiert fuer Active Workspace gezielt `#workspace-content`.
+- Scroll-Host ist nicht fokussierbar, damit `down/up`, `j/k` und `enter/space` weiter die bestehenden Cockpit-Actions steuern.
+- CSS fuer `#workspace` auf vertikales Scrollen und verborgenes horizontales Overflow angepasst.
+- Test ergaenzt, dass `#workspace` ein `ScrollableContainer` ist und `#workspace-content` den Stage-Inhalt haelt.
+
+### Nicht geaendert
+
+- Keine Stage-ID-Neuordnung.
+- Keine Pipeline-, Render-, API- oder n8n-Integration.
+- Keine inhaltlichen Aenderungen an Header, System Status, Pipeline Map oder Bottom Panels.
+- Keine Stage-08- oder Stage-09-Inhaltslogik geaendert.
+
+### Tests
+
+- `python3 -m unittest /workspace/tests/test_creative_os_cockpit.py -v`: gruen, 19 Tests.
+- `python3 -m unittest /workspace/tests/test_creative_os_status.py -v`: gruen, 13 Tests.
+
+## 2026-05-11 - Stage 07 Layout Fix
+
+### Geaendert
+
+- Stage `07 Scene Contracts` Layout nach dem Visual-Correction-Pass stabilisiert.
+- `CURRENT POSITION AND PIPELINE PATH` auf zwei kompakte Reihen mit kurzen Labels umgestellt.
+- A/B/C-Hauptbereiche als stabile fixe 3-Spalten-Boxen gerendert.
+- Box-Helper fuer Stage `07` so korrigiert, dass Header-, Body- und Footer-Zeilen dieselbe Breite haben.
+- Lange Werte in Stage `07` werden vor der Border gekuerzt.
+- B-Block bleibt die breite mittlere Scene-Contracts-Spalte; A bleibt schmal, C mittelbreit.
+- System Status und Pipeline Map minimal verdichtet, ohne deren Inhalte oder Logik zu aendern.
+
+### Nicht geaendert
+
+- Keine Stage-ID-Neuordnung.
+- Kein Header- oder Bottom-Panel-Umbau.
+- Keine Stage-08- oder Stage-09-Logik geaendert.
+- Keine Render-, API-, n8n- oder Pipeline-Integration.
+- Kein neuer Content-Fokus fuer Stage `07`.
+
+### Tests
+
+- `python3 -m unittest /workspace/tests/test_creative_os_cockpit.py -v`: gruen, 19 Tests.
+
+## 2026-05-11 - Stage 07 Visual Correction
+
+### Geaendert
+
+- Stage `07 Scene Contracts` anhand `panel_07_scene_contracts/reference.png` und `visual_analysis_verified.md` korrigiert.
+- Generisches Stage-Detailpanel durch eine eigenstaendige Scene-Contracts-Struktur ersetzt.
+- `ACTIVE WORKSPACE / STAGE 07: SCENE CONTRACTS` ergaenzt.
+- `CURRENT POSITION AND PIPELINE PATH` ergaenzt.
+- `A) CONTRACT INPUTS` mit Creative Strategy, Beat/Hook, Creative Judge, Mode/Style, Risk Policy und Artifact Policy ergaenzt.
+- `B) SCENE CONTRACTS` mit drei kompakten Contract-Cards fuer `scene_01`, `scene_02`, `scene_03` ergaenzt.
+- `C) OUTPUT PREVIEW / READINESS` mit kurzer `scene_contracts.json` Preview und Stage-08-Handoff ergaenzt.
+- `HANDOFF PATH` von Creative Judge zu Image Prompt Compiler ergaenzt.
+- Tests fuer Stage `07` und den Erhalt von Stage `08`/`09` aktualisiert.
+
+### Nicht geaendert
+
+- Keine Stage-ID-Neuordnung.
+- Kein Header-, System-Status-, Bottom-Panel- oder Pipeline-Map-Umbau.
+- Keine Render-, API- oder n8n-Integration.
+- Keine finalen Image Prompts in Stage `07`.
+- Keine echten Bilder, Image Generation Cards oder Compiler-Branches in Stage `07`.
+- Keine neue Library.
+
+### Tests
+
+- `python3 -m unittest /workspace/tests/test_creative_os_cockpit.py -v`: gruen, 19 Tests.
+- `python3 -m unittest /workspace/tests/test_creative_os_status.py -v`: gruen, 13 Tests.
+
+## 2026-05-11 - Stage 08 Visual Correction
+
+### Geaendert
+
+- Stage `08 Image Prompt Compiler` anhand `panel_08_prompt_compiler/reference.png` und `visual_analysis.md` korrigiert.
+- Generische `COMPILER READINESS`/`IMAGE PROMPT CARDS` Struktur durch bildnaehere Prompt-Compiler-Struktur ersetzt.
+- `ACTIVE WORKSPACE - PROMPT COMPILER` ergaenzt.
+- `CURRENT POSITION` mit PromptCompiler, Active Branch, Output Ready und Stage-09-Handoff ergaenzt.
+- `COMPILER SCOPE / OVERVIEW` ergaenzt.
+- `IMAGE COMPILER (ACTIVE)` als dominante aktive Zone mit gruenem Border ergaenzt.
+- `SCENE CONTRACT INPUTS`, `SCENE PROMPT SUMMARIES`, `FINAL PROMPT PAYLOAD (JSON PREVIEW)` und `MODEL RULES / ARTIFACT POLICY` innerhalb der Image-Compiler-Zone strukturiert.
+- `COMPILER FAMILY / BRANCHES` auf queued/later/optional Kontext fuer Video, Audio und Music angepasst.
+- Stage-08-Tests auf die bildnaehere Struktur aktualisiert.
+
+### Nicht geaendert
+
+- Keine Stage-ID-Neuordnung.
+- Kein Header-, System-Status-, Bottom-Panel- oder Pipeline-Map-Umbau.
+- Keine Render-, API- oder n8n-Integration.
+- Keine echten Bilder in Stage 08.
+- Keine neue Library.
+
+### Tests
+
+- `python3 -m unittest /workspace/tests/test_creative_os_cockpit.py -v`: gruen, 18 Tests.
+- `python3 -m unittest /workspace/tests/test_creative_os_status.py -v`: gruen, 13 Tests.
+
+## 2026-05-11 - Visual Reference Audit und Sortierung
+
+### Geaendert
+
+- Neun vorhandene Pipeline-Panel-Referenzbilder unter `/workspace/codex/panel_build/Pipeline vorlage/` gefunden.
+- Bilder in die kanonische Struktur unter `/workspace/codex/panel_build/01_VISUAL_REFERENCES/pipeline_panels/` kopiert.
+- `REFERENCE_INDEX.md` erstellt.
+- Fuer Panel `01` bis `09` jeweils eine `visual_analysis.md` anhand des sichtbaren Bildes erstellt.
+- `VISUAL_SPEC.md` und `IMAGE_INSTRUCTIONS.md` um den kanonischen Referenzpfad und die Pflicht zum Lesen der Analysen erweitert.
+
+### Nicht geaendert
+
+- Kein UI-Code geaendert.
+- Keine Tests geaendert.
+- Keine Panels weitergebaut.
+- Originalbilder nicht verschoben oder geloescht.
+
+### Tests
+
+- Keine Tests ausgefuehrt, da nur Visual-Reference-Dateien und Panel-Build-Doku aktualisiert wurden.
+
+## 2026-05-11 - Stage 08 Compiler Pass
+
+### Geaendert
+
+- Stage `08 Image Prompt Compiler` im Active Workspace neu strukturiert.
+- `COMPILER READINESS` ergaenzt: Pipeline/Route, Current Stage, Scene Contracts, Creative Judge, Style Lock, Artifact Policy, Model Rules.
+- `COMPILER FAMILY` ergaenzt: Image Compiler aktiv; Video, Audio und Music nur als spaeterer Kontext.
+- `IMAGE PROMPT CARDS` fuer Scene `01` bis `03` ergaenzt.
+- `MODEL RULES` mit zimage rules, Artifact-Bans und Stage-09-Handoff ergaenzt.
+- `OUTPUT / NEXT` mit image prompts, prompt audit und naechster Stage ergaenzt.
+- Test `test_stage08_image_prompt_compiler_workspace` ergaenzt.
+- Bestehender Stage-Router-Test fuer die neue eigenstaendige Stage-08-Struktur angepasst.
+
+### Nicht geaendert
+
+- Keine Stage-ID-Neuordnung.
+- Kein Header-, System-Status-, Bottom-Panel- oder Pipeline-Map-Umbau.
+- Keine Render-, API- oder n8n-Integration.
+- Keine echten Bilder in Stage 08.
+- Keine neue Library.
+
+### Tests
+
+- `python3 -m unittest /workspace/tests/test_creative_os_cockpit.py -v`: gruen, 18 Tests.
+- `python3 -m unittest /workspace/tests/test_creative_os_status.py -v`: gruen, 13 Tests.
+
+## 2026-05-11 - Stage 09 Readiness Pass
+
+### Geaendert
+
+- Stage `09 Image / Keyframe Generation` im Active Workspace um `READINESS / INPUTS` erweitert.
+- Readiness-Zone zeigt Pipeline/Route, Creative Inputs, Prompt Inputs, Model/Backend und Keyframe Readiness.
+- Readiness-Werte werden aus vorhandenen Cockpit-State- und Artifact-Daten abgeleitet.
+- Demo-/Fixture-Kontext wird sichtbar als `fixture/demo` ausgegeben.
+- Fehlende Daten bleiben `missing` oder `not_checked` statt als echte Livewerte ausgegeben zu werden.
+- Test `test_stage09_readiness_zone_keeps_image_cards` ergaenzt.
+
+### Nicht geaendert
+
+- Keine Stage-ID-Neuordnung.
+- Kein Header-, System-Status-, Bottom-Panel- oder Pipeline-Map-Umbau.
+- Keine Render-, API- oder n8n-Integration.
+- Keine neue Library.
+
+### Tests
+
+- `python3 -m unittest /workspace/tests/test_creative_os_cockpit.py -v`: gruen, 17 Tests.
+- `python3 -m unittest /workspace/tests/test_creative_os_status.py -v`: gruen, 13 Tests.
+
+## 2026-05-11 - Setup
+
+### Geaendert
+
+- Aufgabenstruktur unter `/workspace/codex/panel_build` angelegt.
+- Startinhalte fuer Read-First, Visual References, Design System, Panel Specs, Behavior, Testing und Progress erstellt.
+
+### Nicht geaendert
+
+- Kein UI-Code geaendert.
+- Keine Panels implementiert.
+- Keine App-Struktur umgebaut.
+
+### Tests
+
+- Keine Build- oder UI-Tests ausgefuehrt, da nur Markdown-Spezifikationsdateien angelegt wurden.

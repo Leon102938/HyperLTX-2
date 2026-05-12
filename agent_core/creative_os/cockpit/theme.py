@@ -92,8 +92,8 @@ Vertical {
 }
 
 #sidebar {
-    width: 36%;
-    min-width: 36;
+    width: 30%;
+    min-width: 30;
     margin-right: 1;
     background: #07111F;
 }
@@ -105,17 +105,27 @@ Vertical {
     color: #E5E7EB;
     padding: 1 2;
     height: 100%;
-    overflow: hidden hidden;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+#workspace-content {
+    width: 100%;
+    height: auto;
+    background: #0B1628;
+    color: #E5E7EB;
 }
 
 #system-status {
-    height: 8;
+    height: 6;
     border: round #38BDF8;
+    padding: 0 1;
 }
 
 #pipeline-map {
     border: round #1E3A5F;
     height: 1fr;
+    padding: 0 1;
     overflow: hidden hidden;
 }
 
