@@ -16,6 +16,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from agent_core.resume_contract import inspect_resume_contract
+from agent_core.creative_os.phase1_runtime import DEFAULT_RUNS_ROOT, Phase1RunConfig, RetryKeyframeConfig, retry_keyframes, run_phase1
 
 
 DEFAULT_BASE_URL = os.environ.get("AGENT_CORE_BASE_URL", "http://127.0.0.1:8000")
@@ -179,6 +180,119 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Print the resolved API payload before submit.",
     )
     return parser
+
+
+def _build_phase1_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="agent_core_cli.py creative-os run-phase1",
+        description="Run Content Maschine Phase 1 locally through Creative OS stages 00-09.",
+    )
+    parser.add_argument("--job-id", required=True, help="Run/job id written under --runs-root.")
+    parser.add_argument("--topic", required=True, help="Creative topic for the run.")
+    parser.add_argument("--pipeline", default="shortform_storyboard_v1", help="Pipeline id. Default: %(default)s")
+    parser.add_argument("--mode", default="visual_adventure", help="Creative mode. Default: %(default)s")
+    parser.add_argument("--style", default="cinematic_nature", help="Style package/hint. Default: %(default)s")
+    parser.add_argument("--format", dest="orientation", choices=("portrait", "landscape", "square"), default="portrait", help="Output format/orientation. Default: %(default)s")
+    parser.add_argument("--duration", default="9s", help="Target duration, e.g. 9s. Default: %(default)s")
+    parser.add_argument("--scenes", type=int, default=3, help="Scene count. Default: %(default)s")
+    parser.add_argument("--runs-root", type=Path, default=DEFAULT_RUNS_ROOT, help="Runs root. Default: %(default)s")
+    parser.add_argument("--image-backend-url", default=DEFAULT_BASE_URL, help="Local backend base URL for zimage readiness/jobs. Default: %(default)s")
+    parser.add_argument("--no-images", action="store_true", help="Create Stage 09 manifest without probing/submitting image backend jobs.")
+    parser.add_argument("--print-json", action="store_true", help="Print machine-readable summary JSON.")
+    return parser
+
+
+def _build_retry_keyframes_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="agent_core_cli.py creative-os retry-keyframes",
+        description="Retry/resume only failed or missing Phase 1 Stage 09 keyframe jobs.",
+    )
+    parser.add_argument("--job-id", required=True, help="Run/job id under --runs-root.")
+    parser.add_argument("--runs-root", type=Path, default=DEFAULT_RUNS_ROOT, help="Runs root. Default: %(default)s")
+    parser.add_argument("--image-backend-url", default=DEFAULT_BASE_URL, help="Local backend base URL for zimage readiness/jobs. Default: %(default)s")
+    parser.add_argument("--scene", dest="scene_id", help="Retry only one scene id, e.g. scene_02.")
+    parser.add_argument("--force", action="store_true", help="Retry even if a finished output file already exists.")
+    parser.add_argument("--dry-run", action="store_true", help="Show retry plan without writing files or calling the backend.")
+    parser.add_argument("--print-json", action="store_true", help="Print machine-readable summary JSON.")
+    return parser
+
+
+def _parse_duration_seconds(value: str) -> int:
+    text = str(value).strip().lower()
+    if text.endswith("sec"):
+        text = text[:-3]
+    elif text.endswith("s"):
+        text = text[:-1]
+    try:
+        return max(1, int(float(text)))
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"invalid duration {value!r}; use e.g. 9s") from exc
+
+
+def _run_phase1_from_cli(argv: list[str]) -> int:
+    parser = _build_phase1_parser()
+    args = parser.parse_args(argv)
+    summary = run_phase1(
+        Phase1RunConfig(
+            job_id=args.job_id,
+            topic=args.topic,
+            pipeline=args.pipeline,
+            mode=args.mode,
+            style=args.style,
+            orientation=args.orientation,
+            duration_sec=_parse_duration_seconds(args.duration),
+            scene_count=args.scenes,
+            runs_root=args.runs_root,
+            image_backend_url=args.image_backend_url,
+            attempt_images=not args.no_images,
+        )
+    )
+    if args.print_json:
+        print(json.dumps(summary, indent=2, ensure_ascii=True))
+        return 0
+    print_box_header("CONTENT MASCHINE PHASE 1", [("Job", summary["job_id"]), ("Status", summary["status"])])
+    print(_line("Run dir", summary["creative_os_dir"], width=14))
+    print(_line("Backend", summary["backend_status"], width=14))
+    print("STAGE ARTIFACTS")
+    for stage, artifact in summary["artifacts"].items():
+        print(_line(stage, artifact, width=4))
+    return 0
+
+
+def _retry_keyframes_from_cli(argv: list[str]) -> int:
+    parser = _build_retry_keyframes_parser()
+    args = parser.parse_args(argv)
+    summary = retry_keyframes(
+        RetryKeyframeConfig(
+            job_id=args.job_id,
+            runs_root=args.runs_root,
+            image_backend_url=args.image_backend_url,
+            scene_id=args.scene_id,
+            force=args.force,
+            dry_run=args.dry_run,
+        )
+    )
+    if args.print_json:
+        print(json.dumps(summary, indent=2, ensure_ascii=True))
+        return 0
+    title = "CONTENT MASCHINE PHASE 1 KEYFRAME RETRY"
+    print_box_header(title, [("Job", summary["job_id"]), ("Status", summary.get("status", "not_checked"))])
+    print(_line("Run dir", summary["run_dir"], width=14))
+    print(_line("Dry run", "yes" if summary["dry_run"] else "no", width=14))
+    print(_line("Force", "yes" if summary["force"] else "no", width=14))
+    if summary.get("scene"):
+        print(_line("Scene", summary["scene"], width=14))
+    print("RETRY JOBS")
+    if summary["retry_jobs"]:
+        for item in summary["retry_jobs"]:
+            print(_line(str(item["scene_id"]), f"{item['reason']} · {item['status']} · file_exists={item['file_exists']}", width=14))
+    else:
+        print(_line("none", "no eligible jobs", width=14))
+    if summary.get("updated_files"):
+        print("UPDATED")
+        for name in summary["updated_files"]:
+            print(_line("file", name, width=14))
+    return 0
 
 
 def _http_json(url: str, *, method: str = "GET", payload: dict[str, Any] | None = None, timeout: float = 30.0) -> dict[str, Any]:
@@ -1824,6 +1938,25 @@ def _inspect_run(path: Path, *, tail_lines: int, show_log_tail: bool, verbose: b
 
 
 def main() -> int:
+    if len(sys.argv) >= 3 and sys.argv[1:3] == ["creative-os", "run-phase1"]:
+        try:
+            return _run_phase1_from_cli(sys.argv[3:])
+        except KeyboardInterrupt:
+            print("Interrupted.", file=sys.stderr)
+            return 130
+        except Exception as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 1
+    if len(sys.argv) >= 3 and sys.argv[1:3] == ["creative-os", "retry-keyframes"]:
+        try:
+            return _retry_keyframes_from_cli(sys.argv[3:])
+        except KeyboardInterrupt:
+            print("Interrupted.", file=sys.stderr)
+            return 130
+        except Exception as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 1
+
     parser = _build_parser()
     args = parser.parse_args()
     base_url = _normalize_base_url(args.base_url)

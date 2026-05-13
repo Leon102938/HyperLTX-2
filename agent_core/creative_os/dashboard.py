@@ -297,6 +297,7 @@ def _overview(inspection: RunInspection, focus: str) -> str:
     next_action = inspector.next_action(inspection)
     keyframe_count = sum(1 for scene_id in ("scene_01", "scene_02", "scene_03") if inspection.artifacts.get(f"keyframes/{scene_id}.png"))
     main_skills = _main_skill_names(loaded)
+    phase1 = _phase1_status(inspection)
     lines = [
         _header_box(
             [
@@ -310,9 +311,10 @@ def _overview(inspection: RunInspection, focus: str) -> str:
         ),
         "",
         _section_title("CURRENT POSITION"),
+        f"  Current step     {_phase1_current_step(phase1) if phase1 else 'LTX Motion Ready'}",
         f"  Last passed      ✓ {inspector.last_passed_stage(inspection)}",
-        "  Next technical   ○ 09 LTX video takes" if inspection.status == "ready_for_ltx_i2v_takes" else f"  Next technical   {next_action}",
-        f"  Operator focus   {_operator_focus(focus)}",
+        f"  Next technical   {next_action}" if phase1 else ("  Next technical   ○ 09 LTX video takes" if inspection.status == "ready_for_ltx_i2v_takes" else f"  Next technical   {next_action}"),
+        f"  Operator focus   {_phase1_operator_focus(phase1, focus) if phase1 else _operator_focus(focus)}",
         f"  Render paused    {_render_paused(focus)}",
         "",
         _section_title("SYSTEM"),
@@ -326,16 +328,12 @@ def _overview(inspection: RunInspection, focus: str) -> str:
         "  Subtitles        - off",
         "",
         _section_title("PIPELINE PATH"),
-        "  Creative OS",
-        "    → Z-Image Prompts",
-        "    → Keyframes",
-        "    → Keyframe QA",
-        "    → LTX Motion Prompts",
-        "    → LTX I2V Takes",
+        *_pipeline_path_lines(phase1),
         "",
         _section_title("PROGRESS"),
     ]
-    lines.extend(f"  {_mark(stage.status)} {stage.index} {stage.name}" for stage in inspection.stages[:9])
+    progress_stages = inspection.stages[:10] if phase1 else inspection.stages[:9]
+    lines.extend(f"  {_mark(stage.status)} {stage.index} {stage.name}" for stage in progress_stages)
     lines.extend(
         [
             "",
@@ -344,11 +342,7 @@ def _overview(inspection: RunInspection, focus: str) -> str:
             f"  Main: {', '.join(main_skills) if main_skills else 'unknown'}",
             "",
             _section_title("ARTIFACTS"),
-            f"  {_artifact_mark(inspection, 'zimage_prompts.json')} zimage_prompts.json",
-            f"  {'✓' if keyframe_count == 3 else '○'} {keyframe_count} keyframes",
-            f"  {_artifact_mark(inspection, 'ltx_motion_prompts.json')} ltx_motion_prompts.json",
-            f"  {_artifact_mark(inspection, 'ltx_prompt_audit.json')} ltx_prompt_audit.json",
-            f"  {_artifact_mark(inspection, 'ltx_video_takes_manifest.json')} ltx_video_takes_manifest.json",
+            *_artifact_overview_lines(inspection, keyframe_count, phase1),
         ]
     )
     lines.extend(
@@ -363,6 +357,66 @@ def _overview(inspection: RunInspection, focus: str) -> str:
         ]
     )
     return "\n".join(lines) + "\n"
+
+
+def _phase1_status(inspection: RunInspection) -> dict[str, Any] | None:
+    phase1 = inspection.data.get("phase1_status")
+    return phase1 if isinstance(phase1, dict) else None
+
+
+def _phase1_current_step(phase1: dict[str, Any]) -> str:
+    real_stage = str(phase1.get("real_run_stage") or phase1.get("current_stage") or "not_checked")
+    if real_stage == "09":
+        return "Stage 09 Image / Keyframe Generation"
+    if real_stage == "not_checked":
+        return "not_checked"
+    return f"Stage {real_stage}"
+
+
+def _phase1_operator_focus(phase1: dict[str, Any], focus: str) -> str:
+    if focus != "none":
+        return _operator_focus(focus)
+    if phase1.get("next_available_stage") == "none_phase1_complete":
+        return "review Stage 09 keyframes"
+    if phase1.get("status") == "paused_missing_backend":
+        return "restore image backend or rerun with --no-images"
+    return "not_checked"
+
+
+def _pipeline_path_lines(phase1: dict[str, Any] | None) -> list[str]:
+    if phase1:
+        return [
+            "  Phase 1 live: 00 Command Center → 09 Image / Keyframe Generation",
+            "  Stage 10+ runtime: not built",
+        ]
+    return [
+        "  Creative OS",
+        "    → Z-Image Prompts",
+        "    → Keyframes",
+        "    → Keyframe QA",
+        "    → LTX Motion Prompts",
+        "    → LTX I2V Takes",
+    ]
+
+
+def _artifact_overview_lines(inspection: RunInspection, keyframe_count: int, phase1: dict[str, Any] | None) -> list[str]:
+    if phase1:
+        gallery_mark = _artifact_mark(inspection, "keyframe_gallery.html")
+        return [
+            f"  {_artifact_mark(inspection, 'prompt_payload_compiled.json')} prompt_payload_compiled.json",
+            f"  {_artifact_mark(inspection, 'zimage_prompts.json')} zimage_prompts.json",
+            f"  {_artifact_mark(inspection, 'keyframe_manifest.json')} keyframe_manifest.json",
+            f"  {'✓' if keyframe_count == 3 else '○'} {keyframe_count} keyframes",
+            f"  {gallery_mark} keyframe_gallery.html",
+            "  ○ Stage 10+ artifacts · not built",
+        ]
+    return [
+        f"  {_artifact_mark(inspection, 'zimage_prompts.json')} zimage_prompts.json",
+        f"  {'✓' if keyframe_count == 3 else '○'} {keyframe_count} keyframes",
+        f"  {_artifact_mark(inspection, 'ltx_motion_prompts.json')} ltx_motion_prompts.json",
+        f"  {_artifact_mark(inspection, 'ltx_prompt_audit.json')} ltx_prompt_audit.json",
+        f"  {_artifact_mark(inspection, 'ltx_video_takes_manifest.json')} ltx_video_takes_manifest.json",
+    ]
 
 
 def _skills(inspection: RunInspection) -> str:

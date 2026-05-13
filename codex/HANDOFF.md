@@ -1,5 +1,28 @@
 # HANDOFF.md
 
+## 2026-05-13 Phase 1 Hardening / Stage 09 Retry
+- Frischer E2E-Run: `/workspace/agent_runs/phase1-hardening-smoke-20260513/creative_os`.
+- Run-CLI:
+  `python3 /workspace/scripts/agent_core_cli.py creative-os run-phase1 --job-id phase1-hardening-smoke-20260513 --topic "jungle safari at sunrise" --pipeline shortform_storyboard_v1 --mode visual_adventure --style cinematic_nature --format portrait --duration 9s --scenes 3`
+- Retry-CLI:
+  `python3 /workspace/scripts/agent_core_cli.py creative-os retry-keyframes --job-id <job-id> --runs-root /workspace/agent_runs [--scene scene_02] [--dry-run] [--force]`
+- Retry liest nur `keyframe_manifest.json`. Kandidaten sind Jobs mit `failed/error/queued/running`, fehlender `output_path` oder `file_exists=false`.
+- Retry schreibt nur `keyframe_manifest.json`, `phase1_status.json` und ggf. `keyframe_gallery.html`; Stage `00` bis `08` bleiben unveraendert.
+- Ohne `--force` werden fertige vorhandene PNGs nicht neu erzeugt. `--force --scene scene_02 --dry-run` plant genau diese Szene.
+- Smoke: `phase1-hardening-retry-sim-20260513` hatte fehlende `scene_02.png`; `retry-keyframes --scene scene_02` hat sie neu erzeugt und Status wieder auf `finished` gesetzt.
+- Cockpit Stage `09` zeigt echte Preview-Pfade, Datei-Status, Gallery und bei fehlendem Manifest `missing manifest` statt Fake-Cards.
+- Tests gruen: Cockpit 16, Status 21. Textual bleibt `0.89.1`.
+- Nicht gebaut: Stage `10-15`, LTX Video, Assembly, Final Output, n8n/API, Redesign, neue Dependencies.
+
+## 2026-05-13 Phase 1 Runtime bis Stage 09
+- Neuer CLI-Pfad: `python3 /workspace/scripts/agent_core_cli.py creative-os run-phase1 --job-id <id> --topic "..." --pipeline shortform_storyboard_v1 --mode visual_adventure --style cinematic_nature --format portrait --duration 9s --scenes 3`.
+- Der Runner schreibt lokale Creative-OS-Artefakte nach `/workspace/agent_runs/<job-id>/creative_os/` fuer Stage `00` bis `09`.
+- Stage-09-Artefakt ist `keyframe_manifest.json` mit pro Szene `scene_id`, `prompt`, `backend`, `status`, `output_path`, `progress_percent`, `elapsed` und `error`.
+- Wenn Z-Image ueber den bestehenden HTTP-Backendpfad nicht erreichbar ist, meldet der Run `phase1_paused_missing_image_backend`; keine Fake-Bilder werden erzeugt oder als Erfolg markiert.
+- Cockpit/Inspector lesen `keyframe_manifest.json` jetzt als echte Stage-09-Jobquelle; Fixture/Demo bleibt kompatibel.
+- Nicht gebaut: Stage `10` bis `15` Runtime, LTX Video, Assembly, Final Output, n8n/API.
+- Tests: `test_creative_os_cockpit.py` gruen, `test_creative_os_status.py` gruen inklusive Phase-1-CLI-/Missing-Backend-Test und Textual-0.89.x-Pin.
+
 ## 2026-05-09 Cockpit Panel Completion V0.2
 - Active Workspace Stage-Panels 00-15 sind als read-only Operator-Oberflaechen vorhanden.
 - Stage 00 enthaelt den read-only Command Composer mit sichtbaren Eingabe-/Preview-Feldern und dem deaktivierten `Run planned / disabled in V0.2` Aktionshinweis; er startet keine Commands.
@@ -91,6 +114,19 @@
 - Nicht gebaut/gestartet: Stage 8, Render, LTX, Video, API, n8n, Textual, Backend-Livechecks.
 
 ## 2026-05-06 Creative OS CLI Cockpit
+## Stand 2026-05-13 Creative OS Phase-1-Reality-Fix
+- Phase 1 ist lokal bis Stage `09` verdrahtet und das Cockpit liest echte Run-Artefakte statt starrer Demo-Werte, sobald ein Real-Run vorhanden ist.
+- Beispielrun: `/workspace/agent_runs/phase1-build-smoke-20260513/creative_os`.
+- CLI:
+  `python3 /workspace/scripts/agent_core_cli.py creative-os run-phase1 --job-id phase1-build-smoke-20260513 --topic "jungle safari at sunrise" --pipeline shortform_storyboard_v1 --mode visual_adventure --style cinematic_nature --format portrait --duration 9s --scenes 3`
+- `phase1_status.json` ist konsistent fuer fertige Stage `09`: `completed_stages` enthaelt `09`, `real_run_stage=09`, `last_completed_stage=09`, `next_available_stage=none_phase1_complete`.
+- Stage `09` liest `keyframe_manifest.json` inklusive Backend, Jobstatus, Progress, Elapsed, Output-Pfad, Error, Backend-Job-ID und Datei-Metadaten.
+- Fertige Jobs ohne Output-Datei werden als Error/Warn angezeigt; keine Fake-Erfolge.
+- Bei echten PNGs wird `keyframe_gallery.html` erzeugt; Terminal-Cockpit zeigt echte Preview-Pfade statt Fake-Thumbnails.
+- Status-CLI ist fuer Phase-1-Runs 00-09-aware und markiert Stage `10+` als nicht gebaut.
+- Tests: `python3 -m unittest /workspace/tests/test_creative_os_cockpit.py -v` und `python3 -m unittest /workspace/tests/test_creative_os_status.py -v` sind gruen.
+- Nicht gebaut: Stage `10-15`, LTX-Video, Assembly, Final Output, n8n/API, neue Dependencies.
+
 - Rich-Cockpit-Design-Pass ist umgesetzt in `agent_core/creative_os/dashboard.py`; `scripts/creative_os_status.py` bleibt der Entry.
 - `scripts/creative_os_status.py` unterstuetzt `--runs-root`; `/workspace/agent_runs` ist nur Default fuer fluechtige echte Run-Artefakte, keine Systemquelle, kein Config-Ort, kein Skill-Ort und keine Pflichtabhaengigkeit.
 - Tests gruen: `python3 -m unittest /workspace/tests/test_creative_os_status.py -v`.

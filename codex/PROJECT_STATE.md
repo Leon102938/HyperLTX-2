@@ -6,6 +6,16 @@ Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E, 3A, 3B, 4A, 4B und
 - Kanonische Capability-Uebersicht: `/workspace/codex/CAPABILITY_MAP.md`
 
 ## Verifizierte Fakten
+- 2026-05-13 Phase 1 Hardening: frischer E2E-Run `phase1-hardening-smoke-20260513` erzeugt Stage `00` bis `09`, 3 echte PNGs und `keyframe_gallery.html`.
+- Neuer enger Retry/Resume-Pfad: `scripts/agent_core_cli.py creative-os retry-keyframes --job-id <id> --runs-root /workspace/agent_runs [--scene scene_02] [--dry-run] [--force]`.
+- Retry/Resume liest nur `keyframe_manifest.json`, schreibt nur `keyframe_manifest.json`, `phase1_status.json` und ggf. `keyframe_gallery.html`; Stage `00` bis `08` werden nicht neu geschrieben.
+- Ohne `--force` werden fertige vorhandene PNGs nicht neu erzeugt. Fehlende/failed/queued/running Jobs oder `file_exists=false` werden ehrlich als Retry-Kandidaten gemeldet.
+- Cockpit Stage `09` zeigt bei fehlendem Real-Run-Manifest `missing manifest` und keine Fake-Cards.
+- 2026-05-13 Phase 1 Build: `scripts/agent_core_cli.py creative-os run-phase1` erzeugt lokal Creative-OS-Artefakte fuer Stage `00` bis `09` unter `/workspace/agent_runs/<job-id>/creative_os/`.
+- Phase-1-Artefakte: `normalized_job.json`, `pipeline_route.json`, `intent_route.json`, `mode_style.json`, `skill_match.json`, `skill_tree.json`, `creative_strategy.json`, `beat_hook_plan.json`, `creative_judge.json`, `scene_contracts.json`, `prompt_payload_compiled.json`, `zimage_prompts.json`, `keyframe_manifest.json`, `phase1_status.json` plus kompatible Alias-Artefakte.
+- Stage `09` nutzt den vorhandenen lokalen Z-Image-HTTP-Pfad, wenn erreichbar. Bei fehlendem Backend wird `phase1_paused_missing_image_backend` gemeldet und das Manifest enthaelt pro Szene `status=error`; es gibt keinen Fake-Erfolg.
+- Cockpit-State und Inspector koennen Phase-1-Run-Artefakte lesen; Stage-09-Cards zeigen Jobstatus/Output-Pfade aus `keyframe_manifest.json`.
+- Nicht gebaut: Stage `10` bis `15` Runtime, LTX-Video, Assembly, Final Output, n8n/API.
 - 2026-05-09 Cockpit Panel Completion V0.2: Active Workspace hat fuer alle Stage-IDs 00-15 eigene read-only Views; 04-08 und 10-15 zeigen stage-spezifische Purpose/Status/Artifacts/Expected Output/Next Action statt generischer Platzhalter.
 - Stage 00 Command Center enthaelt einen read-only Command Composer mit Topic/Format/Mode/Style/Duration/Voice/Music/Subtitles/Storyboard/Output, Command Preview und deaktiviertem `Run planned / disabled in V0.2` Hinweis; es gibt keine Command Execution.
 - Stage 09 Image Jobs bleibt stabil im Card-Panel mit Preview-Slots, Expanded Image 2 und Unicode-Progressbar; keine Render-/API-/n8n-/Pipeline-Integration, keine neuen Runs und keine Command Execution.
@@ -1006,6 +1016,26 @@ Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E, 3A, 3B, 4A, 4B und
 
   - `focus_break` bleibt trotz neutralisiertem `style_lock.visual_identity` modellseitig deutlich text-/screen-anfaellig
   - Burn-in-Subtitles sind funktional, aber der neue Subtitle-Hebel verbessert diese beiden realen Clips nur leicht; die groessere sichtbare Schwachstelle bleibt das Bildmaterial
+
+## Update 2026-05-13 Creative OS Cockpit Phase-1-Reality-Fix
+
+### Implementierter Stand
+- Phase-1-Runtime und Cockpit sind bis Stage `09` real verdrahtet.
+- `phase1_status.json` unterscheidet Real-Run-Fortschritt von UI-Auswahl und schreibt bei fertiger Stage `09` auch `completed_stages` inklusive `09`.
+- Cockpit Stage `08` und `09` lesen echte Artefakte aus `prompt_payload_compiled.json`, `zimage_prompts.json` und `keyframe_manifest.json`.
+- Stage `09` zeigt echte Jobdaten, Preview-Pfade, Datei-Existenz, Dateigroesse und Error-Status; fertige Jobs ohne Datei werden nicht als Erfolg angezeigt.
+- Neue fertige Phase-1-Runs erzeugen `keyframe_gallery.html`, wenn echte PNGs vorhanden sind.
+- Smoke-Run: `/workspace/agent_runs/phase1-build-smoke-20260513/creative_os`, 3 echte PNGs, `phase1_finished_stage09`.
+
+### Nicht gebaut
+- Keine Stage-10-bis-15-Runtime.
+- Keine LTX-Video-Generation, kein Assembly, kein Final Output.
+- Keine n8n/API-Integration und keine neuen Dependencies.
+
+### Verifikation
+- `python3 -m unittest /workspace/tests/test_creative_os_cockpit.py -v` -> 16 Tests OK.
+- `python3 -m unittest /workspace/tests/test_creative_os_status.py -v` -> 17 Tests OK.
+- `textual==0.89.1`.
 
 ## Update 2026-05-03 G7 Creative Beat Planner
 

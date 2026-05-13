@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 
-STAGES = [
+LEGACY_STAGES = [
     ("01", "Input normalized", "normalized_job.json"),
     ("02", "Intent routed", "intent_route.json"),
     ("03", "Skills loaded", "skill_match.json"),
@@ -20,6 +20,21 @@ STAGES = [
     ("11", "Assembly", "final.mp4"),
     ("12", "Final verdict", "final_quality_verdict.json"),
 ]
+
+PHASE1_STAGES = [
+    ("00", "Command Center", "normalized_job.json"),
+    ("01", "Pipeline Overview", "pipeline_route.json"),
+    ("02", "Mode & Style", "mode_style.json"),
+    ("03", "Skills laden", "skill_match.json"),
+    ("04", "Creative Strategy", "creative_strategy.json"),
+    ("05", "Beat / Hook Planner", "beat_hook_plan.json"),
+    ("06", "Creative Judge", "creative_judge.json"),
+    ("07", "Scene Contracts", "scene_contracts.json"),
+    ("08", "Prompt Compiler", "prompt_payload_compiled.json"),
+    ("09", "Image / Keyframe Generation", "keyframe_manifest.json"),
+]
+
+STAGES = LEGACY_STAGES
 
 
 @dataclass
@@ -74,14 +89,23 @@ class CreativeOSRunInspector:
     def _artifact_map(self, run_dir: Path) -> dict[str, bool]:
         names = [
             "normalized_job.json",
+            "pipeline_route.json",
+            "mode_style.json",
+            "creative_direction.json",
+            "skill_tree.json",
             "intent_route.json",
             "skill_match.json",
             "creative_strategy.json",
+            "beat_hook_plan.json",
             "selected_beat_plan.json",
+            "creative_judge.json",
             "scene_contracts.json",
             "keyframe_contracts.json",
+            "prompt_payload_compiled.json",
             "zimage_prompts.json",
             "keyframe_manifest.json",
+            "phase1_status.json",
+            "keyframe_gallery.html",
             "keyframe_review.json",
             "stage6_review_decision.json",
             "ltx_motion_prompts.json",
@@ -101,7 +125,8 @@ class CreativeOSRunInspector:
 
     def _stage_statuses(self, inspection: RunInspection) -> list[StageStatus]:
         statuses: list[StageStatus] = []
-        for index, name, artifact in STAGES:
+        stages = PHASE1_STAGES if isinstance(inspection.data.get("phase1_status"), dict) else LEGACY_STAGES
+        for index, name, artifact in stages:
             status, detail = self._single_stage_status(inspection, artifact)
             statuses.append(StageStatus(index=index, name=name, status=status, artifact=artifact, detail=detail))
         return statuses
@@ -115,6 +140,22 @@ class CreativeOSRunInspector:
             return ("missing", "missing or empty") if not (run_dir / artifact).exists() else ("unknown", "empty")
         if artifact == "keyframe_manifest.json":
             manifest = inspection.data.get("keyframe_manifest") or {}
+            if isinstance(manifest, dict) and isinstance(manifest.get("jobs"), list):
+                jobs = manifest["jobs"]
+                finished = [item for item in jobs if item.get("status") == "finished" and item.get("output_path") and Path(str(item["output_path"])).exists()]
+                errors = [item for item in jobs if item.get("status") == "error"]
+                missing_outputs = [item for item in jobs if item.get("status") == "finished" and not Path(str(item.get("output_path") or "")).exists()]
+                if finished and len(finished) == len(jobs):
+                    return "passed", f"{len(finished)}/{len(jobs)} jobs finished"
+                if missing_outputs:
+                    return "needs_review", f"{len(missing_outputs)}/{len(jobs)} finished jobs missing output"
+                if errors:
+                    backend_reason = str(manifest.get("backend_reason") or errors[0].get("error") or "image backend unavailable")
+                    return "needs_review", f"{len(errors)}/{len(jobs)} jobs error; {backend_reason}"
+                queued = [item for item in jobs if item.get("status") in {"queued", "running"}]
+                if queued:
+                    return "pending", f"{len(queued)}/{len(jobs)} jobs queued"
+                return "unknown", "manifest jobs present"
             items = manifest.get("generated_keyframes") if isinstance(manifest, dict) else None
             if isinstance(items, list) and items:
                 ok = [item for item in items if item.get("success") and item.get("image_path") and Path(item["image_path"]).exists()]
@@ -166,6 +207,14 @@ class CreativeOSRunInspector:
         return issues
 
     def _derive_status(self, inspection: RunInspection) -> str:
+        phase1 = inspection.data.get("phase1_status")
+        if isinstance(phase1, dict) and phase1.get("status"):
+            status = str(phase1.get("status"))
+            if status == "paused_missing_backend":
+                return "phase1_paused_missing_image_backend"
+            if status == "finished":
+                return "phase1_finished_stage09"
+            return status
         stage7 = next((stage for stage in inspection.stages if stage.index == "07"), None)
         stage8 = next((stage for stage in inspection.stages if stage.index == "08"), None)
         stage9 = next((stage for stage in inspection.stages if stage.index == "09"), None)
@@ -191,12 +240,22 @@ class CreativeOSRunInspector:
             return "Resolve blocking Creative OS issues before continuing."
         if inspection.status == "ready_for_ltx_i2v_takes":
             return "Stage 09: render 1 LTX I2V take per scene"
+        if inspection.status == "phase1_paused_missing_image_backend":
+            return "Start/restore Z-Image backend, then rerun Phase 1 image generation."
+        if inspection.status == "phase1_finished_stage09":
+            return "Phase 1 complete through Stage 09; Stage 10+ runtime is not built."
         for stage in inspection.stages:
             if stage.status in {"missing", "needs_review", "rejected", "unknown"}:
                 return f"Complete or review Stage {stage.index}: {stage.name}"
         return "No next action detected."
 
     def last_passed_stage(self, inspection: RunInspection) -> str:
+        phase1 = inspection.data.get("phase1_status")
+        if isinstance(phase1, dict):
+            stage_id = str(phase1.get("last_completed_stage") or "")
+            stage_names = {index: name for index, name, _artifact in PHASE1_STAGES}
+            if stage_id in stage_names:
+                return f"{stage_id} {stage_names[stage_id]}"
         passed = [stage for stage in inspection.stages if stage.status == "passed"]
         if not passed:
             return "none"

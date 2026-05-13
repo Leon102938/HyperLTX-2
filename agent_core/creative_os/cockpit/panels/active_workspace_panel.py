@@ -153,26 +153,13 @@ def _stage_workspace(state: CockpitState, stage: StageDefinition) -> Text:
 def _command_center_workspace(state: CockpitState, stage: StageDefinition) -> Text:
     workspace = _stage_header(stage)
     workspace.append(
-        _section_box(
+        _stage00_section_box(
             "CURRENT POSITION",
-            _position_grid(
-                (
-                    ("Job ID", state.header.job_id),
-                    ("Runs Root", str(state.data_source_path.parent)),
-                    ("Session Mode", state.session_mode),
-                    ("Run Type", _run_type(state)),
-                    ("Data Source", state.header.artifact_mode),
-                    ("Status", state.header.status),
-                    ("Watch", "on" if state.watch_enabled else "off"),
-                    ("Render Paused", state.workspace.render_paused),
-                    ("Current Step", state.workspace.current_step),
-                    ("Next", stage.next_action),
-                )
-            ),
+            _stage00_position_lines(state, stage),
         )
     )
     workspace.append(
-        _section_box(
+        _stage00_section_box(
             "COMMAND COMPOSER",
             _position_grid(
                 (
@@ -195,15 +182,56 @@ def _command_center_workspace(state: CockpitState, stage: StageDefinition) -> Te
         )
     )
     workspace.append(
-        _section_box(
+        _stage00_section_box(
             "COMMAND PREVIEW",
             [
-                _plain_line("read-only preview; no submit action is wired"),
-                _plain_line(_command_preview(state)),
+                _stage00_preview_line("read-only preview; no submit action is wired"),
+                _stage00_preview_line(_command_preview(state)),
             ],
         )
     )
     return workspace
+
+
+def _stage00_position_lines(state: CockpitState, stage: StageDefinition) -> list[Text]:
+    return (
+        _position_grid(
+            (
+                ("Job ID", state.header.job_id),
+                ("Current Step", state.workspace.current_step),
+                ("Next", stage.next_action),
+                ("Watch", "on" if state.watch_enabled else "off"),
+                ("Render Paused", state.workspace.render_paused),
+            )
+        )
+        + [
+            _plain_line(""),
+            _stage00_dev_heading(),
+            _stage00_dev_line("Runs Root", str(state.data_source_path.parent)),
+            _stage00_dev_line("Session Mode", state.session_mode),
+            _stage00_dev_line("Run Type", _run_type(state)),
+            _stage00_dev_line("Run State", state.header.status),
+        ]
+    )
+
+
+def _stage00_dev_heading() -> Text:
+    line = Text()
+    line.append("DEV / RUN INFO", style=style(TEXT_MUTED, bg=BG_WORKSPACE, bold=True))
+    return line
+
+
+def _stage00_dev_line(label: str, value: str) -> Text:
+    line = Text()
+    line.append(f"{label}: ", style=style(TEXT_MUTED, bg=BG_WORKSPACE, bold=True))
+    line.append(_shorten(value, 100), style=style(TEXT_MUTED, bg=BG_WORKSPACE))
+    return line
+
+
+def _stage00_preview_line(value: str) -> Text:
+    line = Text()
+    line.append(_shorten_preserve(value, BOX_WIDTH - 6), style=style(TEXT_MAIN, bg=BG_WORKSPACE))
+    return line
 
 
 def _command_preview(state: CockpitState) -> str:
@@ -227,17 +255,45 @@ def _command_preview(state: CockpitState) -> str:
 def _pipeline_select_workspace(state: CockpitState, stage: StageDefinition) -> Text:
     workspace = Text()
     workspace.append("ACTIVE WORKSPACE / STAGE 01: PIPELINE WÄHLEN\n", style=style(TEXT_LABEL, bg=BG_WORKSPACE, bold=True))
-    workspace.append(
-        _three_column_boxes(
-            (
-                ("PIPELINE PURPOSE / OVERVIEW", _pipeline_selected_lines(state), 42),
-                ("PIPELINE FLOW", _pipeline_route_lines(state), 56),
-                ("PIPELINE ASSETS", _pipeline_asset_lines(state), 30),
-            )
-        )
-    )
-    workspace.append(_compact_section_box("OUTPUT TARGETS / NEXT", _pipeline_output_target_lines(state, stage), BOX_WIDTH))
+    workspace.append(_pipeline_select_layout(state))
     return workspace
+
+
+def _pipeline_select_layout(state: CockpitState) -> Text:
+    left_width = 50
+    right_width = 80
+    left_lines = _box_plain_lines("PIPELINE PURPOSE / OVERVIEW", _pipeline_selected_lines(state), left_width)
+    left_lines.append(" " * left_width)
+    left_lines.extend(_box_plain_lines("PIPELINE ASSETS", _pipeline_asset_lines(state), left_width))
+    right_lines = _box_plain_lines("PIPELINE FLOW", _pipeline_route_lines(state), right_width)
+
+    height = max(len(left_lines), len(right_lines))
+    while len(left_lines) < height:
+        left_lines.append(" " * left_width)
+    while len(right_lines) < height:
+        right_lines.insert(-1, "│ " + " " * (right_width - 3) + "│")
+
+    output = Text()
+    for index, (left, right) in enumerate(zip(left_lines, right_lines)):
+        output.append(left, style=_pipeline_layout_line_style(left, index, len(left_lines)))
+        output.append("  ", style=style(TEXT_MUTED, bg=BG_WORKSPACE))
+        output.append(right, style=_pipeline_layout_line_style(right, index, len(right_lines)))
+        output.append("\n", style=style(TEXT_MAIN, bg=BG_WORKSPACE))
+    return output
+
+
+def _pipeline_layout_line_style(line: str, index: int, height: int) -> str:
+    if index in {0, height - 1} or line.startswith(("╭", "╰")):
+        return style(TEXT_LABEL, bg=BG_WORKSPACE, bold=True)
+    if line.startswith("│ ▶"):
+        return style(TEXT_SUCCESS, bg=BG_WORKSPACE, bold=True)
+    if " done" in line:
+        return style(TEXT_SUCCESS, bg=BG_WORKSPACE)
+    if " upcoming" in line:
+        return style(TEXT_ACTIVE, bg=BG_WORKSPACE)
+    if " locked" in line or "optional" in line or "planned" in line:
+        return style(TEXT_MUTED, bg=BG_WORKSPACE)
+    return style(TEXT_MAIN, bg=BG_WORKSPACE)
 
 
 def _mode_style_workspace(state: CockpitState, stage: StageDefinition) -> Text:
@@ -354,8 +410,7 @@ def _judge_workspace(state: CockpitState, stage: StageDefinition) -> Text:
 def _pipeline_selected_lines(state: CockpitState) -> list[Text]:
     return [
         _label_value_line("Pipeline", state.header.pipeline or "unknown"),
-        _label_value_line("Creative OS / storyboard pipeline", "available"),
-        _plain_line("Shortform vertical workflow for storyboarded scenes, image keyframes, motion and final assembly."),
+        _plain_line("Shortform vertical workflow for storyboarded scenes, image keyframes, motion, and final assembly."),
         _plain_line(""),
         _label_value_line("Purpose", "turn creative direction into scene prompts and keyframes"),
         _label_value_line("Mode", state.header.mode or "not selected"),
@@ -367,17 +422,21 @@ def _pipeline_selected_lines(state: CockpitState) -> list[Text]:
 
 def _pipeline_route_lines(state: CockpitState) -> list[Text]:
     return [
-        _literal_line("▶ 01 Pipeline overview       active"),
-        _literal_line("  ↓"),
-        _literal_line("○ 02 Mode & Style           direction"),
-        _literal_line("  ↓"),
-        _literal_line("○ 03 Skills laden           mode/style/hook/model skills"),
-        _literal_line("  ↓"),
-        _literal_line("○ 04-06 Creative planning   strategy, beat plan, judge"),
-        _literal_line("  ↓"),
-        _literal_line("○ 07-08 Contracts/prompts   scene rules and prompt payload"),
-        _literal_line("  ↓"),
-        _literal_line("○ 09-15 Generation/output   keyframes, video, final assembly"),
+        _literal_line("STAGE                         HANDOFF                         STATUS"),
+        _literal_line(""),
+        _literal_line("▶ 01 Pipeline overview        selected pipeline route          active"),
+        _literal_line("  02 Mode & Style             direction inputs                 upcoming"),
+        _literal_line("  03 Skills laden             mode/style/hook/model skills     upcoming"),
+        _literal_line("  04-06 Creative Planning     strategy, beat plan, judge       upcoming"),
+        _literal_line("  07-08 Contracts/Prompts     scene rules, prompt payload      upcoming"),
+        _literal_line("  09 Image / Keyframe         generate keyframes               upcoming"),
+        _literal_line("  10-15 Video / Final         review, video, assembly, output  locked"),
+        _literal_line(""),
+        _literal_line("STATUS KEY  active = selected  done = passed  upcoming = next  locked = later"),
+        _literal_line(""),
+        _literal_line("FLOW DENSITY  planning -> contracts -> image -> video -> final"),
+        _literal_line("ROUTE         shortform_storyboard_v1 / portrait / 3 scenes"),
+        _literal_line("GATE          read-only overview; render remains paused"),
     ]
 
 
@@ -389,20 +448,6 @@ def _pipeline_asset_lines(state: CockpitState) -> list[Text]:
         _compact_status_line("○", "Subtitles", _data_hint(state, "subtitles", "optional")),
         _compact_status_line("✓", "Scene Count", str(state.header.scene_count or 3)),
         _compact_status_line("○", "Final MP4", "planned"),
-    ]
-
-
-def _pipeline_output_target_lines(state: CockpitState, stage: StageDefinition) -> list[Text]:
-    return [
-        _metric_row(
-            (
-                ("Output Goals", "scene prompts, keyframes, motion prompts, final.mp4"),
-                ("Next Step", "02 Mode & Style"),
-                ("Run Type", _run_type(state)),
-            ),
-            value_width=34,
-        ),
-        _label_value_line("Operator Next", "confirm the selected route and continue to Mode & Style"),
     ]
 
 
@@ -1321,7 +1366,10 @@ def _prompt_job_lines(state: CockpitState) -> list[Text]:
     if not data.scenes:
         line = Text()
         line.append("○ ", style=style(TEXT_MUTED, bg=BG_WORKSPACE))
-        line.append("No prompt/image jobs available", style=style(TEXT_MUTED, bg=BG_WORKSPACE))
+        if isinstance(state.inspection.data.get("phase1_status"), dict) and "keyframe_manifest" not in state.inspection.data:
+            line.append("missing manifest: keyframe_manifest.json unavailable", style=style(TEXT_MUTED, bg=BG_WORKSPACE))
+        else:
+            line.append("No prompt/image jobs available", style=style(TEXT_MUTED, bg=BG_WORKSPACE))
         return [line]
     lines: list[Text] = []
     scene_count = min(3, len(data.scenes))
@@ -1349,7 +1397,7 @@ def _render_prompt_job(state: CockpitState, index: int, scene: object, *, select
         _job_card_border(top=True),
         _job_card_top(index, scene_id, source, job_status, caret, selected),
         _job_card_summary(title, scene_id, summary, job_status),
-        _job_card_source(source),
+        _job_card_source(scene, source),
     ]
     if expanded:
         lines.extend(_job_detail_lines(state, index, scene, _scene_prompt(state, scene_id) or summary, source, job_status))
@@ -1389,13 +1437,18 @@ def _job_card_summary(title: str, scene_id: str, summary: str, job_status: str) 
     return _job_card_line(content)
 
 
-def _job_card_source(source: str) -> Text:
+def _job_card_source(scene: object, source: str) -> Text:
     content = Text()
     content.append("  ", style=style(TEXT_MUTED, bg=BG_WORKSPACE))
     content.append(" " * JOB_CARD_PREVIEW_WIDTH, style=style(TEXT_MUTED, bg=BG_WORKSPACE))
     content.append("  ", style=style(TEXT_MUTED, bg=BG_WORKSPACE))
-    content.append("keyframe: ", style=style(TEXT_LABEL, bg=BG_WORKSPACE, bold=True))
-    content.append(_shorten(_basename(source), JOB_CARD_MAIN_WIDTH - 10), style=style(TEXT_MUTED, bg=BG_WORKSPACE))
+    content.append("Preview: ", style=style(TEXT_LABEL, bg=BG_WORKSPACE, bold=True))
+    preview = source if source not in {"missing", "unknown", "not_checked"} else (_scene_optional(scene, "output_path") or source)
+    content.append(_shorten(_display_path(preview), JOB_CARD_MAIN_WIDTH - 9), style=style(TEXT_MUTED, bg=BG_WORKSPACE))
+    error = _scene_optional(scene, "error")
+    if error:
+        content.append(" · error ", style=style("#EF4444", bg=BG_WORKSPACE, bold=True))
+        content.append(_shorten(error, 28), style=style("#EF4444", bg=BG_WORKSPACE, bold=True))
     return _job_card_line(content)
 
 
@@ -1407,8 +1460,12 @@ def _job_detail_lines(state: CockpitState, index: int, scene: object, summary: s
         _job_detail_title(title),
         _job_detail_prompt(_scene_optional(scene, "prompt") or summary),
         _job_detail_status(progress, status),
-        _job_detail_meta(source, progress),
+        _job_detail_preview(scene, source),
+        _job_detail_meta(scene, source, progress),
     ]
+    gallery = _scene_optional(scene, "gallery_path")
+    if gallery:
+        lines.append(_job_detail_gallery(gallery))
     return lines
 
 
@@ -1440,15 +1497,38 @@ def _job_detail_status(progress: dict[str, object], status: str) -> Text:
     return _job_card_line(content)
 
 
-def _job_detail_meta(source: str, progress: dict[str, object]) -> Text:
+def _job_detail_preview(scene: object, source: str) -> Text:
+    content = Text()
+    content.append("  " + " " * JOB_CARD_PREVIEW_WIDTH + "  ", style=style(TEXT_MUTED, bg=BG_WORKSPACE))
+    exists = _scene_optional(scene, "file_exists") == "True"
+    size = _scene_optional(scene, "file_size_bytes") or "0"
+    mtime = _scene_optional(scene, "file_mtime") or "not_checked"
+    status = "path ok" if exists else "path missing"
+    content.append("Preview: ", style=style(TEXT_LABEL, bg=BG_WORKSPACE, bold=True))
+    preview = source if source not in {"missing", "unknown", "not_checked"} else (_scene_optional(scene, "output_path") or source)
+    content.append(_shorten(_display_path(preview), 56), style=style(TEXT_MAIN if exists else TEXT_MUTED, bg=BG_WORKSPACE))
+    content.append(f" · {status} · {size} bytes · {mtime}", style=style(TEXT_MUTED, bg=BG_WORKSPACE))
+    return _job_card_line(content)
+
+
+def _job_detail_meta(scene: object, source: str, progress: dict[str, object]) -> Text:
     content = Text()
     content.append("  " + " " * JOB_CARD_PREVIEW_WIDTH + "  ", style=style(TEXT_MUTED, bg=BG_WORKSPACE))
     elapsed = str(progress["elapsed"] or "not_checked")
     backend = str(progress["backend"] or "not_checked")
-    content.append(f"elapsed {elapsed} · backend {backend}", style=style(TEXT_MUTED, bg=BG_WORKSPACE))
-    source_name = _basename(source)
-    if source_name:
-        content.append(f" · source {source_name}", style=style(TEXT_MUTED, bg=BG_WORKSPACE))
+    backend_job_id = _scene_optional(scene, "backend_job_id") or "not_checked"
+    error = _scene_optional(scene, "error")
+    content.append(f"elapsed {elapsed} · backend {backend} · backend_job {backend_job_id}", style=style(TEXT_MUTED, bg=BG_WORKSPACE))
+    if error:
+        content.append(f" · error {_shorten(error, 42)}", style=style("#EF4444", bg=BG_WORKSPACE, bold=True))
+    return _job_card_line(content)
+
+
+def _job_detail_gallery(gallery: str) -> Text:
+    content = Text()
+    content.append("  " + " " * JOB_CARD_PREVIEW_WIDTH + "  ", style=style(TEXT_MUTED, bg=BG_WORKSPACE))
+    content.append("Gallery: ", style=style(TEXT_LABEL, bg=BG_WORKSPACE, bold=True))
+    content.append(_shorten(_display_path(gallery), 86), style=style(TEXT_MUTED, bg=BG_WORKSPACE))
     return _job_card_line(content)
 
 
@@ -1501,23 +1581,29 @@ def _preview_label(source: str) -> str:
 def _preview_slot(source: str, status: str) -> str:
     basename = _basename(source)
     if status in {"finished", "ready"} and basename not in {"missing", "unknown", "not_checked"}:
-        return f"[img] {basename}"
-    if status == "generating":
+        return f"[file] {basename}"
+    if status in {"generating", "running"}:
         return "[work] preview"
+    if status == "error":
+        return "[err] output"
     return "[empty] slot"
 
 
 def _preview_style(status: str) -> str:
     if status in {"finished", "ready"}:
         return style(TEXT_SUCCESS, bg=BG_WORKSPACE, bold=True)
-    if status == "generating":
+    if status in {"generating", "running"}:
         return style(TEXT_ACTIVE, bg=BG_WORKSPACE, bold=True)
+    if status == "error":
+        return style("#EF4444", bg=BG_WORKSPACE, bold=True)
     return style(TEXT_MUTED, bg=BG_WORKSPACE)
 
 
 def _image_job_status(state: CockpitState, index: int, scene: object) -> str:
     explicit = _scene_optional(scene, "job_status") or _scene_optional(scene, "queue_state")
-    if explicit in {"finished", "ready", "generating", "in queue"}:
+    if explicit in {"failed", "error"}:
+        return "error"
+    if explicit in {"finished", "ready", "generating", "in queue", "queued", "running"}:
         return explicit
     if state.session_mode == "fixture/demo" and state.run_type == "creative_os":
         return ("ready", "generating", "in queue")[min(index, 3) - 1]
@@ -1540,7 +1626,8 @@ def _image_job_progress(state: CockpitState, index: int, scene: object, status: 
         return {"percent": progress, "elapsed": elapsed, "backend": backend, "demo": False}
     if state.session_mode == "fixture/demo" and status == "generating":
         return {"percent": 62, "elapsed": "00:18 demo", "backend": "zimage_http demo", "demo": True}
-    if status in {"finished", "ready"}:
+    file_exists = _scene_optional(scene, "file_exists") == "True"
+    if status in {"finished", "ready"} and (file_exists or state.session_mode == "fixture/demo"):
         return {"percent": 100, "elapsed": elapsed or "done", "backend": backend, "demo": False}
     return {"percent": None, "elapsed": elapsed or "waiting", "backend": backend, "demo": False}
 
@@ -1823,17 +1910,22 @@ def _artifact_bans_value(state: CockpitState) -> str:
 def _image_prompt_status(state: CockpitState, scene_id: str, prompt: str) -> str:
     if state.session_mode == "fixture/demo" and _prompt_compiler_status(state) == "present":
         return "demo"
-    if prompt not in {"missing", "not_checked", "unknown"}:
-        return "ready"
     for prompt_item in _data_list(state, "zimage_prompts") + _model_prompt_scenes(state):
         if isinstance(prompt_item, dict) and str(prompt_item.get("scene_id") or "") == scene_id:
-            return "ready"
+            status = str(prompt_item.get("status") or "")
+            return status if status else "compiled"
+    if prompt not in {"missing", "not_checked", "unknown"}:
+        return "compiled"
     return "missing"
 
 
 def _scene_prompt_status_for_summary(state: CockpitState, index: int, prompt: str) -> str:
     if state.session_mode == "fixture/demo":
         return "validating" if index == 3 else "compiled"
+    scene_id = f"scene_{index:02d}"
+    for prompt_item in _data_list(state, "zimage_prompts") + _model_prompt_scenes(state):
+        if isinstance(prompt_item, dict) and str(prompt_item.get("scene_id") or "") == scene_id:
+            return str(prompt_item.get("status") or "compiled")
     if prompt not in {"missing", "not_checked", "unknown"}:
         return "compiled"
     return "missing"
@@ -1842,10 +1934,12 @@ def _scene_prompt_status_for_summary(state: CockpitState, index: int, prompt: st
 def _scene_prompt_confidence(index: int, status: str) -> str:
     if status == "missing":
         return "n/a"
-    return ("0.94", "0.93", "0.91")[min(index, 3) - 1]
+    return "artifact"
 
 
 def _prompt_fallback_summary(state: CockpitState, scene_id: str) -> str:
+    if state.session_mode != "fixture/demo":
+        return f"missing prompt for {scene_id}"
     topic = state.header.topic or "visual subject"
     style_hint = _style_hint(state)
     return f"{topic}, {style_hint}, clean subject, no readable text, scene {scene_id} demo summary"
@@ -1869,7 +1963,7 @@ def _image_job_counts(state: CockpitState) -> dict[str, int]:
         status = _image_job_status(state, index, scene)
         if status in {"finished", "ready", "read-only"}:
             counts["finished"] += 1
-        elif status == "generating":
+        elif status in {"generating", "running"}:
             counts["generating"] += 1
         else:
             counts["queued_missing"] += 1
@@ -2353,6 +2447,10 @@ def _section_box(title: str, lines: list[Text]) -> Text:
     return box
 
 
+def _stage00_section_box(title: str, lines: list[Text]) -> Text:
+    return _compact_section_box(title, lines, BOX_WIDTH + 2)
+
+
 def _active_section_box(title: str, lines: list[Text]) -> Text:
     box = Text()
     border_style = style(TEXT_SUCCESS, bg=BG_WORKSPACE, bold=True)
@@ -2413,6 +2511,8 @@ def _blank_position_row() -> Text:
 
 def _status_for_job(state_label: str, output_status: str) -> str:
     lower = f"{state_label} {output_status}".lower()
+    if "error" in lower or "failed" in lower:
+        return "error"
     if "missing" in lower:
         return "missing"
     if "ready" in lower:
@@ -2429,8 +2529,10 @@ def _status_for_job(state_label: str, output_status: str) -> str:
 def _job_status_style(status: str) -> str:
     if status in {"finished", "ready", "read-only"}:
         return style(TEXT_SUCCESS, bg=BG_WORKSPACE, bold=True)
-    if status == "generating":
+    if status in {"generating", "running"}:
         return style(TEXT_ACTIVE, bg=BG_WORKSPACE, bold=True)
+    if status == "error":
+        return style("#EF4444", bg=BG_WORKSPACE, bold=True)
     if status == "missing":
         return style(TEXT_MUTED, bg=BG_WORKSPACE)
     return style(TEXT_MUTED, bg=BG_WORKSPACE)
@@ -2492,3 +2594,12 @@ def _scene_optional(scene: object, key: str) -> str | None:
 
 def _basename(path: str) -> str:
     return path.rsplit("/", 1)[-1] if path else "missing"
+
+
+def _display_path(path: str) -> str:
+    if not path or path in {"missing", "unknown", "not_checked"}:
+        return "missing"
+    marker = "/creative_os/"
+    if marker in path:
+        return path.split(marker, 1)[1]
+    return _basename(path)

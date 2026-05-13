@@ -16,7 +16,7 @@ class StageDefinition:
 
 
 STAGE_DEFINITIONS: tuple[StageDefinition, ...] = (
-    StageDefinition("00", "Command Center", "Job vorbereiten und CLI-Befehl spaeter bauen.", tuple(), "Command composer planned, read-only in V0.1", "command_center"),
+    StageDefinition("00", "Command Center", "Run vorbereiten · Parameter prüfen · Startstatus kontrollieren", tuple(), "Startparameter prüfen", "command_center"),
     StageDefinition("01", "Pipeline wählen", "Operator-Pipeline anzeigen und spaetere Auswahl vorbereiten.", ("plan.json", "intent_route.json"), "Pipeline selection is preview-only in V0.1", "pipeline_select"),
     StageDefinition("02", "Mode & Style", "Mode, Style, Format und Topic fuer den Run sichtbar machen.", ("normalized_job.json", "plan.json"), "Review mode/style inputs before later command composition", "mode_style"),
     StageDefinition("03", "Skills laden", "Skill Health, geladene Skills, Fallbacks und fehlende Skills zeigen.", ("skill_match.json",), "Inspect skill coverage; no runtime loading is triggered", "skills"),
@@ -81,6 +81,8 @@ def current_stage_id(state: CockpitState) -> str:
 
 def _current_stage_id(state: CockpitState) -> str:
     status = state.inspection.status
+    if status.startswith("phase1_"):
+        return "09"
     if status in {"ready_for_ltx_i2v_takes", "ready_for_stage_8"}:
         return "12"
     if _artifact_present(state, "ltx_motion_prompts.json"):

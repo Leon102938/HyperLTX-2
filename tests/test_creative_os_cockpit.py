@@ -61,7 +61,7 @@ class CreativeOSCockpitTests(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn("JOB / PROMPT", str(text))
             self.assertNotIn("details  ", str(text))
             self.assertIn("Prompt:", str(text))
-            self.assertIn("source", str(text))
+            self.assertIn("Preview:", str(text))
             self.assertIn(">", str(text))
             self.assertIn("v", str(text))
             self.assertNotIn("negative_prompt", str(text))
@@ -118,8 +118,25 @@ class CreativeOSCockpitTests(unittest.IsolatedAsyncioTestCase):
                 workspace = _widget_text(app.query_one("#workspace"))
                 for needle in needles:
                     self.assertIn(needle, workspace)
+                if stage_id == "00":
+                    self.assertIn("Run vorbereiten · Parameter prüfen · Startstatus kontrollieren", workspace)
+                    self.assertIn("DEV / RUN INFO", workspace)
+                    self.assertIn("Run State: ready_for_ltx_i2v_takes", workspace)
+                    self.assertNotIn("DATA SOURCE", workspace)
+                    self.assertNotIn("Status: ready_for_ltx_i2v_takes", workspace)
+                    self.assertNotIn("CLI-Befehl spaeter bauen", workspace)
                 if stage_id == "01":
                     self.assertNotIn("CURRENT POSITION", workspace)
+                    self.assertNotIn("OUTPUT TARGETS / NEXT", workspace)
+                    self.assertNotIn("Output Goals", workspace)
+                    self.assertNotIn("Next Step", workspace)
+                    self.assertNotIn("Operator Next", workspace)
+                    self.assertGreater(workspace.find("PIPELINE ASSETS"), workspace.find("PIPELINE PURPOSE / OVERVIEW"))
+                    self.assertIn("01 Pipeline overview        selected pipeline route          active", workspace)
+                    self.assertIn("STATUS KEY  active = selected  done = passed  upcoming = next  locked = later", workspace)
+                    self.assertIn("direction inputs                 upcoming", workspace)
+                    self.assertIn("Video / Final         review, video, assembly, output  locked", workspace)
+                    self.assertIn("10-15 Video / Final", workspace)
                 if stage_id == "03":
                     self.assertNotIn("Pipeline Skills", workspace)
 
@@ -202,7 +219,7 @@ class CreativeOSCockpitTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("Image 1 / scene_01", workspace)
             self.assertIn("Image 2 / scene_02", workspace)
             self.assertIn("Image 3 / scene_03", workspace)
-            self.assertIn("[img] scene_01.png", workspace)
+            self.assertIn("Preview: keyframes/scene_01.png", workspace)
             self.assertIn("[work] preview", workspace)
             self.assertIn("[empty] slot", workspace)
             self.assertIn("ready", workspace)

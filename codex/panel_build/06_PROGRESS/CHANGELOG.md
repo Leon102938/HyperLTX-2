@@ -2,6 +2,57 @@
 
 Diese Datei dokumentiert jede Session mit Datum, Umfang und Teststatus.
 
+## 2026-05-13 - Phase 1 Hardening Stage 09 Retry/Resume
+
+### Geaendert
+
+- Frischer E2E-Run `phase1-hardening-smoke-20260513` erzeugt Artefakte `00` bis `09`, 3 echte Keyframe-PNGs und `keyframe_gallery.html`.
+- Neuer CLI-Befehl `scripts/agent_core_cli.py creative-os retry-keyframes`.
+- Retry/Resume liest nur `keyframe_manifest.json`, erkennt `failed/error/queued/running`, fehlende `output_path` und `file_exists=false`.
+- Retry schreibt nur `keyframe_manifest.json`, `phase1_status.json` und ggf. `keyframe_gallery.html`; Stage `00` bis `08` bleiben unveraendert.
+- `--dry-run`, `--scene scene_02` und `--force` sind unterstuetzt.
+- Ohne `--force` werden fertige vorhandene PNGs nicht neu erzeugt.
+- Cockpit Stage `09` zeigt bei fehlendem Real-Run-Manifest `missing manifest` statt Fake-Cards.
+- Progress faellt nicht mehr auf harte `100%` zurueck, wenn ein Real-Run keine passende Manifest-/Dateibasis hat.
+
+### Nicht geaendert
+
+- Keine Stage-10-bis-15-Runtime.
+- Keine LTX-Video-Generation, kein Assembly, kein Final Output.
+- Keine n8n/API-Integration.
+- Kein Redesign und keine neuen Dependencies.
+
+### Tests
+
+- `python3 -m unittest /workspace/tests/test_creative_os_cockpit.py -v`: gruen, 16 Tests.
+- `python3 -m unittest /workspace/tests/test_creative_os_status.py -v`: gruen, 21 Tests.
+- Smoke: `retry-keyframes --scene scene_02` hat auf `phase1-hardening-retry-sim-20260513` eine fehlende PNG neu erzeugt.
+
+## 2026-05-13 - Phase 1 Runtime bis Stage 09
+
+### Geaendert
+
+- Neuer lokaler Phase-1-Runner `agent_core.creative_os.phase1_runtime`.
+- `scripts/agent_core_cli.py creative-os run-phase1` schreibt Creative-OS-Artefakte unter `/workspace/agent_runs/<job-id>/creative_os/`.
+- Erzeugte Artefakte: `normalized_job.json`, `pipeline_route.json`, `intent_route.json`, `mode_style.json`, `creative_direction.json`, `skill_match.json`, `skill_tree.json`, `creative_strategy.json`, `beat_hook_plan.json`, `selected_beat_plan.json`, `creative_judge.json`, `stage6_review_decision.json`, `scene_contracts.json`, `keyframe_contracts.json`, `prompt_payload_compiled.json`, `zimage_prompts.json`, `keyframe_manifest.json`, `phase1_status.json`.
+- Stage `09` prueft Z-Image ueber den vorhandenen lokalen HTTP-Backendpfad und schreibt pro Szene Jobstatus `queued/running/finished/error`.
+- Wenn das Image-Backend fehlt, bleibt der Run sauber auf `phase1_paused_missing_image_backend`; keine Fake-PNGs und kein Fake-Erfolg.
+- Inspector und Cockpit-State lesen Phase-1-Artefakte und Stage-09-Jobs aus `keyframe_manifest.json`.
+- Tests fuer Phase-1-CLI, Artefakte, Missing-Backend-Verhalten und Textual `0.89.x` ergaenzt.
+
+### Nicht geaendert
+
+- Keine Stage-10-bis-15-Runtime.
+- Keine LTX-Video-Generation, kein Assembly, kein Final Output.
+- Keine n8n/API-Integration.
+- Keine neuen Dependencies und keine Textual-8.x-Anpassung.
+- Kein Design-Redesign der Panels.
+
+### Tests
+
+- `python3 -m unittest /workspace/tests/test_creative_os_cockpit.py -v`: gruen, 16 Tests.
+- `python3 -m unittest /workspace/tests/test_creative_os_status.py -v`: gruen, 15 Tests.
+
 ## 2026-05-12 - Finaler Panel-Polish 00-08
 
 ### Geaendert
@@ -194,6 +245,31 @@ Diese Datei dokumentiert jede Session mit Datum, Umfang und Teststatus.
 ### Tests
 
 - Keine Tests ausgefuehrt, da nur Visual-Reference-Dateien und Panel-Build-Doku aktualisiert wurden.
+
+## 2026-05-13 - Phase 1 Reality Fix
+
+### Geaendert
+
+- `phase1_status.json` wird fuer fertige Stage `09` konsistent geschrieben: `completed_stages` enthaelt `09`, `real_run_stage=09`, `last_completed_stage=09`, `next_available_stage=none_phase1_complete`.
+- Cockpit-State liest Phase-1-Run-Fortschritt getrennt vom aktuell ausgewaehlten Panel und zeigt bei fertiger Phase 1 `Stage 10+ not built yet`.
+- Stage `08` liest Prompt-Summaries aus echten Prompt-Artefakten und markiert fehlende Werte als `missing`/`not_checked`.
+- Stage `09` liest echte Jobs aus `keyframe_manifest.json`: Backend, Backend-Status, Overall-Status, Scene-ID, Status, Progress, Elapsed, Output-Pfad, Error und Backend-Job-ID.
+- Stage `09` prueft pro Job, ob `output_path` existiert, und zeigt Dateigroesse/mtime an. Fertige Jobs ohne Datei werden als Error/Warn behandelt.
+- Terminal-Cockpit zeigt echte Preview-Pfade statt Fake-Thumbnails.
+- Runtime erzeugt bei vorhandenen PNGs `keyframe_gallery.html`; der Smoke-Run `phase1-build-smoke-20260513` wurde damit aktualisiert.
+- Status-CLI zeigt Phase-1-Runs mit Stage `00` bis `09` statt alter LTX-Stage-Legacy-Beschriftung.
+
+### Nicht geaendert
+
+- Keine Stage-10-bis-15-Runtime.
+- Keine LTX-Video-Generation, kein Assembly, kein Final Output.
+- Kein Redesign, keine neuen Dependencies, keine Textual-8.x-Aenderungen.
+- Keine n8n/API-Integration.
+
+### Tests
+
+- `python3 -m unittest /workspace/tests/test_creative_os_cockpit.py -v`: gruen, 16 Tests.
+- `python3 -m unittest /workspace/tests/test_creative_os_status.py -v`: gruen, 17 Tests.
 
 ## 2026-05-11 - Stage 08 Compiler Pass
 

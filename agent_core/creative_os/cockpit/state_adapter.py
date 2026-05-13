@@ -49,6 +49,18 @@ class WorkspaceSceneData:
     summary: str
     state_label: str = "READY FOR LTX"
     status: str = "waiting for Stage 09 render gate"
+    backend: str = "not_checked"
+    backend_status: str = "not_checked"
+    overall_status: str = "not_checked"
+    progress_percent: str = ""
+    elapsed: str = ""
+    output_path: str = ""
+    error: str = ""
+    backend_job_id: str = ""
+    file_exists: bool = False
+    file_size_bytes: int = 0
+    file_mtime: str = ""
+    gallery_path: str = ""
 
 
 @dataclass(frozen=True)
@@ -148,9 +160,7 @@ class CockpitStateAdapter:
             )
         meta = _job_meta(inspection)
         health = self.inspector.skill_health(inspection)
-        keyframes = sum(
-            1 for scene_id in ("scene_01", "scene_02", "scene_03") if inspection.artifacts.get(f"keyframes/{scene_id}.png")
-        )
+        workspace_scenes = tuple(_motion_items(inspection))
         return CockpitState(
             inspection=inspection,
             session_mode=session_mode,
@@ -180,12 +190,12 @@ class CockpitStateAdapter:
             system_status=SystemStatusData(rows=_system_rows(inspection)),
             pipeline_map=tuple(PipelineStageData(stage.index, stage.name, stage.status) for stage in inspection.stages),
             workspace=WorkspaceData(
-                current_step="LTX Motion Ready",
-                last_passed=f"✓ {self.inspector.last_passed_stage(inspection)}",
-                next_technical="○ 09 LTX I2V takes",
-                operator_focus="CLI cockpit refinement",
+                current_step=_creative_os_current_step(inspection, session_mode),
+                last_passed=_creative_os_last_completed(inspection, self.inspector.last_passed_stage(inspection)),
+                next_technical=_creative_os_next_available(inspection),
+                operator_focus=_creative_os_operator_focus(inspection, session_mode),
                 render_paused="yes",
-                scenes=tuple(_motion_items(inspection)),
+                scenes=workspace_scenes,
             ),
             skill_health=SkillHealthData(
                 mark=str(health["mark"]),
@@ -198,7 +208,8 @@ class CockpitStateAdapter:
             artifacts=ArtifactsData(
                 lines=(
                     (f"{_artifact_mark(inspection, 'zimage_prompts.json')} zimage_prompts.json", bool(inspection.artifacts.get("zimage_prompts.json"))),
-                    (f"{'✓' if keyframes == 3 else '○'} {keyframes} keyframes", keyframes == 3),
+                    _keyframe_artifact_line(inspection, workspace_scenes),
+                    (f"{_artifact_mark(inspection, 'keyframe_gallery.html')} keyframe_gallery.html", bool(inspection.artifacts.get("keyframe_gallery.html"))),
                     (
                         f"{_artifact_mark(inspection, 'ltx_motion_prompts.json')} ltx_motion_prompts.json",
                         bool(inspection.artifacts.get("ltx_motion_prompts.json")),
@@ -217,7 +228,7 @@ class CockpitStateAdapter:
                 blocking_issues=tuple(str(issue) for issue in inspection.blocking_issues),
                 severity=_issues_severity(tuple(str(issue) for issue in inspection.blocking_issues)),
             ),
-            next_panel=NextData(rows=(("Technical", "Stage 09: LTX I2V takes"), ("Operator", "Improve CLI cockpit"))),
+            next_panel=NextData(rows=_creative_os_next_rows(inspection)),
         )
 
     def _agent_core_state(
@@ -419,7 +430,7 @@ class CockpitStateAdapter:
 
 def _system_rows(inspection: RunInspection) -> tuple[tuple[str, str], ...]:
     vision = "- manual_structured" if "stage6_review_decision" in inspection.data else "- heuristic"
-    image = "✓ zimage_http" if inspection.artifacts.get("keyframe_manifest.json") else "? not_checked"
+    image = _image_backend_row(inspection)
     return (
         ("API", "? not_checked"),
         ("Director", "? not_checked"),
@@ -430,6 +441,17 @@ def _system_rows(inspection: RunInspection) -> tuple[tuple[str, str], ...]:
         ("Music", "- disabled"),
         ("Subtitles", "- off"),
     )
+
+
+def _image_backend_row(inspection: RunInspection) -> str:
+    manifest = inspection.data.get("keyframe_manifest")
+    if isinstance(manifest, dict):
+        backend = str(manifest.get("backend") or "zimage_http")
+        if manifest.get("backend_status") == "available":
+            return f"✓ {backend}"
+        reason = str(manifest.get("backend_reason") or "missing")
+        return f"✗ {backend} · {reason}"
+    return "? not_checked"
 
 
 def _job_meta(inspection: RunInspection) -> dict[str, object]:
@@ -446,10 +468,118 @@ def _job_meta(inspection: RunInspection) -> dict[str, object]:
     }
 
 
+def _creative_os_current_step(inspection: RunInspection, session_mode: str) -> str:
+    phase1 = inspection.data.get("phase1_status")
+    if isinstance(phase1, dict):
+        return f"Stage {phase1.get('real_run_stage') or phase1.get('current_stage') or '09'} Image / Keyframe Generation"
+    return "LTX Motion Ready" if session_mode == "fixture/demo" else "not_checked"
+
+
+def _creative_os_last_completed(inspection: RunInspection, fallback: str) -> str:
+    phase1 = inspection.data.get("phase1_status")
+    if isinstance(phase1, dict):
+        value = phase1.get("last_completed_stage")
+        return f"✓ {value}" if value else "- none"
+    return f"✓ {fallback}"
+
+
+def _creative_os_next_available(inspection: RunInspection) -> str:
+    phase1 = inspection.data.get("phase1_status")
+    if isinstance(phase1, dict):
+        if phase1.get("next_available_stage") == "none_phase1_complete":
+            return "Phase 1 complete / Stage 10+ not built yet"
+        if phase1.get("paused_reason"):
+            return "Stage 09 paused / image backend unavailable"
+        return f"Stage {phase1.get('next_available_stage') or '09'}"
+    return "○ 09 LTX I2V takes"
+
+
+def _creative_os_operator_focus(inspection: RunInspection, session_mode: str) -> str:
+    if session_mode == "fixture/demo":
+        return "fixture/demo artifacts"
+    phase1 = inspection.data.get("phase1_status")
+    if isinstance(phase1, dict):
+        return "Source: real_run · Fixture: no · Artifacts: loaded"
+    return "Source: real_run · Fixture: no · Artifacts: partial"
+
+
+def _creative_os_next_rows(inspection: RunInspection) -> tuple[tuple[str, str], ...]:
+    phase1 = inspection.data.get("phase1_status")
+    if isinstance(phase1, dict) and phase1.get("next_available_stage") == "none_phase1_complete":
+        return (("Technical", "Phase 1 complete / Stage 10+ not built yet"), ("Operator", "Review Stage 09 keyframes"))
+    if isinstance(phase1, dict) and phase1.get("paused_reason"):
+        return (("Technical", "Restore image backend and rerun Stage 09"), ("Reason", str(phase1.get("paused_reason"))))
+    return (("Technical", "Stage 09: image/keyframe jobs"), ("Operator", "Inspect manifest status"))
+
+
+def _keyframe_artifact_line(inspection: RunInspection, scenes: tuple[WorkspaceSceneData, ...]) -> tuple[str, bool]:
+    if scenes:
+        ok = sum(1 for scene in scenes if scene.file_exists)
+        total = len(scenes)
+        mark = "✓" if ok == total and total else "○"
+        return (f"{mark} {ok}/{total} keyframe files", ok == total and total > 0)
+    keyframes = sum(1 for scene_id in ("scene_01", "scene_02", "scene_03") if inspection.artifacts.get(f"keyframes/{scene_id}.png"))
+    return (f"{'✓' if keyframes == 3 else '○'} {keyframes} keyframes", keyframes == 3)
+
+
 def _motion_items(inspection: RunInspection) -> list[WorkspaceSceneData]:
+    manifest = inspection.data.get("keyframe_manifest")
+    if isinstance(manifest, dict) and isinstance(manifest.get("jobs"), list):
+        items: list[WorkspaceSceneData] = []
+        for job in manifest["jobs"]:
+            if not isinstance(job, dict):
+                continue
+            status = str(job.get("status") or "queued")
+            keyframe = str(job.get("output_path") or "")
+            file_exists = Path(keyframe).exists() if keyframe else False
+            if status == "finished" and not file_exists:
+                status = "error"
+                previous_error = str(job.get("error") or "").strip()
+                job_error = "finished job output missing" + (f" · {previous_error}" if previous_error else "")
+            else:
+                job_error = str(job.get("error") or "")
+            if status != "finished" and not file_exists:
+                keyframe = "missing"
+            items.append(
+                WorkspaceSceneData(
+                    scene_id=str(job.get("scene_id") or "unknown"),
+                    keyframe=keyframe,
+                    summary=str(job.get("prompt") or job.get("error") or "image job present"),
+                    state_label="KEYFRAME JOB",
+                    status=status,
+                    backend=str(job.get("backend") or manifest.get("backend") or "not_checked"),
+                    backend_status=str(manifest.get("backend_status") or "not_checked"),
+                    overall_status=str(manifest.get("overall_status") or "not_checked"),
+                    progress_percent="" if job.get("progress_percent") in (None, "") else str(job.get("progress_percent")),
+                    elapsed=str(job.get("elapsed") or ""),
+                    output_path=str(job.get("output_path") or ""),
+                    error=job_error,
+                    backend_job_id=str(job.get("backend_job_id") or ""),
+                    file_exists=file_exists,
+                    file_size_bytes=int(job.get("file_size_bytes") or (Path(keyframe).stat().st_size if file_exists else 0)),
+                    file_mtime=str(job.get("file_mtime") or ""),
+                    gallery_path=str(manifest.get("gallery_path") or ""),
+                )
+            )
+        return items
+    if isinstance(inspection.data.get("phase1_status"), dict):
+        return []
     prompts = inspection.data.get("ltx_motion_prompts") or []
     if not isinstance(prompts, list):
-        return []
+        prompt_items = inspection.data.get("zimage_prompts") or []
+        if not isinstance(prompt_items, list):
+            return []
+        return [
+            WorkspaceSceneData(
+                scene_id=str(prompt.get("scene_id") or "unknown"),
+                keyframe="missing",
+                summary=str(prompt.get("prompt") or prompt.get("model_prompt") or "image prompt present"),
+                state_label="IMAGE PROMPT",
+                status=str(prompt.get("status") or "queued"),
+            )
+            for prompt in prompt_items
+            if isinstance(prompt, dict)
+        ]
     items: list[WorkspaceSceneData] = []
     for prompt in prompts:
         if not isinstance(prompt, dict):

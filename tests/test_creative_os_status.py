@@ -8,8 +8,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import textual
+
 from agent_core.creative_os.dashboard import render_dashboard, render_rich_dashboard
 from agent_core.creative_os.run_inspector import CreativeOSRunInspector
+from agent_core.creative_os.cockpit.state_adapter import CockpitStateAdapter
+from agent_core.creative_os.cockpit.stage_registry import current_stage_id
+from agent_core.creative_os.cockpit.panels import active_workspace_panel
 
 
 FIXTURE_RUNS_ROOT = Path("/workspace/tests/fixtures/creative_os_runs")
@@ -17,6 +22,336 @@ SOURCE_RUN = FIXTURE_RUNS_ROOT / "creative-os-jungle-001" / "creative_os"
 
 
 class CreativeOSStatusTests(unittest.TestCase):
+    def test_textual_version_stays_on_089(self) -> None:
+        self.assertTrue(textual.__version__.startswith("0.89."), textual.__version__)
+
+    def test_phase1_cli_creates_stage00_to_stage09_artifacts_without_fake_backend_success(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            result = subprocess.run(
+                [
+                    "python3",
+                    "/workspace/scripts/agent_core_cli.py",
+                    "creative-os",
+                    "run-phase1",
+                    "--job-id",
+                    "phase1-test",
+                    "--topic",
+                    "jungle safari at sunrise",
+                    "--pipeline",
+                    "shortform_storyboard_v1",
+                    "--mode",
+                    "visual_adventure",
+                    "--style",
+                    "cinematic_nature",
+                    "--format",
+                    "portrait",
+                    "--duration",
+                    "9s",
+                    "--scenes",
+                    "3",
+                    "--runs-root",
+                    tmp,
+                    "--no-images",
+                    "--print-json",
+                ],
+                cwd="/workspace",
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(0, result.returncode, result.stderr)
+            run_dir = Path(tmp) / "phase1-test" / "creative_os"
+            for artifact in (
+                "normalized_job.json",
+                "pipeline_route.json",
+                "mode_style.json",
+                "skill_match.json",
+                "skill_tree.json",
+                "creative_strategy.json",
+                "beat_hook_plan.json",
+                "creative_judge.json",
+                "scene_contracts.json",
+                "prompt_payload_compiled.json",
+                "zimage_prompts.json",
+                "keyframe_manifest.json",
+                "phase1_status.json",
+            ):
+                self.assertTrue((run_dir / artifact).exists(), artifact)
+
+            manifest = json.loads((run_dir / "keyframe_manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual("missing", manifest["backend_status"])
+            self.assertEqual(3, len(manifest["jobs"]))
+            self.assertTrue(all(job["status"] == "error" for job in manifest["jobs"]))
+            self.assertFalse(any(Path(job["output_path"]).exists() for job in manifest["jobs"]))
+
+            inspection = CreativeOSRunInspector(runs_root=tmp).inspect("phase1-test")
+            self.assertEqual("phase1_paused_missing_image_backend", inspection.status)
+            state = CockpitStateAdapter(job_id="phase1-test", runs_root=tmp).load()
+            self.assertEqual("creative_os", state.run_type)
+            self.assertEqual("jungle safari at sunrise", state.header.topic)
+            self.assertEqual("visual_adventure", state.header.mode)
+            self.assertEqual("error", state.workspace.scenes[0].status)
+            self.assertEqual("09", current_stage_id(state))
+
+    def test_phase1_finished_status_completes_stage09_and_stage09_workspace_uses_manifest_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            self._run_phase1_no_images(tmp, "phase1-finished")
+            run_dir = Path(tmp) / "phase1-finished" / "creative_os"
+            manifest = json.loads((run_dir / "keyframe_manifest.json").read_text(encoding="utf-8"))
+            for job in manifest["jobs"]:
+                output_path = Path(job["output_path"])
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                output_path.write_bytes(b"fake-png-test")
+                job.update(
+                    {
+                        "status": "finished",
+                        "progress_percent": 100,
+                        "error": None,
+                        "backend_job_id": f"test_{job['scene_id']}",
+                        "file_exists": True,
+                        "file_size_bytes": output_path.stat().st_size,
+                        "file_mtime": "2026-05-13T00:00:00Z",
+                    }
+                )
+            manifest["backend_status"] = "available"
+            manifest["backend_reason"] = "ready"
+            manifest["overall_status"] = "finished"
+            manifest["gallery_path"] = str(run_dir / "keyframe_gallery.html")
+            (run_dir / "keyframe_gallery.html").write_text("<html>gallery</html>\n", encoding="utf-8")
+            (run_dir / "keyframe_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+            phase1_status = json.loads((run_dir / "phase1_status.json").read_text(encoding="utf-8"))
+            phase1_status.update(
+                {
+                    "status": "finished",
+                    "current_stage": "09",
+                    "real_run_stage": "09",
+                    "last_completed_stage": "09",
+                    "next_available_stage": "none_phase1_complete",
+                    "completed_stages": [f"{index:02d}" for index in range(10)],
+                    "stage10_plus": "not_built",
+                }
+            )
+            (run_dir / "phase1_status.json").write_text(json.dumps(phase1_status), encoding="utf-8")
+
+            self.assertIn("09", phase1_status["completed_stages"])
+            inspection = CreativeOSRunInspector(runs_root=tmp).inspect("phase1-finished")
+            self.assertEqual("phase1_finished_stage09", inspection.status)
+            state = CockpitStateAdapter(job_id="phase1-finished", runs_root=tmp).load()
+            self.assertEqual("09", current_stage_id(state))
+            self.assertEqual("Phase 1 complete / Stage 10+ not built yet", state.workspace.next_technical)
+            workspace = str(active_workspace_panel.render(state))
+            self.assertIn("Preview: keyframes/scene_01.png", workspace)
+            self.assertIn("Preview: keyframes/scene_02.png", workspace)
+            self.assertIn("Preview: keyframes/scene_03.png", workspace)
+            self.assertIn("path ok", workspace)
+            self.assertIn("Gallery: keyframe_gallery.html", workspace)
+
+    def test_finished_stage09_job_missing_output_is_error_not_green(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            self._run_phase1_no_images(tmp, "phase1-missing-output")
+            run_dir = Path(tmp) / "phase1-missing-output" / "creative_os"
+            manifest = json.loads((run_dir / "keyframe_manifest.json").read_text(encoding="utf-8"))
+            manifest["backend_status"] = "available"
+            manifest["overall_status"] = "finished"
+            manifest["jobs"][0]["status"] = "finished"
+            manifest["jobs"][0]["error"] = None
+            missing_path = Path(manifest["jobs"][0]["output_path"])
+            if missing_path.exists():
+                missing_path.unlink()
+            (run_dir / "keyframe_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+            inspection = CreativeOSRunInspector(runs_root=tmp).inspect("phase1-missing-output")
+            stage = next(stage for stage in inspection.stages if stage.artifact == "keyframe_manifest.json")
+            self.assertEqual("needs_review", stage.status)
+            state = CockpitStateAdapter(job_id="phase1-missing-output", runs_root=tmp).load()
+            self.assertEqual("error", state.workspace.scenes[0].status)
+            workspace = str(active_workspace_panel.render(state))
+            self.assertIn("path missing", workspace)
+            self.assertIn("finished job output missing", workspace)
+
+    def test_retry_keyframes_dry_run_detects_failed_jobs_and_scene_filter(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            self._run_phase1_no_images(tmp, "phase1-retry-dry-run")
+            result = subprocess.run(
+                [
+                    "python3",
+                    "/workspace/scripts/agent_core_cli.py",
+                    "creative-os",
+                    "retry-keyframes",
+                    "--job-id",
+                    "phase1-retry-dry-run",
+                    "--runs-root",
+                    tmp,
+                    "--dry-run",
+                    "--print-json",
+                ],
+                cwd="/workspace",
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(0, result.returncode, result.stderr)
+            payload = json.loads(result.stdout)
+            self.assertEqual("dry_run", payload["status"])
+            self.assertEqual(3, len(payload["retry_jobs"]))
+            self.assertEqual({"scene_01", "scene_02", "scene_03"}, {item["scene_id"] for item in payload["retry_jobs"]})
+
+            scene_result = subprocess.run(
+                [
+                    "python3",
+                    "/workspace/scripts/agent_core_cli.py",
+                    "creative-os",
+                    "retry-keyframes",
+                    "--job-id",
+                    "phase1-retry-dry-run",
+                    "--runs-root",
+                    tmp,
+                    "--scene",
+                    "scene_02",
+                    "--dry-run",
+                    "--print-json",
+                ],
+                cwd="/workspace",
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(0, scene_result.returncode, scene_result.stderr)
+            scene_payload = json.loads(scene_result.stdout)
+            self.assertEqual(["scene_02"], [item["scene_id"] for item in scene_payload["retry_jobs"]])
+
+    def test_retry_keyframes_does_not_rewrite_stage00_to_stage08(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            self._run_phase1_no_images(tmp, "phase1-retry-no-rewrite")
+            run_dir = Path(tmp) / "phase1-retry-no-rewrite" / "creative_os"
+            protected = [
+                run_dir / "normalized_job.json",
+                run_dir / "pipeline_route.json",
+                run_dir / "mode_style.json",
+                run_dir / "skill_tree.json",
+                run_dir / "creative_strategy.json",
+                run_dir / "beat_hook_plan.json",
+                run_dir / "creative_judge.json",
+                run_dir / "scene_contracts.json",
+                run_dir / "prompt_payload_compiled.json",
+            ]
+            before = {path.name: path.stat().st_mtime_ns for path in protected}
+            result = subprocess.run(
+                [
+                    "python3",
+                    "/workspace/scripts/agent_core_cli.py",
+                    "creative-os",
+                    "retry-keyframes",
+                    "--job-id",
+                    "phase1-retry-no-rewrite",
+                    "--runs-root",
+                    tmp,
+                    "--image-backend-url",
+                    "http://127.0.0.1:1",
+                    "--print-json",
+                ],
+                cwd="/workspace",
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(0, result.returncode, result.stderr)
+            after = {path.name: path.stat().st_mtime_ns for path in protected}
+            self.assertEqual(before, after)
+            payload = json.loads(result.stdout)
+            self.assertEqual(["keyframe_manifest.json", "phase1_status.json"], payload["updated_files"])
+
+    def test_retry_keyframes_protects_finished_outputs_unless_forced(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            self._run_phase1_no_images(tmp, "phase1-retry-force")
+            run_dir = Path(tmp) / "phase1-retry-force" / "creative_os"
+            manifest = json.loads((run_dir / "keyframe_manifest.json").read_text(encoding="utf-8"))
+            for job in manifest["jobs"]:
+                output_path = Path(job["output_path"])
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                output_path.write_bytes(b"fake-png-test")
+                job.update({"status": "finished", "progress_percent": 100, "error": None, "file_exists": True, "file_size_bytes": output_path.stat().st_size})
+            manifest["backend_status"] = "available"
+            manifest["overall_status"] = "finished"
+            (run_dir / "keyframe_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+            protected_result = subprocess.run(
+                [
+                    "python3",
+                    "/workspace/scripts/agent_core_cli.py",
+                    "creative-os",
+                    "retry-keyframes",
+                    "--job-id",
+                    "phase1-retry-force",
+                    "--runs-root",
+                    tmp,
+                    "--dry-run",
+                    "--print-json",
+                ],
+                cwd="/workspace",
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(0, protected_result.returncode, protected_result.stderr)
+            self.assertEqual([], json.loads(protected_result.stdout)["retry_jobs"])
+
+            forced_result = subprocess.run(
+                [
+                    "python3",
+                    "/workspace/scripts/agent_core_cli.py",
+                    "creative-os",
+                    "retry-keyframes",
+                    "--job-id",
+                    "phase1-retry-force",
+                    "--runs-root",
+                    tmp,
+                    "--scene",
+                    "scene_02",
+                    "--force",
+                    "--dry-run",
+                    "--print-json",
+                ],
+                cwd="/workspace",
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(0, forced_result.returncode, forced_result.stderr)
+            forced = json.loads(forced_result.stdout)
+            self.assertEqual([("scene_02", "force")], [(item["scene_id"], item["reason"]) for item in forced["retry_jobs"]])
+
+    def test_missing_stage09_manifest_does_not_render_fake_cards(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            self._run_phase1_no_images(tmp, "phase1-missing-manifest")
+            run_dir = Path(tmp) / "phase1-missing-manifest" / "creative_os"
+            (run_dir / "keyframe_manifest.json").unlink()
+            state = CockpitStateAdapter(job_id="phase1-missing-manifest", runs_root=tmp).load()
+            workspace = str(active_workspace_panel.render(state))
+            self.assertIn("missing manifest: keyframe_manifest.json unavailable", workspace)
+            self.assertNotIn("Image 1 / scene_01", workspace)
+
+    def _run_phase1_no_images(self, runs_root: str, job_id: str) -> None:
+        result = subprocess.run(
+            [
+                "python3",
+                "/workspace/scripts/agent_core_cli.py",
+                "creative-os",
+                "run-phase1",
+                "--job-id",
+                job_id,
+                "--topic",
+                "jungle safari at sunrise",
+                "--runs-root",
+                runs_root,
+                "--no-images",
+            ],
+            cwd="/workspace",
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(0, result.returncode, result.stderr)
+
     def test_inspector_detects_existing_artifacts_and_next_action(self) -> None:
         inspector = CreativeOSRunInspector(runs_root=FIXTURE_RUNS_ROOT)
         inspection = inspector.inspect("creative-os-jungle-001")
