@@ -57,6 +57,14 @@ def selected_stage(state: CockpitState) -> StageDefinition:
 
 
 def status_for_stage(state: CockpitState, stage: StageDefinition) -> str:
+    if _phase1_scope(state) and int(stage.stage_id) > 9:
+        return "pending"
+    live_status = _live_stage_status(state, stage.stage_id)
+    if live_status:
+        return live_status
+    phase1_status = _phase1_stage_status(state, stage.stage_id)
+    if phase1_status:
+        return phase1_status
     current = _current_stage_id(state)
     if stage.stage_id == current:
         return "current"
@@ -80,6 +88,10 @@ def current_stage_id(state: CockpitState) -> str:
 
 
 def _current_stage_id(state: CockpitState) -> str:
+    live = state.inspection.data.get("live_status")
+    if isinstance(live, dict):
+        stage_id = str(live.get("current_running_stage") or live.get("real_run_stage") or DEFAULT_STAGE_ID)
+        return normalize_stage_id(stage_id)
     status = state.inspection.status
     if status.startswith("phase1_"):
         return "09"
@@ -116,3 +128,39 @@ def _artifact_present(state: CockpitState, artifact: str) -> bool:
     if state.inspection.artifacts.get(artifact):
         return True
     return (state.data_source_path / artifact).exists()
+
+
+def _phase1_scope(state: CockpitState) -> bool:
+    return isinstance(state.inspection.data.get("live_status"), dict) or isinstance(state.inspection.data.get("phase1_status"), dict)
+
+
+def _phase1_stage_status(state: CockpitState, stage_id: str) -> str | None:
+    if not _phase1_scope(state) or int(stage_id) > 9:
+        return None
+    stage = next((item for item in state.inspection.stages if item.index == stage_id), None)
+    if stage is None:
+        return None
+    if stage.status == "passed":
+        return "passed"
+    if stage.status in {"needs_review", "rejected"}:
+        return "rejected"
+    if stage.status in {"missing", "pending", "running", "unknown"}:
+        return stage.status
+    return None
+
+
+def _live_stage_status(state: CockpitState, stage_id: str) -> str | None:
+    live = state.inspection.data.get("live_status")
+    if not isinstance(live, dict):
+        return None
+    stages = live.get("stages")
+    if not isinstance(stages, dict) or not isinstance(stages.get(stage_id), dict):
+        return None
+    status = str(stages[stage_id].get("status") or "unknown")
+    if status == "done":
+        return "passed"
+    if status in {"running", "pending", "missing", "unknown"}:
+        return status
+    if status == "error":
+        return "rejected"
+    return "unknown"

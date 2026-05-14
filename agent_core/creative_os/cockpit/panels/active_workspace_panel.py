@@ -1371,7 +1371,7 @@ def _prompt_job_lines(state: CockpitState) -> list[Text]:
         else:
             line.append("No prompt/image jobs available", style=style(TEXT_MUTED, bg=BG_WORKSPACE))
         return [line]
-    lines: list[Text] = []
+    lines: list[Text] = _stage09_manifest_lines(state)
     scene_count = min(3, len(data.scenes))
     selected = int(getattr(state, "selected_image_job", 2) or 2)
     selected = max(1, min(scene_count, selected))
@@ -1383,6 +1383,32 @@ def _prompt_job_lines(state: CockpitState) -> list[Text]:
             lines.append(_job_gap_line())
         lines.extend(_render_prompt_job(state, index, scene, selected=index == selected, expanded=index in expanded_jobs))
     return lines
+
+
+def _stage09_manifest_lines(state: CockpitState) -> list[Text]:
+    manifest = state.inspection.data.get("keyframe_manifest")
+    if not isinstance(manifest, dict):
+        return []
+    live = state.inspection.data.get("live_status")
+    live_stage = "not_checked"
+    if isinstance(live, dict) and isinstance(live.get("stages"), dict) and isinstance(live["stages"].get("09"), dict):
+        live_stage = str(live["stages"]["09"].get("status") or "unknown")
+    jobs = [job for job in manifest.get("jobs") or [] if isinstance(job, dict)]
+    finished_existing = sum(1 for job in jobs if job.get("status") == "finished" and bool(job.get("file_exists")))
+    total = len(jobs)
+    gallery = str(manifest.get("gallery_path") or "unavailable")
+    header = Text()
+    header.append("KEYFRAME MANIFEST / LIVE STATE", style=style(TEXT_LABEL, bg=BG_WORKSPACE, bold=True))
+    rows = [
+        header,
+        _label_value_line("Backend Status", str(manifest.get("backend_status") or "unknown")),
+        _label_value_line("Backend Reason", str(manifest.get("backend_reason") or "unavailable")),
+        _label_value_line("Overall Status", str(manifest.get("overall_status") or "unknown")),
+        _label_value_line("Live Stage 09", live_stage),
+        _label_value_line("Finished Files", f"{finished_existing}/{total}" if total else "unknown"),
+        _label_value_line("Gallery", _display_path(gallery) if gallery != "unavailable" else "unavailable"),
+    ]
+    return [*rows, _job_gap_line()]
 
 
 def _render_prompt_job(state: CockpitState, index: int, scene: object, *, selected: bool, expanded: bool) -> list[Text]:
@@ -1628,8 +1654,8 @@ def _image_job_progress(state: CockpitState, index: int, scene: object, status: 
         return {"percent": 62, "elapsed": "00:18 demo", "backend": "zimage_http demo", "demo": True}
     file_exists = _scene_optional(scene, "file_exists") == "True"
     if status in {"finished", "ready"} and (file_exists or state.session_mode == "fixture/demo"):
-        return {"percent": 100, "elapsed": elapsed or "done", "backend": backend, "demo": False}
-    return {"percent": None, "elapsed": elapsed or "waiting", "backend": backend, "demo": False}
+        return {"percent": None if state.session_mode == "real_run" else 100, "elapsed": elapsed or "unavailable", "backend": backend, "demo": False}
+    return {"percent": None, "elapsed": elapsed or ("waiting" if state.session_mode == "fixture/demo" else "unavailable"), "backend": backend, "demo": False}
 
 
 def _scene_contract_count(state: CockpitState) -> str:

@@ -62,10 +62,11 @@ class CreativeOSCockpitApp(App[None]):
             watch_enabled=args.watch,
             refresh_sec=args.refresh_sec,
         )
-        self.selected_stage = DEFAULT_STAGE_ID
         self.selected_image_job = 2
         self.expanded_image_jobs = (2,)
-        self.state = self._state_with_selected_stage(self.state_adapter.load())
+        loaded_state = self.state_adapter.load()
+        self.selected_stage = loaded_state.selected_stage or DEFAULT_STAGE_ID
+        self.state = self._state_with_selected_stage(loaded_state)
         self.inspector = self.state_adapter.inspector
         self.inspection = self.state.inspection
 
@@ -136,7 +137,7 @@ class CreativeOSCockpitApp(App[None]):
 
     def _watch_refresh(self) -> None:
         loaded_state = self._state_with_selected_stage(self.state_adapter.load())
-        if loaded_state == self.state:
+        if _semantic_state(loaded_state) == _semantic_state(self.state):
             return
         self.state = loaded_state
         self.inspection = self.state.inspection
@@ -192,6 +193,10 @@ class ThemePreviewApp(App[None]):
                 yield Static(_theme_preview_workspace(), id="theme-preview-workspace", classes="theme-preview-panel")
                 yield Static(_theme_preview_secondary(), id="theme-preview-secondary", classes="theme-preview-panel")
             yield Static(_theme_preview_footer(), id="theme-preview-footer")
+
+
+def _semantic_state(state: object) -> object:
+    return replace(state, last_refresh_time="")
 
 
 def _theme_preview_header() -> Text:

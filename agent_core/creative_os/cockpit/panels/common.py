@@ -37,14 +37,20 @@ def value_style(value: str, *, bg: str | None = None) -> str:
 
 
 def status_text_style(status: str) -> str:
-    if status == "passed":
+    if status in {"passed", "done"}:
         return TEXT_SUCCESS
     if status == "pending":
         return "#94A3B8"
-    if status in {"needs_review", "unknown"}:
+    if status == "running":
+        return "#FBBF24"
+    if status == "needs_review":
         return TEXT_ACTIVE
-    if status == "rejected":
+    if status == "unknown":
+        return TEXT_MUTED
+    if status in {"rejected", "error", "failed", "missing"}:
         return "#EF4444"
+    if status == "paused":
+        return TEXT_ACTIVE
     return TEXT_MAIN
 
 

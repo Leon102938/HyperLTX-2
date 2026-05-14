@@ -1,6 +1,6 @@
 # Task Board
 
-Stand: 2026-05-13, Phase-1-Hardening Stage 00-09.
+Stand: 2026-05-14, Phase-1-Live-Orchestrator V3 Stage 00-09.
 
 ## Done
 
@@ -37,10 +37,24 @@ Stand: 2026-05-13, Phase-1-Hardening Stage 00-09.
 - [x] Retry Dry-Run, Scene-Filter, Force-Schutz und Missing-Output-Erkennung getestet.
 - [x] Retry schreibt Stage `00` bis `08` nicht neu.
 - [x] Real-Run ohne `keyframe_manifest.json` zeigt keine Fake-Stage-09-Cards.
+- [x] CLI `creative-os run-phase1-live` gebaut.
+- [x] Live-State `live_status.json` und `stage_events.jsonl` fuer Stage `00` bis `09` gebaut.
+- [x] Cockpit Watch liest Live-State und trennt `viewed_stage` von `real_run_stage/current_running_stage`.
+- [x] Real-Run-Progress wird nicht geraten; Fixture/Demo-Progress bleibt klar Fixture-only.
+- [x] Live-Smoke `live-smoke-20260514` erzeugt.
+- [x] V2 Status-Konsistenz: disabled Backend => completed nur `00` bis `08`, Stage `09=error`, kein `09 done` Event.
+- [x] Pipeline Map malt Stage `09` bei `paused_missing_backend` nicht mehr gruen.
+- [x] `--open-cockpit` startet kein Textual im Background-TTY und crasht ohne TTY nicht.
+- [x] `--stage-delay-seconds`, `--generate-images`, `--no-generate-images` ergaenzt.
+- [x] V2-Smokes: `live-v2-smoke-20260514` disabled, `live-v2-smoke-images-20260514` mit 3 PNGs/Gallery.
+- [x] V3 Phase-1-Grenze: Stage `10` bis `15` nie gruen/done in Phase-1-Runs.
+- [x] V3 Stage-09-Real-Anzeige: Backend/Overall/Live/Gallery und Jobdaten sichtbar.
+- [x] V3 Watch/Interaktion: manuelle Stage-Auswahl bleibt bei Watch erhalten; reine Timer-Ticks rendern nicht voll neu.
+- [x] V3-Smokes: `live-v3-smoke-noimages-20260514`, `live-v3-smoke-images-20260514`.
 
 ## In Progress
 
-- [ ] Kein aktiver Build-Durchlauf. Phase 1 ist lokal gehaertet; Stage 10+ ist bewusst nicht gebaut.
+- [ ] Kein aktiver Build-Durchlauf. Phase 1 ist lokal live-orchestriert; Stage 10+ ist bewusst nicht gebaut.
 
 ## Next Build Backlog
 

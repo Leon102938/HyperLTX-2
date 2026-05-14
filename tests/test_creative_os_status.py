@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from unittest import mock
 import shutil
 import subprocess
@@ -14,7 +15,7 @@ from agent_core.creative_os.dashboard import render_dashboard, render_rich_dashb
 from agent_core.creative_os.run_inspector import CreativeOSRunInspector
 from agent_core.creative_os.cockpit.state_adapter import CockpitStateAdapter
 from agent_core.creative_os.cockpit.stage_registry import current_stage_id
-from agent_core.creative_os.cockpit.panels import active_workspace_panel
+from agent_core.creative_os.cockpit.panels import active_workspace_panel, pipeline_map_panel
 
 
 FIXTURE_RUNS_ROOT = Path("/workspace/tests/fixtures/creative_os_runs")
@@ -93,6 +94,165 @@ class CreativeOSStatusTests(unittest.TestCase):
             self.assertEqual("error", state.workspace.scenes[0].status)
             self.assertEqual("09", current_stage_id(state))
 
+    def test_phase1_live_cli_writes_live_status_and_events_without_fake_progress(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            result = subprocess.run(
+                [
+                    "python3",
+                    "/workspace/scripts/agent_core_cli.py",
+                    "creative-os",
+                    "run-phase1-live",
+                    "--job-id",
+                    "phase1-live-test",
+                    "--topic",
+                    "jungle safari at sunrise",
+                    "--pipeline",
+                    "shortform_storyboard_v1",
+                    "--mode",
+                    "visual_adventure",
+                    "--style",
+                    "cinematic_nature",
+                    "--format",
+                    "portrait",
+                    "--duration",
+                    "9s",
+                    "--scenes",
+                    "3",
+                    "--runs-root",
+                    tmp,
+                    "--no-images",
+                    "--print-json",
+                ],
+                cwd="/workspace",
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(0, result.returncode, result.stderr)
+            run_dir = Path(tmp) / "phase1-live-test" / "creative_os"
+            live = json.loads((run_dir / "live_status.json").read_text(encoding="utf-8"))
+            self.assertEqual("00", live["viewed_stage"])
+            self.assertEqual("09", live["real_run_stage"])
+            self.assertIsNone(live["current_running_stage"])
+            self.assertEqual([f"{index:02d}" for index in range(9)], live["completed_stages"])
+            self.assertEqual(["09"], live["failed_stages"])
+            self.assertEqual([], live["pending_stages"])
+            self.assertEqual("done", live["stages"]["00"]["status"])
+            self.assertEqual("error", live["stages"]["09"]["status"])
+            self.assertEqual("paused_missing_backend", live["status"])
+            self.assertTrue((run_dir / "stage_events.jsonl").exists())
+            events = [json.loads(line) for line in (run_dir / "stage_events.jsonl").read_text(encoding="utf-8").splitlines()]
+            self.assertEqual(("init", "00", "pending"), (events[0]["kind"], events[0]["stage"], events[0]["status"]))
+            self.assertIn(("09", "running"), [(event["stage"], event["status"]) for event in events])
+            self.assertIn(("09", "error"), [(event["stage"], event["status"]) for event in events])
+            self.assertNotIn(("09", "done"), [(event["stage"], event["status"]) for event in events])
+
+            phase1 = json.loads((run_dir / "phase1_status.json").read_text(encoding="utf-8"))
+            self.assertEqual("paused_missing_backend", phase1["status"])
+            self.assertEqual([f"{index:02d}" for index in range(9)], phase1["completed_stages"])
+            self.assertEqual("08", phase1["last_completed_stage"])
+            self.assertEqual("09", phase1["current_stage"])
+            self.assertEqual("09", phase1["real_run_stage"])
+            self.assertEqual("09", phase1["next_available_stage"])
+            self.assertEqual("not_built", phase1["stage10_plus"])
+
+            manifest = json.loads((run_dir / "keyframe_manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual("missing", manifest["backend_status"])
+            self.assertTrue(all(job["status"] == "error" for job in manifest["jobs"]))
+            self.assertTrue(all(job["progress_percent"] is None for job in manifest["jobs"]))
+
+            state = CockpitStateAdapter(job_id="phase1-live-test", runs_root=tmp, watch_enabled=True, refresh_sec=1).load()
+            self.assertEqual("00", state.selected_stage)
+            self.assertIn("Viewed 00 / Real Stage 09", state.workspace.current_step)
+            self.assertEqual("Stage 09 paused / image backend unavailable", state.workspace.next_technical)
+            self.assertEqual("", state.workspace.scenes[0].progress_percent)
+            self.assertEqual("", state.workspace.scenes[0].output_path)
+            pipeline = str(pipeline_map_panel.render(state))
+            self.assertIn("✗ 09 Image / Keyframe Generation", pipeline)
+            self.assertNotIn("✓ 09 Image / Keyframe Generation", pipeline)
+            self.assertNotIn("✓ 10 Keyframe Review", pipeline)
+            workspace = str(active_workspace_panel.render(replace(state, selected_stage="09")))
+            self.assertIn("KEYFRAME MANIFEST / LIVE STATE", workspace)
+            self.assertIn("Backend Status", workspace)
+            self.assertIn("missing", workspace)
+            self.assertIn("Backend Reason", workspace)
+            self.assertIn("disabled_by_cli", workspace)
+
+    def test_phase1_live_accepts_stage_delay_parameter(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            result = subprocess.run(
+                [
+                    "python3",
+                    "/workspace/scripts/agent_core_cli.py",
+                    "creative-os",
+                    "run-phase1-live",
+                    "--job-id",
+                    "phase1-live-delay",
+                    "--topic",
+                    "jungle safari at sunrise",
+                    "--runs-root",
+                    tmp,
+                    "--no-generate-images",
+                    "--stage-delay-seconds",
+                    "0",
+                    "--print-json",
+                ],
+                cwd="/workspace",
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(0, result.returncode, result.stderr)
+            self.assertTrue((Path(tmp) / "phase1-live-delay" / "creative_os" / "live_status.json").exists())
+
+    def test_open_cockpit_without_tty_does_not_start_textual_or_crash(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            result = subprocess.run(
+                [
+                    "python3",
+                    "/workspace/scripts/agent_core_cli.py",
+                    "creative-os",
+                    "run-phase1-live",
+                    "--job-id",
+                    "phase1-open-cockpit-no-tty",
+                    "--topic",
+                    "jungle safari at sunrise",
+                    "--runs-root",
+                    tmp,
+                    "--open-cockpit",
+                ],
+                cwd="/workspace",
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(0, result.returncode)
+            self.assertNotIn("OSError", result.stderr)
+            self.assertIn("--open-cockpit is disabled", result.stderr)
+            self.assertIn("Terminal 1:", result.stderr)
+            self.assertIn("Terminal 2:", result.stderr)
+            self.assertFalse((Path(tmp) / "phase1-open-cockpit-no-tty").exists())
+
+    def test_live_stage_missing_is_missing_not_fake_passed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            self._run_phase1_live_no_images(tmp, "phase1-live-missing")
+            run_dir = Path(tmp) / "phase1-live-missing" / "creative_os"
+            (run_dir / "skill_tree.json").unlink()
+            live = json.loads((run_dir / "live_status.json").read_text(encoding="utf-8"))
+            live["stages"]["03"]["status"] = "missing"
+            live["stages"]["03"]["error"] = "missing artifact: skill_tree.json"
+            live["completed_stages"].remove("03")
+            live["missing_stages"] = ["03"]
+            (run_dir / "live_status.json").write_text(json.dumps(live), encoding="utf-8")
+
+            inspection = CreativeOSRunInspector(runs_root=tmp).inspect("phase1-live-missing")
+            stage03 = next(stage for stage in inspection.stages if stage.index == "03")
+            self.assertEqual("missing", stage03.status)
+            self.assertIn("skill_tree.json", stage03.detail)
+            state = CockpitStateAdapter(job_id="phase1-live-missing", runs_root=tmp).load()
+            self.assertEqual("missing", [stage.status for stage in inspection.stages if stage.index == "03"][0])
+            self.assertEqual("03", state.workspace.next_technical.split()[1])
+
     def test_phase1_finished_status_completes_stage09_and_stage09_workspace_uses_manifest_paths(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             self._run_phase1_no_images(tmp, "phase1-finished")
@@ -140,11 +300,16 @@ class CreativeOSStatusTests(unittest.TestCase):
             self.assertEqual("09", current_stage_id(state))
             self.assertEqual("Phase 1 complete / Stage 10+ not built yet", state.workspace.next_technical)
             workspace = str(active_workspace_panel.render(state))
+            pipeline = str(pipeline_map_panel.render(state))
             self.assertIn("Preview: keyframes/scene_01.png", workspace)
             self.assertIn("Preview: keyframes/scene_02.png", workspace)
             self.assertIn("Preview: keyframes/scene_03.png", workspace)
+            self.assertIn("KEYFRAME MANIFEST / LIVE STATE", workspace)
+            self.assertIn("Overall Status", workspace)
+            self.assertIn("finished", workspace)
             self.assertIn("path ok", workspace)
             self.assertIn("Gallery: keyframe_gallery.html", workspace)
+            self.assertNotIn("✓ 10 Keyframe Review", pipeline)
 
     def test_finished_stage09_job_missing_output_is_error_not_green(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -164,6 +329,8 @@ class CreativeOSStatusTests(unittest.TestCase):
             self.assertEqual("needs_review", stage.status)
             state = CockpitStateAdapter(job_id="phase1-missing-output", runs_root=tmp).load()
             self.assertEqual("error", state.workspace.scenes[0].status)
+            pipeline = str(pipeline_map_panel.render(state))
+            self.assertNotIn("✓ 09 Image / Keyframe Generation", pipeline)
             workspace = str(active_workspace_panel.render(state))
             self.assertIn("path missing", workspace)
             self.assertIn("finished job output missing", workspace)
@@ -337,6 +504,28 @@ class CreativeOSStatusTests(unittest.TestCase):
                 "/workspace/scripts/agent_core_cli.py",
                 "creative-os",
                 "run-phase1",
+                "--job-id",
+                job_id,
+                "--topic",
+                "jungle safari at sunrise",
+                "--runs-root",
+                runs_root,
+                "--no-images",
+            ],
+            cwd="/workspace",
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(0, result.returncode, result.stderr)
+
+    def _run_phase1_live_no_images(self, runs_root: str, job_id: str) -> None:
+        result = subprocess.run(
+            [
+                "python3",
+                "/workspace/scripts/agent_core_cli.py",
+                "creative-os",
+                "run-phase1-live",
                 "--job-id",
                 job_id,
                 "--topic",

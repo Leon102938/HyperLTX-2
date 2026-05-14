@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from agent_core.creative_os.phase1_runtime import Phase1RunConfig, run_phase1_live
 from agent_core.creative_os.textual_cockpit import CockpitArgs, CreativeOSCockpitApp, ThemePreviewApp, _scene_card_text
 from agent_core.creative_os.cockpit.panel_registry import PANEL_CONFIG, PANEL_REGISTRY, enabled_panels
 from agent_core.creative_os.cockpit.stage_registry import STAGE_DEFINITIONS, stage_ids
@@ -103,6 +104,29 @@ class CreativeOSCockpitTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("▸ 10 Keyframe Review", _widget_text(app.query_one("#pipeline-map")))
             await pilot.press("k")
             self.assertEqual("09", app.state.selected_stage)
+
+    async def test_watch_refresh_does_not_override_manual_stage_selection(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            runs_root = Path(temp_dir)
+            run_phase1_live(
+                Phase1RunConfig(
+                    job_id="phase1-watch-selection",
+                    topic="jungle safari at sunrise",
+                    runs_root=runs_root,
+                    attempt_images=False,
+                )
+            )
+            app = CreativeOSCockpitApp(CockpitArgs(job_id="phase1-watch-selection", runs_root=runs_root, watch=True, refresh_sec=1))
+            async with app.run_test():
+                self.assertEqual("00", app.state.selected_stage)
+                app._select_stage("05")
+                self.assertEqual("05", app.state.selected_stage)
+                live_path = runs_root / "phase1-watch-selection" / "creative_os" / "live_status.json"
+                live = json.loads(live_path.read_text(encoding="utf-8"))
+                live["updated_at"] = "2026-05-14T12:00:00Z"
+                live_path.write_text(json.dumps(live), encoding="utf-8")
+                app._watch_refresh()
+                self.assertEqual("05", app.state.selected_stage)
 
     async def test_active_workspace_stage_router_views(self) -> None:
         app = CreativeOSCockpitApp(CockpitArgs(job_id="creative-os-jungle-001", runs_root=FIXTURE_RUNS_ROOT))

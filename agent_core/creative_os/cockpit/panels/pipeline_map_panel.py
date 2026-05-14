@@ -27,22 +27,26 @@ def render(state: CockpitState) -> Text:
 def _marker(stage_id: str, status: str, selected: str, current: str) -> str:
     if stage_id == selected:
         return "▸"
-    if stage_id == current:
-        return "▶"
     if status == "passed":
         return "✓"
-    if status in {"needs_review", "unknown", "current"}:
-        return "!"
-    if status == "rejected":
+    if status in {"rejected", "error", "failed", "paused", "missing"}:
         return "✗"
+    if stage_id == current:
+        return "▶"
+    if status == "unknown":
+        return "?"
+    if status in {"needs_review", "current", "running"}:
+        return "!"
     return "○"
 
 
 def _stage_style(stage_id: str, status: str, selected: str, current: str) -> str:
     if stage_id == selected:
         return style(TEXT_LABEL, bold=True)
+    if status in {"rejected", "error", "failed", "paused", "missing"}:
+        return status_text_style(status)
     if stage_id == current:
         return "bold #FBBF24"
-    if status == "current":
+    if status in {"current", "running"}:
         return "bold #FBBF24"
     return status_text_style(status if status != "current" else "unknown")

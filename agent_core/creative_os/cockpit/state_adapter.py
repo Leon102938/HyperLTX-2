@@ -229,6 +229,7 @@ class CockpitStateAdapter:
                 severity=_issues_severity(tuple(str(issue) for issue in inspection.blocking_issues)),
             ),
             next_panel=NextData(rows=_creative_os_next_rows(inspection)),
+            selected_stage=_viewed_stage(inspection),
         )
 
     def _agent_core_state(
@@ -469,6 +470,11 @@ def _job_meta(inspection: RunInspection) -> dict[str, object]:
 
 
 def _creative_os_current_step(inspection: RunInspection, session_mode: str) -> str:
+    live = inspection.data.get("live_status")
+    if isinstance(live, dict):
+        real_stage = str(live.get("real_run_stage") or live.get("current_running_stage") or "00")
+        status = str(live.get("status") or "unknown")
+        return f"Viewed {_viewed_stage(inspection)} / Real Stage {real_stage} · {status}"
     phase1 = inspection.data.get("phase1_status")
     if isinstance(phase1, dict):
         return f"Stage {phase1.get('real_run_stage') or phase1.get('current_stage') or '09'} Image / Keyframe Generation"
@@ -476,6 +482,10 @@ def _creative_os_current_step(inspection: RunInspection, session_mode: str) -> s
 
 
 def _creative_os_last_completed(inspection: RunInspection, fallback: str) -> str:
+    live = inspection.data.get("live_status")
+    if isinstance(live, dict):
+        completed = live.get("completed_stages") if isinstance(live.get("completed_stages"), list) else []
+        return f"✓ {completed[-1]}" if completed else "- none"
     phase1 = inspection.data.get("phase1_status")
     if isinstance(phase1, dict):
         value = phase1.get("last_completed_stage")
@@ -484,6 +494,24 @@ def _creative_os_last_completed(inspection: RunInspection, fallback: str) -> str
 
 
 def _creative_os_next_available(inspection: RunInspection) -> str:
+    live = inspection.data.get("live_status")
+    if isinstance(live, dict):
+        running = live.get("current_running_stage")
+        live_status = str(live.get("status") or "unknown")
+        pending = live.get("pending_stages") if isinstance(live.get("pending_stages"), list) else []
+        failed = live.get("failed_stages") if isinstance(live.get("failed_stages"), list) else []
+        missing = live.get("missing_stages") if isinstance(live.get("missing_stages"), list) else []
+        if missing:
+            return f"Stage {missing[-1]} missing"
+        if live_status == "paused_missing_backend":
+            return "Stage 09 paused / image backend unavailable"
+        if failed:
+            return f"Stage {failed[-1]} error"
+        if running:
+            return f"Stage {running} running"
+        if pending:
+            return f"Stage {pending[0]} pending"
+        return "Phase 1 complete / Stage 10+ not built yet"
     phase1 = inspection.data.get("phase1_status")
     if isinstance(phase1, dict):
         if phase1.get("next_available_stage") == "none_phase1_complete":
@@ -498,12 +526,23 @@ def _creative_os_operator_focus(inspection: RunInspection, session_mode: str) ->
     if session_mode == "fixture/demo":
         return "fixture/demo artifacts"
     phase1 = inspection.data.get("phase1_status")
+    live = inspection.data.get("live_status")
+    if isinstance(live, dict):
+        return "Source: real_run · Live: yes · Fixture: no"
     if isinstance(phase1, dict):
         return "Source: real_run · Fixture: no · Artifacts: loaded"
     return "Source: real_run · Fixture: no · Artifacts: partial"
 
 
 def _creative_os_next_rows(inspection: RunInspection) -> tuple[tuple[str, str], ...]:
+    live = inspection.data.get("live_status")
+    if isinstance(live, dict):
+        return (
+            ("Viewed", _viewed_stage(inspection)),
+            ("Real", str(live.get("real_run_stage") or "unknown")),
+            ("Running", str(live.get("current_running_stage") or "none")),
+            ("Status", str(live.get("status") or "unknown")),
+        )
     phase1 = inspection.data.get("phase1_status")
     if isinstance(phase1, dict) and phase1.get("next_available_stage") == "none_phase1_complete":
         return (("Technical", "Phase 1 complete / Stage 10+ not built yet"), ("Operator", "Review Stage 09 keyframes"))
@@ -552,7 +591,7 @@ def _motion_items(inspection: RunInspection) -> list[WorkspaceSceneData]:
                     overall_status=str(manifest.get("overall_status") or "not_checked"),
                     progress_percent="" if job.get("progress_percent") in (None, "") else str(job.get("progress_percent")),
                     elapsed=str(job.get("elapsed") or ""),
-                    output_path=str(job.get("output_path") or ""),
+                    output_path=str(job.get("output_path") or "") if file_exists else "",
                     error=job_error,
                     backend_job_id=str(job.get("backend_job_id") or ""),
                     file_exists=file_exists,
@@ -618,6 +657,14 @@ def _session_mode(data_source_path: Path, run_found: bool) -> str:
 
 def _session_label(session_mode: str) -> str:
     return "real run" if session_mode == "real_run" else session_mode
+
+
+def _viewed_stage(inspection: RunInspection) -> str:
+    live = inspection.data.get("live_status")
+    if isinstance(live, dict):
+        viewed = str(live.get("viewed_stage") or "00")
+        return viewed if viewed in {f"{index:02d}" for index in range(16)} else "00"
+    return "09"
 
 
 def _watch_label(watch_enabled: bool, refresh_sec: float) -> str:

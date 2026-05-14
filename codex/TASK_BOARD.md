@@ -1,6 +1,7 @@
 # TASK_BOARD.md
 
 ## TODO
+- Stage-09-Keyframe-Review/Gate als naechsten engen Schritt spezifizieren, ohne Stage `10+` Runtime, LTX, n8n/API oder Redesign zu starten.
 - Creative OS Stage 8 enger Folgeschritt: kontrollierten LTX I2V Render-Plan/Executor-Gate entwerfen, ohne Batch/n8n/API und ohne sofortigen unkontrollierten Render.
 - Creative OS V1 Dry-Run-Artefakte manuell auditieren und dann genau einen Integrationspunkt in den bestehenden Stop-after-`model_prompts`-Pfad entscheiden.
 - G5-Folge: Skills und Stage Contracts aktiv in Director/Planner/PromptBuilder einspeisen und nicht nur laden/tracen.
@@ -28,6 +29,19 @@
 - noch leer
 
 ## DONE
+- V3 Live-Fix umgesetzt: Phase-1-Runs halten Stage `10-15` in Pipeline Map out-of-scope/pending, nie done/gruen.
+- Stage `09` zeigt echte Manifest-/Live-Daten im Workspace und schreibt Manifest waehrend echter Image-Generierung fort.
+- Watch-Refresh rendert nicht bei reiner Zeit-Aenderung und ueberschreibt manuelle Stage-Auswahl nicht.
+- V3-Smokes erstellt: `live-v3-smoke-noimages-20260514`, `live-v3-smoke-images-20260514`.
+- V2 Live-Fix umgesetzt: Stage `09` wird bei disabled/missing Backend nicht mehr `done`, `live_status.json` und `phase1_status.json` bleiben konsistent.
+- Pipeline Map zeigt Stage `09` bei `paused_missing_backend` warn/error statt gruen.
+- `--open-cockpit` TTY-Crash entschärft; Flag gibt sichere Zwei-Terminal-Befehle aus.
+- `--stage-delay-seconds`, `--generate-images`, `--no-generate-images` ergaenzt; `--no-images` bleibt kompatibel.
+- V2-Smokes erstellt: `live-v2-smoke-20260514` disabled, `live-v2-smoke-images-20260514` mit 3 PNGs/Gallery.
+- Phase 1 Live Cockpit Orchestration umgesetzt: `creative-os run-phase1-live` schreibt `live_status.json` und `stage_events.jsonl` ab Stage `00` bis `09`.
+- Cockpit Watch trennt `viewed_stage` von `real_run_stage/current_running_stage`; Live-Smoke liegt unter `/workspace/agent_runs/live-smoke-20260514/creative_os`.
+- Real-Data-Regel gehaertet: fehlende Live-Artefakte werden `missing`, fehlendes Stage-09-Manifest rendert keine Fake-Cards, Real-Run-Progress wird nicht geraten.
+- Live-Tests gruen: `python3 -m unittest /workspace/tests/test_creative_os_cockpit.py -v` und `python3 -m unittest /workspace/tests/test_creative_os_status.py -v`.
 - Final Closeout 2026-05-07: Textual Cockpit Issue-Semantik fixiert, Skill Health von Runtime-Issues getrennt, Issues Severity/Border umgesetzt.
 - Finaler Video-Proof `cockpit-video-smoke-001`: `director_mode=llm_augmented`, `director_llm_active=true`, `final.mp4` vorhanden und im Cockpit als present sichtbar.
 - Creative OS CLI Dashboard V1 gebaut: read-only `scripts/creative_os_status.py` mit Views `overview`, `skills`, `stages`, `artifacts`, `issues`, `next`, `all`.

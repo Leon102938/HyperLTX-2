@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shlex
 import sys
 import time
 from datetime import datetime, timezone
@@ -16,7 +17,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from agent_core.resume_contract import inspect_resume_contract
-from agent_core.creative_os.phase1_runtime import DEFAULT_RUNS_ROOT, Phase1RunConfig, RetryKeyframeConfig, retry_keyframes, run_phase1
+from agent_core.creative_os.phase1_runtime import DEFAULT_RUNS_ROOT, Phase1RunConfig, RetryKeyframeConfig, retry_keyframes, run_phase1, run_phase1_live
 
 
 DEFAULT_BASE_URL = os.environ.get("AGENT_CORE_BASE_URL", "http://127.0.0.1:8000")
@@ -197,9 +198,41 @@ def _build_phase1_parser() -> argparse.ArgumentParser:
     parser.add_argument("--scenes", type=int, default=3, help="Scene count. Default: %(default)s")
     parser.add_argument("--runs-root", type=Path, default=DEFAULT_RUNS_ROOT, help="Runs root. Default: %(default)s")
     parser.add_argument("--image-backend-url", default=DEFAULT_BASE_URL, help="Local backend base URL for zimage readiness/jobs. Default: %(default)s")
-    parser.add_argument("--no-images", action="store_true", help="Create Stage 09 manifest without probing/submitting image backend jobs.")
+    parser.add_argument("--no-images", action="store_true", help="Compatibility alias for --no-generate-images.")
+    parser.add_argument("--generate-images", dest="generate_images", action="store_true", default=None, help="Probe/submit real Z-Image jobs during Stage 09.")
+    parser.add_argument("--no-generate-images", dest="generate_images", action="store_false", help="Create Stage 09 manifest without probing/submitting image backend jobs.")
     parser.add_argument("--print-json", action="store_true", help="Print machine-readable summary JSON.")
     return parser
+
+
+def _build_phase1_live_parser() -> argparse.ArgumentParser:
+    parser = _build_phase1_parser()
+    parser.prog = "agent_core_cli.py creative-os run-phase1-live"
+    parser.description = "Run Content Maschine Phase 1 with live status files for cockpit watch mode."
+    parser.add_argument(
+        "--open-cockpit",
+        action="store_true",
+        help="Start a separate Textual cockpit watch process for this run when a TTY is available.",
+    )
+    parser.add_argument(
+        "--cockpit-refresh-sec",
+        type=float,
+        default=1.0,
+        help="Cockpit watch refresh interval for --open-cockpit. Default: %(default)s",
+    )
+    parser.add_argument(
+        "--stage-delay-seconds",
+        type=float,
+        default=0.0,
+        help="Optional debug delay after each Stage 00-08 live update. Default: %(default)s",
+    )
+    return parser
+
+
+def _attempt_images_from_args(args: argparse.Namespace) -> bool:
+    if getattr(args, "generate_images", None) is not None:
+        return bool(args.generate_images)
+    return not bool(getattr(args, "no_images", False))
 
 
 def _build_retry_keyframes_parser() -> argparse.ArgumentParser:
@@ -244,7 +277,7 @@ def _run_phase1_from_cli(argv: list[str]) -> int:
             scene_count=args.scenes,
             runs_root=args.runs_root,
             image_backend_url=args.image_backend_url,
-            attempt_images=not args.no_images,
+            attempt_images=_attempt_images_from_args(args),
         )
     )
     if args.print_json:
@@ -257,6 +290,68 @@ def _run_phase1_from_cli(argv: list[str]) -> int:
     for stage, artifact in summary["artifacts"].items():
         print(_line(stage, artifact, width=4))
     return 0
+
+
+def _run_phase1_live_from_cli(argv: list[str]) -> int:
+    parser = _build_phase1_live_parser()
+    args = parser.parse_args(argv)
+    cockpit_command = [
+        "python3",
+        str(REPO_ROOT / "scripts" / "creative_os_cockpit.py"),
+        "--job-id",
+        args.job_id,
+        "--runs-root",
+        str(args.runs_root),
+        "--watch",
+        "--refresh-sec",
+        str(args.cockpit_refresh_sec),
+    ]
+    if args.open_cockpit:
+        live_command = ["python3", str(REPO_ROOT / "scripts" / "agent_core_cli.py"), "creative-os", "run-phase1-live", *argv_without_flag(argv, "--open-cockpit")]
+        print("ERROR: --open-cockpit is disabled for this CLI mode to avoid Textual TTY I/O errors.", file=sys.stderr)
+        print("Use two terminals instead:", file=sys.stderr)
+        print(f"  Terminal 1: {_shell_join(live_command)}", file=sys.stderr)
+        print(f"  Terminal 2: {_shell_join(cockpit_command)}", file=sys.stderr)
+        if not (sys.stdin.isatty() and sys.stdout.isatty()):
+            print("No interactive TTY detected; cockpit was not started.", file=sys.stderr)
+        return 0
+    if args.stage_delay_seconds < 0:
+        parser.error("--stage-delay-seconds must be >= 0")
+    summary = run_phase1_live(
+        Phase1RunConfig(
+            job_id=args.job_id,
+            topic=args.topic,
+            pipeline=args.pipeline,
+            mode=args.mode,
+            style=args.style,
+            orientation=args.orientation,
+            duration_sec=_parse_duration_seconds(args.duration),
+            scene_count=args.scenes,
+            runs_root=args.runs_root,
+            image_backend_url=args.image_backend_url,
+            attempt_images=_attempt_images_from_args(args),
+            stage_delay_seconds=args.stage_delay_seconds,
+        )
+    )
+    if args.print_json:
+        payload = {**summary, "live_status": str(args.runs_root / args.job_id / "creative_os" / "live_status.json"), "cockpit_watch_command": cockpit_command}
+        print(json.dumps(payload, indent=2, ensure_ascii=True))
+        return 0
+    print_box_header("CONTENT MASCHINE PHASE 1 LIVE", [("Job", summary["job_id"]), ("Status", summary["status"])])
+    print(_line("Run dir", summary["creative_os_dir"], width=14))
+    print(_line("Live status", args.runs_root / args.job_id / "creative_os" / "live_status.json", width=14))
+    print(_line("Events", args.runs_root / args.job_id / "creative_os" / "stage_events.jsonl", width=14))
+    print(_line("Backend", summary["backend_status"], width=14))
+    print(_line("Cockpit watch", _shell_join(cockpit_command), width=14))
+    return 0
+
+
+def argv_without_flag(argv: list[str], flag: str) -> list[str]:
+    return [item for item in argv if item != flag]
+
+
+def _shell_join(command: list[str]) -> str:
+    return " ".join(shlex.quote(str(part)) for part in command)
 
 
 def _retry_keyframes_from_cli(argv: list[str]) -> int:
@@ -1938,6 +2033,15 @@ def _inspect_run(path: Path, *, tail_lines: int, show_log_tail: bool, verbose: b
 
 
 def main() -> int:
+    if len(sys.argv) >= 3 and sys.argv[1:3] == ["creative-os", "run-phase1-live"]:
+        try:
+            return _run_phase1_live_from_cli(sys.argv[3:])
+        except KeyboardInterrupt:
+            print("Interrupted.", file=sys.stderr)
+            return 130
+        except Exception as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 1
     if len(sys.argv) >= 3 and sys.argv[1:3] == ["creative-os", "run-phase1"]:
         try:
             return _run_phase1_from_cli(sys.argv[3:])

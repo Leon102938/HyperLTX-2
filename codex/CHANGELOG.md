@@ -1,5 +1,29 @@
 # CHANGELOG.md
 
+## 2026-05-14 Phase 1 Live Orchestrator V3 Fix
+- Phase-1-Grenze in der Pipeline Map erzwungen: Stage `10` bis `15` bleiben fuer Phase-1-Runs pending/out-of-scope und koennen nicht durch vorhandene Artefakte gruen werden.
+- Stage `09` Active Workspace zeigt echte Manifest-/Live-Daten sichtbar: Backend Status/Reason, Overall Status, Live Stage 09, Finished Files und Gallery.
+- Stage `09` Manifest wird waehrend echter Image-Generierung fortgeschrieben, damit Watch running/progress/finished/error aus realem State lesen kann.
+- Watch-Refresh vergleicht semantischen State ohne `last_refresh_time`; reine Timer-Ticks loesen keinen Full-Panel-Refresh aus und manuelle Stage-Auswahl bleibt erhalten.
+- Tests erweitert fuer Stage-10+-Grenze, Stage-09-Manifestanzeige, Watch-Auswahl und bestehende Kompatibilitaet.
+- Smokes: `live-v3-smoke-noimages-20260514` und `live-v3-smoke-images-20260514`.
+
+## 2026-05-14 Phase 1 Live Orchestrator V2 Fix
+- Status-Konsistenz korrigiert: disabled/missing Backend schliesst nur Stage `00` bis `08` ab; Stage `09` bleibt `error` und Gesamtstatus `paused_missing_backend`.
+- `stage_events.jsonl` schreibt bei failed/disabled Keyframe-Jobs kein `09 done` mehr.
+- Pipeline Map priorisiert `live_status.stages[*].status`; Stage `09` wird bei paused/missing Backend nicht mehr durch vorhandenes `keyframe_manifest.json` gruen.
+- `--open-cockpit` entschärft: kein Textual-Background-Prozess im selben TTY, stattdessen klare Zwei-Terminal-Anleitung ohne OSError.
+- Neue CLI-Optionen: `--stage-delay-seconds`, `--generate-images`, `--no-generate-images`; `--no-images` bleibt kompatibel.
+- Smokes: `live-v2-smoke-20260514` disabled mit Stage `09=error`; `live-v2-smoke-images-20260514` mit Backend, 3 PNGs und Gallery.
+
+## 2026-05-14 Phase 1 Live Cockpit Orchestration
+- `creative-os run-phase1-live` als zusaetzlicher CLI-Befehl eingefuehrt; `creative-os run-phase1` bleibt Batch-kompatibel.
+- Neuer Live-State unter `creative_os/live_status.json` plus `stage_events.jsonl` mit Stage-Status `pending -> running -> done/error/missing`, Timestamps, Artifact-Pfaden, `viewed_stage`, `real_run_stage` und `current_running_stage`.
+- Phase-1-Live-Runner schreibt Stage `00` bis `09` sequenziell: normalized job, pipeline route, mode/style, skill tree, strategy, beat/hook plan, judge, scene contracts, prompt payload und keyframe manifest.
+- Textual Cockpit Watch liest Live-State, startet Live-Runs bei Stage `00`, markiert den echten Runner-Stage separat und haelt Stage `09`/complete nach Finish.
+- Real-Run Stage `09` zeigt keine Fake-Cards und keinen geratenen Progress; fehlendes Manifest bleibt `missing manifest`, finished PNGs nutzen echte Datei-Metadaten.
+- Verifikation: Live-Smoke `live-smoke-20260514`; Status-Tests 23 gruen, Cockpit-Tests 16 gruen. Keine Stage `10-15` Runtime, kein LTX, kein n8n/API, kein Redesign, Textual bleibt `0.89.x`.
+
 ## 2026-05-09 Cockpit Panel Completion V0.2
 - Active Workspace Stage-Panels 00-15 als read-only Stage-Oberflaechen vervollstaendigt: 04-08 und 10-15 zeigen jetzt Stage-spezifische Status-, Artifact-, Expected-Output- und Next-Action-Informationen statt generischer Placeholder.
 - Stage 00-03 bleiben als Command Center, Pipeline wählen, Mode & Style und Skills laden ausgearbeitet; Stage 00 enthaelt jetzt einen read-only Command Composer mit sichtbaren Topic/Format/Mode/Style/Duration/Voice/Music/Subtitles/Storyboard/Output-Feldern, Command Preview und deaktiviertem V0.2-Run-Hinweis.

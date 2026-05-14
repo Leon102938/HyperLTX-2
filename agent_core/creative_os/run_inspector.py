@@ -25,7 +25,7 @@ PHASE1_STAGES = [
     ("00", "Command Center", "normalized_job.json"),
     ("01", "Pipeline Overview", "pipeline_route.json"),
     ("02", "Mode & Style", "mode_style.json"),
-    ("03", "Skills laden", "skill_match.json"),
+    ("03", "Skills laden", "skill_tree.json"),
     ("04", "Creative Strategy", "creative_strategy.json"),
     ("05", "Beat / Hook Planner", "beat_hook_plan.json"),
     ("06", "Creative Judge", "creative_judge.json"),
@@ -105,6 +105,8 @@ class CreativeOSRunInspector:
             "zimage_prompts.json",
             "keyframe_manifest.json",
             "phase1_status.json",
+            "live_status.json",
+            "stage_events.jsonl",
             "keyframe_gallery.html",
             "keyframe_review.json",
             "stage6_review_decision.json",
@@ -125,11 +127,34 @@ class CreativeOSRunInspector:
 
     def _stage_statuses(self, inspection: RunInspection) -> list[StageStatus]:
         statuses: list[StageStatus] = []
-        stages = PHASE1_STAGES if isinstance(inspection.data.get("phase1_status"), dict) else LEGACY_STAGES
+        stages = PHASE1_STAGES if isinstance(inspection.data.get("phase1_status"), dict) or isinstance(inspection.data.get("live_status"), dict) else LEGACY_STAGES
         for index, name, artifact in stages:
-            status, detail = self._single_stage_status(inspection, artifact)
+            status, detail = self._live_stage_status(inspection, index)
+            if not status:
+                status, detail = self._single_stage_status(inspection, artifact)
             statuses.append(StageStatus(index=index, name=name, status=status, artifact=artifact, detail=detail))
         return statuses
+
+    def _live_stage_status(self, inspection: RunInspection, index: str) -> tuple[str, str] | tuple[None, None]:
+        live = inspection.data.get("live_status")
+        if not isinstance(live, dict):
+            return None, None
+        stages = live.get("stages")
+        if not isinstance(stages, dict) or not isinstance(stages.get(index), dict):
+            return None, None
+        stage = stages[index]
+        status = str(stage.get("status") or "unknown")
+        if status == "done":
+            return "passed", "live done"
+        if status == "running":
+            return "running", "live running"
+        if status == "error":
+            return "needs_review", str(stage.get("error") or "live error")
+        if status == "missing":
+            return "missing", str(stage.get("error") or "live missing")
+        if status == "pending":
+            return "pending", "live pending"
+        return "unknown", f"live {status}"
 
     def _single_stage_status(self, inspection: RunInspection, artifact: str) -> tuple[str, str]:
         run_dir = inspection.run_dir
@@ -207,6 +232,19 @@ class CreativeOSRunInspector:
         return issues
 
     def _derive_status(self, inspection: RunInspection) -> str:
+        live = inspection.data.get("live_status")
+        if isinstance(live, dict):
+            status = str(live.get("status") or "unknown")
+            if status == "complete":
+                return "phase1_live_complete"
+            if status == "paused_missing_backend":
+                return "phase1_paused_missing_image_backend"
+            if status in {"running", "pending"}:
+                return "phase1_live_running"
+            if status in {"error", "missing"}:
+                return f"phase1_live_{status}"
+            if status:
+                return status
         phase1 = inspection.data.get("phase1_status")
         if isinstance(phase1, dict) and phase1.get("status"):
             status = str(phase1.get("status"))

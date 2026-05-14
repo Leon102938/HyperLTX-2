@@ -1,12 +1,18 @@
 # Active Plan
 
-Stand: 2026-05-13, Phase-1-Hardening Stage 00-09 mit Retry/Resume.
+Stand: 2026-05-14, Phase-1-Live-Orchestrator V3 Stage 00-09.
 
 ## Aktueller Build-Stand
 
 Textual bleibt fest auf der stabilen 0.89.x-Linie. Im Pod ist `textual==0.89.1` aktiv, und der Pin `textual>=0.89,<1.0` bleibt Pflicht. Keine neuen Dependency-Experimente und keine Textual-8.x-Anpassungen.
 
 Phase 1 baut jetzt eine lokale CLI-Runtime fuer `creative-os run-phase1`, die strukturierte Creative-OS-Artefakte unter `/workspace/agent_runs/<job-id>/creative_os/` schreibt. Der Fokus liegt auf Runtime/Integration bis Stage `09`, nicht auf weiterem Design-Feinschliff.
+
+Der zusaetzliche Live-Pfad `creative-os run-phase1-live` schreibt waehrend des Runs `live_status.json` und `stage_events.jsonl`. `viewed_stage` bleibt Cockpit-Auswahl, `real_run_stage/current_running_stage` bleibt Runner-Wahrheit.
+
+V2-Korrektur: Stage `09` wird nur `done`, wenn `keyframe_manifest.json` alle Jobs als `finished` mit `file_exists=true` meldet. Disabled/missing Backend bleibt `paused_missing_backend`, completed nur `00` bis `08`, Stage `09=error`.
+
+V3-Korrektur: Stage `10` bis `15` sind fuer Phase-1-Runs out-of-scope/not built und koennen in der Pipeline Map nicht gruen werden. Stage `09` zeigt echte Manifest-/Live-Daten im Workspace und schreibt das Manifest waehrend echter Image-Generierung fort. Watch-Refresh bleibt semantisch und ueberschreibt manuelle Stage-Auswahl nicht.
 
 CLI:
 
@@ -32,6 +38,44 @@ python3 /workspace/scripts/agent_core_cli.py creative-os retry-keyframes \
 
 Optionen: `--dry-run`, `--scene scene_02`, `--force`. Ohne `--force` werden fertige vorhandene PNGs nicht neu erzeugt.
 
+Live-Run plus Watch:
+
+```bash
+python3 /workspace/scripts/agent_core_cli.py creative-os run-phase1-live \
+  --job-id live-smoke-20260514 \
+  --topic "jungle safari at sunrise" \
+  --pipeline shortform_storyboard_v1 \
+  --mode visual_adventure \
+  --style cinematic_nature \
+  --format portrait \
+  --duration 9s \
+  --scenes 3 \
+  --no-generate-images
+
+python3 /workspace/scripts/creative_os_cockpit.py \
+  --job-id live-smoke-20260514 \
+  --runs-root /workspace/agent_runs \
+  --watch \
+  --refresh-sec 1
+```
+
+Echte Z-Image-Generierung:
+
+```bash
+python3 /workspace/scripts/agent_core_cli.py creative-os run-phase1-live \
+  --job-id live-v2-smoke-images-20260514 \
+  --topic "jungle safari at sunrise" \
+  --pipeline shortform_storyboard_v1 \
+  --mode visual_adventure \
+  --style cinematic_nature \
+  --format portrait \
+  --duration 9s \
+  --scenes 3 \
+  --generate-images
+```
+
+`--open-cockpit` startet Textual nicht im selben TTY-Background. Der Flag gibt sichere Terminal-Befehle aus. Fuer sichtbare schnelle Stages: `--stage-delay-seconds 0.5`.
+
 ## Phase-1-Artefakte 00-09
 
 - Stage `00 Command Center`: `normalized_job.json`
@@ -44,6 +88,7 @@ Optionen: `--dry-run`, `--scene scene_02`, `--force`. Ohne `--force` werden fert
 - Stage `07 Scene Contracts`: `scene_contracts.json`, kompatibel dazu `keyframe_contracts.json`
 - Stage `08 Prompt Compiler`: `prompt_payload_compiled.json`, `zimage_prompts.json`
 - Stage `09 Image / Keyframe Generation`: `keyframe_manifest.json`, `phase1_status.json`
+- Live-State: `live_status.json`, `stage_events.jsonl`
 
 Stage `09` prueft das vorhandene lokale Z-Image-HTTP-Backend. Wenn es erreichbar ist, werden Jobs ueber den bestehenden `/zimage/jobs`-Pfad versucht. Wenn es fehlt, bleibt der Run sauber auf `phase1_paused_missing_image_backend`; das Manifest zeigt pro Szene `status=error` und es werden keine Fake-Bilder als Erfolg behauptet.
 

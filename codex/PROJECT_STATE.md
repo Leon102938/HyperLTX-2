@@ -6,6 +6,22 @@ Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E, 3A, 3B, 4A, 4B und
 - Kanonische Capability-Uebersicht: `/workspace/codex/CAPABILITY_MAP.md`
 
 ## Verifizierte Fakten
+- 2026-05-14 V3 Live-Fix: In Phase-1-Runs bleiben Stage `10` bis `15` in der Pipeline Map grau/pending/not built; completed-Stages oder vorhandene Legacy-/Alias-Artefakte koennen sie nicht gruen machen.
+- Stage `09` Workspace zeigt echte `keyframe_manifest.json`-/`live_status.json`-Daten: Backend Status/Reason, Overall Status, Live Stage, Finished Files, Gallery und pro Job Status/Datei-Metadaten.
+- Watch-Refresh ignoriert reine Refresh-Zeit-Aenderungen und ueberschreibt manuelle Stage-Auswahl nicht mehr; Pfeilnavigation bleibt deterministisch.
+- Stage `09` Manifest wird waehrend Image-Generierung fortgeschrieben, damit Cockpit Watch reale running/progress/finished/error-Aenderungen sehen kann.
+- V3-Smokes: `live-v3-smoke-noimages-20260514` => 00-08 done, 09 error, 10-15 nicht gruen; `live-v3-smoke-images-20260514` => 00-09 done, 3 PNGs, Gallery, 10-15 nicht gruen.
+- 2026-05-14 V2 Live-Fix: Bei `--no-generate-images`/disabled Backend sind `phase1_status.json` und `live_status.json` konsistent: `completed_stages=["00"... "08"]`, Stage `09=error`, Gesamtstatus `paused_missing_backend`, `next_available_stage=09`.
+- Pipeline Map malt Stage `09` bei `paused_missing_backend` nicht mehr gruen, auch wenn `keyframe_manifest.json` existiert.
+- `--open-cockpit` startet Textual nicht mehr im Background desselben TTY; der Flag gibt sichere Terminal-1/Terminal-2-Befehle aus und crasht ohne TTY nicht.
+- Neue Flags: `--generate-images`, `--no-generate-images`, kompatibel weiter `--no-images`; Debug-Sichtbarkeit ueber `--stage-delay-seconds`.
+- V2-Smokes: `live-v2-smoke-20260514` ohne Bilder -> 0 PNGs, Stage `09=error`; `live-v2-smoke-images-20260514` mit Z-Image -> 3 PNGs, Gallery, Stage `09=done`.
+- 2026-05-14 Phase 1 Live Orchestrator: `scripts/agent_core_cli.py creative-os run-phase1-live` fuehrt Stage `00` bis `09` sequenziell aus und schreibt `live_status.json` plus `stage_events.jsonl` waehrend des Runs.
+- Live-State enthaelt `viewed_stage`, `real_run_stage`, `current_running_stage`, `completed_stages`, `failed_stages`, `pending_stages`, Timestamps, Artifact-Pfade und Error-Felder; `viewed_stage` wird im Cockpit nicht mit dem echten Runner-Stage vermischt.
+- Cockpit Watch liest Live-State ueber den bestehenden Watch-Modus: `python3 /workspace/scripts/creative_os_cockpit.py --job-id <id> --runs-root /workspace/agent_runs --watch --refresh-sec 1`.
+- `--open-cockpit` im Live-CLI startet bei TTY einen separaten Watch-Prozess; ohne TTY wird der exakte Watch-Befehl ausgegeben.
+- Real-Run Stage `09` nutzt nur `keyframe_manifest.json`; fehlendes Manifest bleibt `missing manifest`, Progress erscheint nur bei echten Manifestwerten, und Demo-Progress bleibt auf Fixture/Demo begrenzt.
+- Live-Smoke: `/workspace/agent_runs/live-smoke-20260514/creative_os`; Tests gruen: Cockpit 16, Status 23.
 - 2026-05-13 Phase 1 Hardening: frischer E2E-Run `phase1-hardening-smoke-20260513` erzeugt Stage `00` bis `09`, 3 echte PNGs und `keyframe_gallery.html`.
 - Neuer enger Retry/Resume-Pfad: `scripts/agent_core_cli.py creative-os retry-keyframes --job-id <id> --runs-root /workspace/agent_runs [--scene scene_02] [--dry-run] [--force]`.
 - Retry/Resume liest nur `keyframe_manifest.json`, schreibt nur `keyframe_manifest.json`, `phase1_status.json` und ggf. `keyframe_gallery.html`; Stage `00` bis `08` werden nicht neu geschrieben.

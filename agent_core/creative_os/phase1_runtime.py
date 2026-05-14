@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import Any
 from urllib import error, request
 
+from agent_core.creative_os.live_status import LIVE_STAGE_ARTIFACTS, LiveStatusWriter
+
 
 DEFAULT_RUNS_ROOT = Path("/workspace/agent_runs")
 DEFAULT_IMAGE_BACKEND_URL = os.environ.get("AGENT_CORE_BASE_URL", "http://127.0.0.1:8000")
@@ -28,6 +30,7 @@ class Phase1RunConfig:
     image_backend_url: str = DEFAULT_IMAGE_BACKEND_URL
     image_backend: str = "zimage_http"
     attempt_images: bool = True
+    stage_delay_seconds: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -102,6 +105,96 @@ def run_phase1(config: Phase1RunConfig) -> dict[str, Any]:
     }
 
 
+def run_phase1_live(config: Phase1RunConfig) -> dict[str, Any]:
+    started = _utc_now()
+    run_dir = config.runs_root / config.job_id / "creative_os"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / "keyframes").mkdir(exist_ok=True)
+    live = LiveStatusWriter(run_dir=run_dir, job_id=config.job_id)
+    live.initialize(viewed_stage="00")
+
+    try:
+        live.stage_running("00")
+        normalized_job = _normalized_job(config, started)
+        normalized_job["command_center"]["source"] = "agent_core_cli creative-os run-phase1-live"
+        _write_live_stage(run_dir, live, "00", "normalized_job.json", normalized_job)
+        _stage_delay(config)
+
+        live.stage_running("01")
+        pipeline_route = _pipeline_route(config)
+        _write_json(run_dir / "pipeline_route.json", pipeline_route)
+        _write_json(run_dir / "intent_route.json", _intent_route(config, pipeline_route))
+        _finish_live_artifact(run_dir, live, "01", "pipeline_route.json")
+        _stage_delay(config)
+
+        live.stage_running("02")
+        mode_style = _mode_style(config)
+        _write_json(run_dir / "mode_style.json", mode_style)
+        _write_json(run_dir / "creative_direction.json", mode_style)
+        _finish_live_artifact(run_dir, live, "02", "mode_style.json")
+        _stage_delay(config)
+
+        live.stage_running("03")
+        skill_match, skill_tree = _skill_artifacts(config)
+        _write_json(run_dir / "skill_match.json", skill_match)
+        _write_json(run_dir / "skill_tree.json", skill_tree)
+        _finish_live_artifact(run_dir, live, "03", "skill_tree.json")
+        _stage_delay(config)
+
+        live.stage_running("04")
+        creative_strategy = _creative_strategy(config, normalized_job, mode_style, skill_match)
+        _write_live_stage(run_dir, live, "04", "creative_strategy.json", creative_strategy)
+        _stage_delay(config)
+
+        live.stage_running("05")
+        beat_hook_plan = _beat_hook_plan(config, creative_strategy)
+        _write_json(run_dir / "beat_hook_plan.json", beat_hook_plan)
+        _write_json(run_dir / "selected_beat_plan.json", beat_hook_plan["selected_beat_plan"])
+        _finish_live_artifact(run_dir, live, "05", "beat_hook_plan.json")
+        _stage_delay(config)
+
+        live.stage_running("06")
+        creative_judge = _creative_judge(config, creative_strategy, beat_hook_plan)
+        _write_json(run_dir / "creative_judge.json", creative_judge)
+        _write_json(run_dir / "stage6_review_decision.json", _stage6_compat_decision(creative_judge))
+        _finish_live_artifact(run_dir, live, "06", "creative_judge.json")
+        _stage_delay(config)
+
+        live.stage_running("07")
+        scene_contracts = _scene_contracts(config, creative_judge)
+        _write_json(run_dir / "scene_contracts.json", scene_contracts)
+        _write_json(run_dir / "keyframe_contracts.json", scene_contracts)
+        _finish_live_artifact(run_dir, live, "07", "scene_contracts.json")
+        _stage_delay(config)
+
+        live.stage_running("08")
+        prompt_payload, zimage_prompts = _prompt_payload(config, scene_contracts)
+        _write_json(run_dir / "prompt_payload_compiled.json", prompt_payload)
+        _write_json(run_dir / "zimage_prompts.json", zimage_prompts)
+        _finish_live_artifact(run_dir, live, "08", "prompt_payload_compiled.json")
+        _stage_delay(config)
+
+        live.stage_running("09")
+        manifest = _run_image_jobs(config, run_dir, zimage_prompts, on_update=lambda payload: _write_json(run_dir / "keyframe_manifest.json", payload))
+        gallery_path = _write_keyframe_gallery(run_dir, manifest)
+        if gallery_path:
+            manifest["gallery_path"] = str(gallery_path)
+        _write_json(run_dir / "keyframe_manifest.json", manifest)
+        _write_json(run_dir / "phase1_status.json", _phase1_status(config, started, manifest))
+        if _stage09_manifest_complete(manifest):
+            _finish_live_artifact(run_dir, live, "09", "keyframe_manifest.json")
+        else:
+            live.stage_error("09", artifact_path=run_dir / "keyframe_manifest.json", error=_stage09_live_error(manifest))
+        live.finish(status="complete" if manifest["overall_status"] == "finished" else manifest["overall_status"])
+
+        return _phase1_summary(config, run_dir, manifest)
+    except Exception as exc:
+        current = str(live.read().get("current_running_stage") or live.read().get("real_run_stage") or "00")
+        live.stage_error(current, artifact_path=run_dir / LIVE_STAGE_ARTIFACTS.get(current, "unknown"), error=str(exc))
+        live.finish(status="error", error=str(exc))
+        raise
+
+
 def retry_keyframes(config: RetryKeyframeConfig) -> dict[str, Any]:
     run_dir = config.runs_root / config.job_id / "creative_os"
     manifest_path = run_dir / "keyframe_manifest.json"
@@ -145,7 +238,7 @@ def retry_keyframes(config: RetryKeyframeConfig) -> dict[str, Any]:
         output_path = Path(str(job.get("output_path") or run_dir / "keyframes" / f"{scene_id}.png"))
         prompt_text = str(job.get("prompt") or prompts_by_scene.get(scene_id) or "")
         if not prompt_text:
-            job.update({"status": "error", "progress_percent": 0, "elapsed": "00:00", "error": "missing prompt for retry"})
+            job.update({"status": "error", "progress_percent": None, "elapsed": "00:00", "error": "missing prompt for retry"})
             job.update(_output_file_metadata(output_path))
             continue
         job.update(
@@ -154,7 +247,7 @@ def retry_keyframes(config: RetryKeyframeConfig) -> dict[str, Any]:
                 "backend": run_config.image_backend,
                 "status": "queued",
                 "output_path": str(output_path),
-                "progress_percent": 0,
+                "progress_percent": None,
                 "elapsed": "00:00",
                 "error": None,
                 "backend_job_id": None,
@@ -402,10 +495,25 @@ def _prompt_payload(config: Phase1RunConfig, scene_contracts: list[dict[str, Any
     }, prompts
 
 
-def _run_image_jobs(config: Phase1RunConfig, run_dir: Path, prompts: list[dict[str, Any]]) -> dict[str, Any]:
+def _run_image_jobs(
+    config: Phase1RunConfig,
+    run_dir: Path,
+    prompts: list[dict[str, Any]],
+    *,
+    on_update: Any | None = None,
+) -> dict[str, Any]:
     started = time.monotonic()
     backend = _probe_zimage(config.image_backend_url) if config.attempt_images else {"available": False, "reason": "disabled_by_cli"}
     jobs: list[dict[str, Any]] = []
+
+    def refresh_manifest() -> dict[str, Any]:
+        for item in jobs:
+            item.update(_output_file_metadata(item.get("output_path")))
+        manifest_payload = _keyframe_manifest(config, backend, jobs)
+        if on_update is not None:
+            on_update(manifest_payload)
+        return manifest_payload
+
     for prompt in prompts:
         scene_id = str(prompt["scene_id"])
         output_path = run_dir / "keyframes" / f"{scene_id}.png"
@@ -415,22 +523,25 @@ def _run_image_jobs(config: Phase1RunConfig, run_dir: Path, prompts: list[dict[s
             "backend": config.image_backend,
             "status": "queued",
             "output_path": str(output_path),
-            "progress_percent": 0,
+            "progress_percent": None,
             "elapsed": "00:00",
             "error": None,
             "backend_job_id": None,
         }
+        jobs.append(job)
+        refresh_manifest()
         if backend["available"]:
-            _submit_zimage_job(config, prompt, output_path, job, started)
+            _submit_zimage_job(config, prompt, output_path, job, started, on_update=refresh_manifest)
         else:
             job["status"] = "error"
             job["error"] = backend["reason"]
-        jobs.append(job)
+            refresh_manifest()
 
-    for job in jobs:
-        job.update(_output_file_metadata(job.get("output_path")))
+    return refresh_manifest()
 
-    overall = _manifest_overall_status(jobs, backend_available=backend["available"])
+
+def _keyframe_manifest(config: Phase1RunConfig, backend: dict[str, Any], jobs: list[dict[str, Any]]) -> dict[str, Any]:
+    overall = _manifest_overall_status(jobs, backend_available=bool(backend["available"]))
     return {
         "stage": "09",
         "backend": config.image_backend,
@@ -439,13 +550,19 @@ def _run_image_jobs(config: Phase1RunConfig, run_dir: Path, prompts: list[dict[s
         "backend_reason": backend["reason"],
         "overall_status": overall,
         "jobs": jobs,
-        "generated_keyframes": [
-            {"scene_id": job["scene_id"], "success": job["status"] == "finished", "image_path": job["output_path"], "error": job["error"]} for job in jobs
-        ],
+        "generated_keyframes": [{"scene_id": job["scene_id"], "success": job["status"] == "finished" and bool(job.get("file_exists")), "image_path": job["output_path"], "error": job["error"]} for job in jobs],
     }
 
 
-def _submit_zimage_job(config: Phase1RunConfig, prompt: dict[str, Any], output_path: Path, job: dict[str, Any], started: float) -> None:
+def _submit_zimage_job(
+    config: Phase1RunConfig,
+    prompt: dict[str, Any],
+    output_path: Path,
+    job: dict[str, Any],
+    started: float,
+    *,
+    on_update: Any | None = None,
+) -> None:
     # Phase 1 supports the existing local zimage HTTP contract when present.
     payload = {
         "job_id": f"{config.job_id}_{prompt['scene_id']}",
@@ -458,6 +575,9 @@ def _submit_zimage_job(config: Phase1RunConfig, prompt: dict[str, Any], output_p
     try:
         submit = _http_json(f"{config.image_backend_url.rstrip('/')}/zimage/jobs", method="POST", payload=payload, timeout=60)
         backend_job_id = str(submit.get("job_id") or payload["job_id"])
+        job["backend_job_id"] = backend_job_id
+        if on_update is not None:
+            on_update()
         latest: dict[str, Any] = {}
         deadline = time.monotonic() + 900
         while time.monotonic() < deadline:
@@ -466,11 +586,19 @@ def _submit_zimage_job(config: Phase1RunConfig, prompt: dict[str, Any], output_p
             if state in {"succeeded", "failed", "error"}:
                 break
             job["status"] = "running"
-            job["progress_percent"] = latest.get("progress_percent") or latest.get("progress") or 0
+            progress = latest.get("progress_percent")
+            if progress is None:
+                progress = latest.get("progress")
+            if progress is not None:
+                job["progress_percent"] = progress
+            if on_update is not None:
+                on_update()
             time.sleep(2)
         if str(latest.get("state") or latest.get("status")) != "succeeded":
             job["status"] = "error"
             job["error"] = str(latest.get("error") or "zimage job failed")
+            if on_update is not None:
+                on_update()
             return
         source = Path(str(latest.get("output_path") or ""))
         if source.exists():
@@ -480,12 +608,18 @@ def _submit_zimage_job(config: Phase1RunConfig, prompt: dict[str, Any], output_p
             job["progress_percent"] = 100
             job["elapsed"] = _format_elapsed(time.monotonic() - started)
             job["backend_job_id"] = backend_job_id
+            if on_update is not None:
+                on_update()
         else:
             job["status"] = "error"
             job["error"] = f"backend succeeded but output missing: {source}"
+            if on_update is not None:
+                on_update()
     except Exception as exc:
         job["status"] = "error"
         job["error"] = str(exc)
+        if on_update is not None:
+            on_update()
 
 
 def _probe_zimage(base_url: str) -> dict[str, Any]:
@@ -621,6 +755,71 @@ def _manifest_overall_status(jobs: list[dict[str, Any]], *, backend_available: b
     if any(job.get("status") == "finished" and not bool(job.get("file_exists")) for job in jobs):
         return "needs_review"
     return "needs_review"
+
+
+def _stage_delay(config: Phase1RunConfig) -> None:
+    if config.stage_delay_seconds > 0:
+        time.sleep(config.stage_delay_seconds)
+
+
+def _stage09_manifest_complete(manifest: dict[str, Any]) -> bool:
+    jobs = manifest.get("jobs")
+    return (
+        manifest.get("overall_status") == "finished"
+        and isinstance(jobs, list)
+        and bool(jobs)
+        and all(isinstance(job, dict) and job.get("status") == "finished" and bool(job.get("file_exists")) for job in jobs)
+    )
+
+
+def _stage09_live_error(manifest: dict[str, Any]) -> str:
+    backend_status = str(manifest.get("backend_status") or "unknown")
+    backend_reason = str(manifest.get("backend_reason") or "").strip()
+    jobs = [job for job in manifest.get("jobs") or [] if isinstance(job, dict)]
+    if backend_status in {"missing", "disabled"} or backend_reason:
+        return backend_reason or f"image backend {backend_status}"
+    failed = [job for job in jobs if job.get("status") in {"error", "failed"}]
+    if failed:
+        return str(failed[0].get("error") or "keyframe job failed")
+    missing_outputs = [job for job in jobs if not job.get("file_exists")]
+    if missing_outputs:
+        return "keyframe output missing"
+    return "keyframe manifest not complete"
+
+
+def _write_live_stage(run_dir: Path, live: LiveStatusWriter, stage_id: str, artifact: str, payload: Any) -> None:
+    _write_json(run_dir / artifact, payload)
+    _finish_live_artifact(run_dir, live, stage_id, artifact)
+
+
+def _finish_live_artifact(run_dir: Path, live: LiveStatusWriter, stage_id: str, artifact: str) -> None:
+    artifact_path = run_dir / artifact
+    if artifact_path.exists():
+        live.stage_done(stage_id, artifact_path=artifact_path)
+    else:
+        live.stage_missing(stage_id, artifact_path=artifact_path, error=f"missing artifact: {artifact}")
+
+
+def _phase1_summary(config: Phase1RunConfig, run_dir: Path, manifest: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "job_id": config.job_id,
+        "run_dir": str(run_dir),
+        "creative_os_dir": str(run_dir),
+        "status": "paused_missing_image_backend" if manifest["backend_status"] != "available" else manifest["overall_status"],
+        "backend_status": manifest["backend_status"],
+        "artifacts": {
+            "00": "normalized_job.json",
+            "01": "pipeline_route.json",
+            "02": "mode_style.json",
+            "03": "skill_match.json / skill_tree.json",
+            "04": "creative_strategy.json",
+            "05": "beat_hook_plan.json",
+            "06": "creative_judge.json",
+            "07": "scene_contracts.json",
+            "08": "prompt_payload_compiled.json / zimage_prompts.json",
+            "09": "keyframe_manifest.json",
+        },
+    }
 
 
 def _skill_exists(root: Path, skill_id: str) -> bool:

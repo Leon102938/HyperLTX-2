@@ -1,5 +1,29 @@
 # HANDOFF.md
 
+## 2026-05-14 Phase 1 Live Cockpit Orchestration
+- V3-Fix: Phase-1-Runs sperren Stage `10` bis `15` in der Pipeline Map als out-of-scope/pending; vorhandene Alias-Artefakte wie `stage6_review_decision.json` koennen Stage `10` nicht mehr gruen faerben.
+- Stage `09` Active Workspace zeigt jetzt echte Manifest-/Live-Daten sichtbar: Backend Status/Reason, Overall Status, Live Stage 09, Finished Files und Gallery.
+- Watch-Refresh rendert nicht mehr bei reiner `last_refresh_time`-Aenderung; manuelle Stage-Auswahl bleibt bei Watch erhalten.
+- Stage `09` schreibt `keyframe_manifest.json` waehrend der echten Image-Job-Schleife fort, damit Watch running/progress/finished/error aus realem Backend-State lesen kann.
+- V3-Smokes: `/workspace/agent_runs/live-v3-smoke-noimages-20260514/creative_os` und `/workspace/agent_runs/live-v3-smoke-images-20260514/creative_os`.
+- V2-Fix: Missing/disabled Backend markiert Stage `09` im `live_status.json` nicht mehr als `done`, sondern als `error`; `completed_stages` bleibt dann `00` bis `08`, passend zu `phase1_status.json`.
+- `stage_events.jsonl` schreibt bei disabled Backend `09 running -> 09 error`, nicht mehr `09 done`.
+- Pipeline Map nutzt Live-Stage-Status vor Artifact-Anwesenheit: Stage `09` wird bei `paused_missing_backend` rot/warnend statt gruen, auch wenn `keyframe_manifest.json` existiert.
+- `--open-cockpit` startet Textual nicht mehr als Background-Prozess im selben TTY. Der Flag gibt zwei sichere Terminal-Befehle aus und beendet sauber; ohne TTY kein OSError.
+- Neuer Debug-Parameter: `--stage-delay-seconds 0.5` fuer sichtbare Live-Schritte; Default `0`.
+- Image-Flags: `--generate-images` fuer echte Z-Image-Jobs, `--no-generate-images` fuer disabled/no-image Live-Runs; `--no-images` bleibt kompatibler Alias.
+- V2-Smokes: disabled `/workspace/agent_runs/live-v2-smoke-20260514/creative_os` mit Stage `09=error`; image `/workspace/agent_runs/live-v2-smoke-images-20260514/creative_os` mit 3 PNGs und Gallery.
+- Neuer Live-CLI-Pfad: `python3 /workspace/scripts/agent_core_cli.py creative-os run-phase1-live --job-id <id> --topic "..." --pipeline shortform_storyboard_v1 --mode visual_adventure --style cinematic_nature --format portrait --duration 9s --scenes 3 [--open-cockpit]`.
+- Live-Runner schreibt waehrend des Runs `live_status.json` und `stage_events.jsonl` unter `/workspace/agent_runs/<job-id>/creative_os/`; Batch `creative-os run-phase1` bleibt kompatibel.
+- Live-State trennt `viewed_stage` von `real_run_stage`/`current_running_stage`; Cockpit startet fuer Live-Runs bei Stage `00`, waehrend der echte Runner bis Stage `09` fortschreibt.
+- Cockpit-Watch-Pfad: `python3 /workspace/scripts/creative_os_cockpit.py --job-id <id> --runs-root /workspace/agent_runs --watch --refresh-sec 1`.
+- `--open-cockpit` startet nur stabil als separater Textual-Prozess, wenn eine TTY vorhanden ist; ohne TTY gibt die CLI exakt den Watch-Befehl aus.
+- Real-Data-Regel bleibt eng: fehlende Artefakte werden `missing`, fehlendes Stage-09-Manifest zeigt keine Demo-Cards, und Real-Runs zeigen Progress nur aus echten Manifestwerten.
+- Stage `09` liest weiter nur `keyframe_manifest.json`: queued/running/finished/error, elapsed, output_path, file_exists/size/mtime und gallery_path; ETA bleibt `unavailable`/nicht angezeigt, wenn nicht ableitbar.
+- Smoke-Run: `/workspace/agent_runs/live-smoke-20260514/creative_os`.
+- Tests gruen: `python3 -m unittest /workspace/tests/test_creative_os_cockpit.py -v` und `python3 -m unittest /workspace/tests/test_creative_os_status.py -v`.
+- Nicht gebaut: Stage `10-15` Runtime, LTX, n8n/API, Redesign, neue Textual-Version.
+
 ## 2026-05-13 Phase 1 Hardening / Stage 09 Retry
 - Frischer E2E-Run: `/workspace/agent_runs/phase1-hardening-smoke-20260513/creative_os`.
 - Run-CLI:

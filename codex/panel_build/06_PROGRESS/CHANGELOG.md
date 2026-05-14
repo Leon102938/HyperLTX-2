@@ -2,6 +2,59 @@
 
 Diese Datei dokumentiert jede Session mit Datum, Umfang und Teststatus.
 
+## 2026-05-14 - Phase 1 Live Orchestrator V3 Fix
+
+### Geaendert
+
+- Pipeline Map behandelt Stage `10` bis `15` fuer Phase-1-Runs als out-of-scope/pending, nie done/gruen.
+- Stage `09` Active Workspace zeigt echte `keyframe_manifest.json`-/`live_status.json`-Daten sichtbar.
+- `keyframe_manifest.json` wird waehrend Stage-09-Image-Generierung aktualisiert, nicht erst am Ende.
+- Watch-Refresh ignoriert reine Refresh-Zeit-Aenderungen und erhaelt manuelle Stage-Auswahl.
+
+### Tests / Smokes
+
+- `python3 -m unittest /workspace/tests/test_creative_os_cockpit.py -v`: gruen, 17 Tests.
+- `python3 -m unittest /workspace/tests/test_creative_os_status.py -v`: gruen, 25 Tests.
+- Smokes: `live-v3-smoke-noimages-20260514`, `live-v3-smoke-images-20260514`.
+
+## 2026-05-14 - Phase 1 Live Orchestrator V2 Fix
+
+### Geaendert
+
+- Stage `09` ist bei disabled/missing Backend nicht mehr `done`, obwohl `keyframe_manifest.json` existiert.
+- `live_status.json` und `phase1_status.json` sind konsistent: paused Backend => completed `00` bis `08`, Stage `09=error`, next `09`.
+- Pipeline Map nutzt Live-Stage-Status statt blind Artefakt-Anwesenheit.
+- `--open-cockpit` gibt sichere Zwei-Terminal-Befehle aus und startet Textual nicht mehr als Background-Prozess im selben TTY.
+- `--stage-delay-seconds`, `--generate-images`, `--no-generate-images` ergaenzt; `--no-images` bleibt Alias.
+
+### Tests / Smokes
+
+- Disabled-Smoke: `live-v2-smoke-20260514`, 0 PNGs, Stage `09=error`, kein `09 done` Event.
+- Image-Smoke: `live-v2-smoke-images-20260514`, 3 PNGs, Gallery, Stage `09=done`.
+- `python3 -m unittest /workspace/tests/test_creative_os_cockpit.py -v`: gruen, 16 Tests.
+- `python3 -m unittest /workspace/tests/test_creative_os_status.py -v`: gruen, 25 Tests.
+
+## 2026-05-14 - Phase 1 Live Cockpit Orchestration
+
+### Geaendert
+
+- Neuer CLI-Befehl `scripts/agent_core_cli.py creative-os run-phase1-live`.
+- Live-Run schreibt `live_status.json` und `stage_events.jsonl` waehrend Stage `00` bis `09` laufen.
+- Live-State trennt `viewed_stage` von `real_run_stage` und `current_running_stage`.
+- Cockpit Watch liest Live-State und startet Live-Runs bei Stage `00`.
+- Real-Run Stage `09` nutzt nur echte `keyframe_manifest.json`-Werte; fehlendes Manifest zeigt keine Fake-Cards und Progress wird nicht geraten.
+- Live-Smoke: `/workspace/agent_runs/live-smoke-20260514/creative_os`.
+
+### Nicht geaendert
+
+- `creative-os run-phase1` bleibt Batch-kompatibel.
+- Keine Stage-10-bis-15-Runtime, kein LTX, kein n8n/API, kein Redesign, keine neue Textual-Version.
+
+### Tests
+
+- `python3 -m unittest /workspace/tests/test_creative_os_cockpit.py -v`: gruen, 16 Tests.
+- `python3 -m unittest /workspace/tests/test_creative_os_status.py -v`: gruen, 23 Tests.
+
 ## 2026-05-13 - Phase 1 Hardening Stage 09 Retry/Resume
 
 ### Geaendert

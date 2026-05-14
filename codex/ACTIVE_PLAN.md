@@ -26,6 +26,11 @@ Eine kleine Director-/Brain-Schicht vor dem bestehenden Planner bauen, die Jobs 
 Den bereits vorbereiteten Director-Layer produktiv an ein echtes lokales Director-Modell anbinden, bevorzugt Qwen3.6-35B-A3B in praktikabler quantisierter Form als GGUF `Q4_K_M`, ohne Fake-Integration, ohne neuen Mega-Stack und mit sauberem Fallback auf den bisherigen regelbasierten Flow.
 
 ## Aktueller Operativer Fokus
+- 2026-05-14 V3 Live-Fix abgeschlossen: Phase-1-Grenze 00-09 ist in der Pipeline Map erzwungen, Stage `10-15` werden nie done/gruen; Stage `09` zeigt echte Manifest-/Live-Daten, und Watch/Keys bleiben stabil ohne Full-Refresh bei reiner Zeit-Aenderung.
+- 2026-05-14 V2 Live-Fix abgeschlossen: disabled/missing Backend schliesst nur Stage `00` bis `08` ab, Stage `09` bleibt error/warn, Pipeline Map wird nicht komplett gruen, und `--open-cockpit` gibt sichere Zwei-Terminal-Befehle statt Textual-Background-TTY.
+- 2026-05-14 Live-Orchestrator abgeschlossen: `creative-os run-phase1-live` schreibt Live-State/Eventlog ab Stage `00`, Cockpit Watch startet auf `viewed_stage=00` und verfolgt `real_run_stage/current_running_stage` getrennt bis Stage `09`.
+- Aktueller Live-Smoke: `/workspace/agent_runs/live-smoke-20260514/creative_os`; Watch-Befehl: `python3 /workspace/scripts/creative_os_cockpit.py --job-id live-smoke-20260514 --runs-root /workspace/agent_runs --watch --refresh-sec 1`.
+- Naechster enger Schritt: Stage-09-Keyframe-Review/Gate definieren, bevor irgendeine Stage `10+` Runtime oder LTX-Arbeit begonnen wird.
 - Final Closeout 2026-05-07 abgeschlossen: Textual Cockpit V0.4 trennt Skill Health von Runtime-/Director-/final.mp4-Issues; Issues Severity ist sichtbar; `cockpit-video-smoke-001` belegt `llm_augmented` plus `final.mp4 present` im Cockpit.
 - Naechster sinnvoller Schritt: nach Pod-Restore Archiv wieder einspielen, Director 8011 kurz pruefen und dann erst gezielt entscheiden, ob ein separater Publish-/Quality-Gate-Schritt bearbeitet wird.
 - Creative OS CLI Dashboard V1 ist gebaut. Aktueller read-only Inspect-Befehl: `python3 /workspace/scripts/creative_os_status.py --job-id creative-os-jungle-001 --view overview`.
