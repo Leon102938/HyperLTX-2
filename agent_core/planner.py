@@ -929,7 +929,7 @@ class ProductionPlanner:
             variation=selected_variation,
         )
         effective_model_prompt = str(
-            storyboard_prompt_metadata.get("zimage_prompt_sent")
+            storyboard_prompt_metadata.get("hidream_prompt_sent")
             or storyboard_prompt_metadata.get("effective_model_prompt")
             or storyboard_prompt_metadata.get("positive_model_prompt")
             or storyboard_prompt_metadata.get("model_prompt")
@@ -1519,7 +1519,7 @@ class ProductionPlanner:
             scene_text=scene_prompt_text,
         )
         selected_variations = ranked_variations[: storyboard_config.candidate_count]
-        zimage_overrides = job.backend_overrides.get("zimage", {})
+        hidream_overrides = job.backend_overrides.get("hidream", {})
         candidates: list[KeyframeCandidatePlan] = []
         for candidate_index, variation in enumerate(selected_variations, start=1):
             candidate_id = f"{variation.variation_id}_keyframe_{candidate_index:02d}"
@@ -1529,7 +1529,7 @@ class ProductionPlanner:
                 "One clean representative frame, sharp composition, no motion blur, blank unlabeled surfaces, no text overlay, no signage, no interface, no handwriting, no printed pages."
             )
             candidate_model_prompt = str(
-                variation.prompt_build_metadata.get("zimage_prompt_sent")
+                variation.prompt_build_metadata.get("hidream_prompt_sent")
                 or variation.prompt_build_metadata.get("positive_model_prompt")
                 or variation.prompt_build_metadata.get("model_prompt")
                 or prompt_text
@@ -1549,8 +1549,8 @@ class ProductionPlanner:
                     relation_type="scene_variation",
                     render_params={
                         "seed": seed,
-                        "steps": int(zimage_overrides.get("steps", 9)),
-                        "guidance_scale": float(zimage_overrides.get("guidance_scale", 0.0)),
+                        "steps": int(hidream_overrides.get("steps", 28)),
+                        "guidance_scale": float(hidream_overrides.get("guidance_scale", 0.0)),
                         "effective_model_prompt": candidate_model_prompt,
                         "model_prompt": candidate_model_prompt,
                         "combined_model_prompt": variation.prompt_build_metadata.get("combined_model_prompt"),

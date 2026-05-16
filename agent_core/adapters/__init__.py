@@ -3,7 +3,7 @@ from .ltx2_adapter import LTX2Adapter
 from .music_adapter import MusicAdapter
 from .qwen_tts_adapter import QwenTTSAdapter
 from .storyboard_adapter import StoryboardStubAdapter
-from .zimage_storyboard_adapter import ZImageStoryboardAdapter
+from .hidream_storyboard_adapter import HiDreamStoryboardAdapter
 
 __all__ = [
     "BackendAdapter",
@@ -17,5 +17,5 @@ __all__ = [
     "StubAdapter",
     "VideoAdapter",
     "VoiceAdapter",
-    "ZImageStoryboardAdapter",
+    "HiDreamStoryboardAdapter",
 ]

@@ -4,7 +4,7 @@
     "core/positive_image_prompting",
     "core/anti_boring",
     "core/artifact_avoidance",
-    "models/zimage",
+    "models/hidream_o1_dev",
     "styles/cinematic_nature",
     "fallback/generic_visual_adventure",
     "fallback/generic_shortform_story"

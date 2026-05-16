@@ -1,0 +1,13 @@
+{
+  "status": "approved",
+  "decision": "approved",
+  "reviewer": "phase1_runtime",
+  "issues": [
+    "avoid readable text and signage",
+    "keep subject readable at small mobile size"
+  ],
+  "fixes": [
+    "add explicit no-text rule to every scene contract",
+    "anchor each scene with one main subject"
+  ]
+}

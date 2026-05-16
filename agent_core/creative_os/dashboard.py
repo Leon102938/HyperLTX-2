@@ -120,7 +120,7 @@ def _technical_flow() -> Any:
         (
             ("Director", _t("muted")),
             ("Creative OS", _t("muted")),
-            ("Z-Image", _t("ok")),
+            ("HiDream-O1-Dev", _t("ok")),
             ("Keyframes", _t("ok")),
             ("QA", _t("ok")),
             ("LTX Motion", _t("ok")),
@@ -177,7 +177,7 @@ def _rich_overview_group(inspection: RunInspection, focus: str, width: int) -> A
     system.add_column(ratio=2)
     system.add_row(Text("API", style=_t("label")), Text("? not_checked", style=_t("muted")))
     system.add_row(Text("Director", style=_t("label")), Text("? not_checked", style=_t("muted")))
-    system.add_row(Text("Image Backend", style=_t("label")), Text("✓ zimage_http", style=_t("ok")) if inspection.artifacts.get("keyframe_manifest.json") else Text("? not_checked", style=_t("muted")))
+    system.add_row(Text("Image Backend", style=_t("label")), Text("✓ hidream_o1_dev", style=_t("ok")) if inspection.artifacts.get("keyframe_manifest.json") else Text("? not_checked", style=_t("muted")))
     system.add_row(Text("Video Backend", style=_t("label")), Text("? planned ltx2", style=_t("muted")))
     system.add_row(Text("Vision Review", style=_t("label")), Text("- manual_structured", style=_t("warn")) if "stage6_review_decision" in inspection.data else Text("- heuristic", style=_t("warn")))
     system.add_row(Text("Voice", style=_t("label")), Text("- disabled", style=_t("disabled")))
@@ -238,7 +238,7 @@ def _rich_overview_group(inspection: RunInspection, focus: str, width: int) -> A
     artifacts = Table.grid()
     keyframe_count = sum(1 for scene_id in ("scene_01", "scene_02", "scene_03") if inspection.artifacts.get(f"keyframes/{scene_id}.png"))
     for line in (
-        f"{_artifact_mark(inspection, 'zimage_prompts.json')} zimage_prompts.json",
+        f"{_artifact_mark(inspection, 'hidream_prompts.json')} hidream_prompts.json",
         f"{'✓' if keyframe_count == 3 else '○'} {keyframe_count} keyframes",
         f"{_artifact_mark(inspection, 'ltx_motion_prompts.json')} ltx_motion_prompts.json",
         f"{_artifact_mark(inspection, 'ltx_prompt_audit.json')} ltx_prompt_audit.json",
@@ -320,7 +320,7 @@ def _overview(inspection: RunInspection, focus: str) -> str:
         _section_title("SYSTEM"),
         "  API              ? not_checked",
         "  Director         ? not_checked",
-        "  Image Backend    ✓ zimage_http" if inspection.artifacts.get("keyframe_manifest.json") else "  Image Backend    ? not_checked",
+        "  Image Backend    ✓ hidream_o1_dev" if inspection.artifacts.get("keyframe_manifest.json") else "  Image Backend    ? not_checked",
         "  Video Backend    ? not_checked · planned ltx2" if inspection.artifacts.get("ltx_motion_prompts.json") else "  Video Backend    ? not_checked",
         "  Vision Review    - manual_structured" if "stage6_review_decision" in inspection.data else "  Vision Review    - heuristic",
         "  Voice            - disabled",
@@ -391,7 +391,7 @@ def _pipeline_path_lines(phase1: dict[str, Any] | None) -> list[str]:
         ]
     return [
         "  Creative OS",
-        "    → Z-Image Prompts",
+        "    → HiDream Prompts",
         "    → Keyframes",
         "    → Keyframe QA",
         "    → LTX Motion Prompts",
@@ -404,14 +404,14 @@ def _artifact_overview_lines(inspection: RunInspection, keyframe_count: int, pha
         gallery_mark = _artifact_mark(inspection, "keyframe_gallery.html")
         return [
             f"  {_artifact_mark(inspection, 'prompt_payload_compiled.json')} prompt_payload_compiled.json",
-            f"  {_artifact_mark(inspection, 'zimage_prompts.json')} zimage_prompts.json",
+            f"  {_artifact_mark(inspection, 'hidream_prompts.json')} hidream_prompts.json",
             f"  {_artifact_mark(inspection, 'keyframe_manifest.json')} keyframe_manifest.json",
             f"  {'✓' if keyframe_count == 3 else '○'} {keyframe_count} keyframes",
             f"  {gallery_mark} keyframe_gallery.html",
             "  ○ Stage 10+ artifacts · not built",
         ]
     return [
-        f"  {_artifact_mark(inspection, 'zimage_prompts.json')} zimage_prompts.json",
+        f"  {_artifact_mark(inspection, 'hidream_prompts.json')} hidream_prompts.json",
         f"  {'✓' if keyframe_count == 3 else '○'} {keyframe_count} keyframes",
         f"  {_artifact_mark(inspection, 'ltx_motion_prompts.json')} ltx_motion_prompts.json",
         f"  {_artifact_mark(inspection, 'ltx_prompt_audit.json')} ltx_prompt_audit.json",
@@ -585,7 +585,7 @@ def _view_block(title: str, content: str) -> str:
 
 
 def _main_skill_names(skill_ids: list[str]) -> list[str]:
-    priority = ["tiktok_shortform", "zimage", "cinematic_nature", "artifact_avoidance"]
+    priority = ["tiktok_shortform", "hidream", "cinematic_nature", "artifact_avoidance"]
     names = [skill_id.split("/", 1)[-1] for skill_id in skill_ids]
     selected = [name for name in priority if name in names]
     for name in names:

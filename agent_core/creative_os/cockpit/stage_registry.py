@@ -24,7 +24,7 @@ STAGE_DEFINITIONS: tuple[StageDefinition, ...] = (
     StageDefinition("05", "Beat / Hook Planner", "Hook, Beats, Escalation und Payoff vorbereiten.", ("selected_beat_plan.json",), "Detailed beat panel planned"),
     StageDefinition("06", "Creative Judge", "Judge-Ergebnis, Auswahl und Rationale anzeigen.", ("creative_judge.json", "decision_log.json"), "Detailed judge panel planned"),
     StageDefinition("07", "Scene Contracts", "Scene Contracts mit Umgebung, Action, Kamera und Controls zeigen.", ("scene_contracts.json",), "Detailed scene contract panel planned"),
-    StageDefinition("08", "Image Prompt Compiler", "Bildprompt-Listen und Prompt-Audit vorbereiten.", ("zimage_prompts.json", "model_prompts.json", "prompt_audit.json"), "Detailed image prompt panel planned"),
+    StageDefinition("08", "Image Prompt Compiler", "Bildprompt-Listen und Prompt-Audit vorbereiten.", ("hidream_prompts.json", "model_prompts.json", "prompt_audit.json"), "Detailed image prompt panel planned"),
     StageDefinition("09", "Image / Keyframe Generation", "Keyframe- und Image-Job-Status im bestehenden Panel zeigen.", ("keyframe_manifest.json", "keyframes/scene_01.png", "keyframes/scene_02.png", "keyframes/scene_03.png"), "Inspect generated keyframes", "image_jobs"),
     StageDefinition("10", "Keyframe Review", "Keyframe-QA und Review-Entscheidungen anzeigen.", ("keyframe_review.json", "stage6_review_decision.json"), "Detailed keyframe review panel planned"),
     StageDefinition("11", "LTX Motion Prompt Compiler", "LTX-I2V-Motion-Prompts und Audit anzeigen.", ("ltx_motion_prompts.json", "ltx_prompt_audit.json"), "Detailed LTX prompt panel planned"),
@@ -103,7 +103,7 @@ def _current_stage_id(state: CockpitState) -> str:
         return "11"
     if _artifact_present(state, "keyframe_manifest.json"):
         return "10"
-    if _artifact_present(state, "zimage_prompts.json") or _artifact_present(state, "model_prompts.json"):
+    if _artifact_present(state, "hidream_prompts.json") or _artifact_present(state, "model_prompts.json"):
         return "09"
     if _artifact_present(state, "scene_contracts.json") or _artifact_present(state, "stage_contracts.json"):
         return "08"

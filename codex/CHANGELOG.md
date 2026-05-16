@@ -1,5 +1,23 @@
 # CHANGELOG.md
 
+## 2026-05-15 HiDream O1 Closeout
+- Z-Image aus aktivem System entfernt: FastAPI-Router, `/DW/zimage_ready`, `/zimage/jobs`, Backend-Registry, Phase-1-Runtime, Cockpit/Status, CLI-Defaults, `init.sh`, `tools.config`, Skill Manifest und aktive Tests.
+- HiDream-O1-Dev als einziges Stage-09-Bildbackend gesetzt: `hidream_o1_dev`, `/DW/hidream_ready`, `/hidream/jobs`, `28` Steps, Stage-08-Artefakt `hidream_prompts.json`.
+- Neuer HiDream-Router `app/hidream.py` und Adapter `agent_core/adapters/hidream_storyboard_adapter.py`; Z-Image-Service-/Runtime-Dateien entfernt.
+- Skill Tree V1 Model-Skills auf `hidream_o1_dev_prompt_rules`, `hidream_o1_storyboard_rules`, `hidream_o1_no_unwanted_text_rules` umgestellt.
+- Tests/Checks: py_compile fuer FastAPI/HiDream/Phase1/SkillTree; SkillTree, Creative-OS Status, Creative-OS Cockpit und Output Quality Utils gruen.
+- Live-Smoke `hidream-migration-live-smoke`: HiDream-Prompts und HiDream-Manifest korrekt; keine PNGs, weil laufende lokale API `/DW/hidream_ready` noch nicht bereitstellte (`Not Found`), daher ehrlicher paused Status.
+
+## 2026-05-15 Skill Tree V1 + Stage 03-08 Real Wiring
+- Root Skill Tree V1 unter `/workspace/skills/` eingefuehrt: Manifest plus Mode-, Style-, Hook- und Model-Skill-Dateien.
+- Robuster Skill-Loader `agent_core/creative_os/skill_tree_v1.py`: liest Manifest, laedt Markdown-Regeln, markiert fehlende Skills als `missing` und liefert `skill_match.json`/`skill_tree.json`.
+- Phase 1 Stage `03` nutzt echte Job-Mode-/Style-Auswahl, Topic/Mode-basierte Hook-Auswahl und feste Model-Skills. Pipeline bleibt eine feste technische Route ohne Pipeline-Skills.
+- Stage `04` bis `08` minimal echt verdrahtet: Strategy, Beat/Hook, Judge, Scene Contracts und Prompt Compiler lesen aktive Skill-Regeln und schreiben sie in Artefakte.
+- Z-Image Prompt Compiler uebernimmt `zimage_avoid_text_artifacts` in Prompt und Negative Prompt, inklusive `text-sparse, image-first`, no readable text, no fake text, no UI/screens/logos/labels/documents/charts.
+- Cockpit Stage `03` zeigt echte Skill Tree V1-Gruppen; Stage `04` bis `08` zeigen `Source: skills loaded`.
+- Tests ergaenzt: `tests/test_skill_tree_v1.py`. Verifikation gruen: Skill-Tree 6, Status 25, Cockpit 17.
+- Smoke: `skill-tree-v1-smoke-20260515`; Backend missing, Stage `09` korrekt pausiert, Stage `00` bis `08` inklusive Skill-Wiring erzeugt.
+
 ## 2026-05-14 Phase 1 Live Orchestrator V3 Fix
 - Phase-1-Grenze in der Pipeline Map erzwungen: Stage `10` bis `15` bleiben fuer Phase-1-Runs pending/out-of-scope und koennen nicht durch vorhandene Artefakte gruen werden.
 - Stage `09` Active Workspace zeigt echte Manifest-/Live-Daten sichtbar: Backend Status/Reason, Overall Status, Live Stage 09, Finished Files und Gallery.

@@ -876,7 +876,7 @@ class VideoAgent:
                     "positive_model_prompt": positive_model_prompt,
                     "negative_model_prompt": negative_model_prompt,
                     "model_prompt": model_prompt,
-                    "zimage_prompt_sent": scene.prompt_build_metadata.get("zimage_prompt_sent") or contract.get("zimage_prompt_sent"),
+                    "hidream_prompt_sent": scene.prompt_build_metadata.get("hidream_prompt_sent") or contract.get("hidream_prompt_sent"),
                     "ltx_prompt_sent": scene.prompt_build_metadata.get("ltx_prompt_sent") or contract.get("ltx_prompt_sent"),
                     "ltx_positive_prompt_sent": positive_model_prompt,
                     "ltx_negative_prompt_sent": negative_model_prompt or None,
@@ -916,9 +916,9 @@ class VideoAgent:
             "scene_has_hook_function": all(bool(scene.get("hook_function")) for scene in scenes),
             "anti_patterns_checked": all(bool(scene.get("anti_patterns_checked")) for scene in scenes),
             "backend_prompt_policy_applied": all(bool(scene.get("backend_prompt_policy")) for scene in scenes),
-            "zimage_positive_only_applied": all(
-                str((scene.get("backend_prompt_policy") or {}).get("zimage")) == "positive_only"
-                and "Avoid:" not in str(scene.get("zimage_prompt_sent") or "")
+            "hidream_positive_only_applied": all(
+                str((scene.get("backend_prompt_policy") or {}).get("hidream")) == "positive_only"
+                and "Avoid:" not in str(scene.get("hidream_prompt_sent") or "")
                 for scene in scenes
             ),
             "ltx_short_avoid_applied": all(len(str(scene.get("ltx_prompt_sent") or scene.get("model_prompt") or "").split()) <= 140 for scene in scenes),
@@ -948,7 +948,7 @@ class VideoAgent:
             "review_plan": (plan.metadata.get("stage_contracts") or {}).get("review_plan"),
             "backend_prompt_policy": plan.metadata.get("backend_prompt_policy"),
             "backend_prompt_policy_notes": {
-                "zimage": "positive_only; no avoid list is sent to Z-Image",
+                "hidream": "positive_only; no avoid list is sent to HiDream-O1-Dev",
                 "ltx": "positive prompt plus short avoid policy is planned; adapter-level separate negative_prompt support is not wired in G2",
                 "ltx_negative_prompt_supported": False,
             },
@@ -1011,7 +1011,7 @@ class VideoAgent:
                 or contract.get("model_prompt")
                 or scene.prompt_text
             )
-            planned_zimage_prompt = str(meta.get("zimage_prompt_sent") or contract.get("zimage_prompt_sent") or "")
+            planned_hidream_prompt = str(meta.get("hidream_prompt_sent") or contract.get("hidream_prompt_sent") or "")
             planned_ltx_prompt = str(meta.get("ltx_prompt_sent") or contract.get("ltx_prompt_sent") or combined_model_prompt)
 
             storyboard_prompts = [
@@ -1027,20 +1027,20 @@ class VideoAgent:
                 )
                 for take in scene.takes
             ]
-            zimage_prompt_sent = storyboard_prompts[0] if storyboard_prompts else planned_zimage_prompt
+            hidream_prompt_sent = storyboard_prompts[0] if storyboard_prompts else planned_hidream_prompt
             ltx_prompt_sent = take_ltx_prompts[0] if take_ltx_prompts else planned_ltx_prompt
 
-            if not zimage_prompt_sent and str(policy.get("zimage")) == "positive_only":
-                zimage_prompt_sent = positive_model_prompt
+            if not hidream_prompt_sent and str(policy.get("hidream")) == "positive_only":
+                hidream_prompt_sent = positive_model_prompt
             if not ltx_prompt_sent:
                 ltx_prompt_sent = combined_model_prompt
 
-            source_zimage = str(source.get("zimage") or ("positive_model_prompt" if zimage_prompt_sent == positive_model_prompt else "unknown"))
+            source_hidream = str(source.get("hidream") or ("positive_model_prompt" if hidream_prompt_sent == positive_model_prompt else "unknown"))
             source_ltx = str(source.get("ltx") or ("combined_model_prompt" if ltx_prompt_sent == combined_model_prompt else "unknown"))
 
-            zimage_leaks = [term for term in leaked_terms if term and term in zimage_prompt_sent]
+            hidream_leaks = [term for term in leaked_terms if term and term in hidream_prompt_sent]
             ltx_leaks = [term for term in leaked_terms if term and term in ltx_prompt_sent]
-            zimage_script_leaks = [term for term in script_snippets if term and term in zimage_prompt_sent]
+            hidream_script_leaks = [term for term in script_snippets if term and term in hidream_prompt_sent]
             ltx_script_leaks = [term for term in script_snippets if term and term in ltx_prompt_sent]
             risky_positive_terms = [
                 term
@@ -1048,12 +1048,12 @@ class VideoAgent:
                 if PromptBuilder._term_is_positive_leak(positive_model_prompt, term)
             ]
             warnings: list[str] = []
-            if source_zimage == "debug_prompt" or source_ltx == "debug_prompt":
+            if source_hidream == "debug_prompt" or source_ltx == "debug_prompt":
                 warnings.append("prompt_sent_to_backend_source_debug_prompt")
-            if zimage_leaks or ltx_leaks or zimage_script_leaks or ltx_script_leaks:
+            if hidream_leaks or ltx_leaks or hidream_script_leaks or ltx_script_leaks:
                 warnings.append("backend_prompt_leak_detected")
-            if str(policy.get("zimage")) == "positive_only" and "Avoid:" in zimage_prompt_sent:
-                warnings.append("zimage_positive_only_policy_not_applied")
+            if str(policy.get("hidream")) == "positive_only" and "Avoid:" in hidream_prompt_sent:
+                warnings.append("hidream_positive_only_policy_not_applied")
 
             scenes.append(
                 {
@@ -1067,22 +1067,22 @@ class VideoAgent:
                     "positive_model_prompt": positive_model_prompt,
                     "negative_model_prompt": negative_model_prompt,
                     "combined_model_prompt": combined_model_prompt,
-                    "zimage_prompt_sent": zimage_prompt_sent or None,
+                    "hidream_prompt_sent": hidream_prompt_sent or None,
                     "ltx_prompt_sent": ltx_prompt_sent or None,
                     "ltx_positive_prompt_sent": positive_model_prompt or None,
                     "ltx_negative_prompt_sent": negative_model_prompt or None,
                     "ltx_negative_prompt_supported": False,
                     "prompt_sent_to_backend_source": {
-                        "zimage": source_zimage,
+                        "hidream": source_hidream,
                         "ltx": source_ltx,
                     },
                     "prompt_checks": {
-                        "zimage_no_debug_labels": not any(label in zimage_prompt_sent for label in PromptBuilder.DEBUG_LABELS),
-                        "zimage_no_script_snippets": not zimage_script_leaks,
+                        "hidream_no_debug_labels": not any(label in hidream_prompt_sent for label in PromptBuilder.DEBUG_LABELS),
+                        "hidream_no_script_snippets": not hidream_script_leaks,
                         "ltx_no_debug_labels": not any(label in ltx_prompt_sent for label in PromptBuilder.DEBUG_LABELS),
                         "ltx_no_script_snippets": not ltx_script_leaks,
                         "no_risky_positive_terms": not risky_positive_terms,
-                        "zimage_prompt_word_count_ok": len(zimage_prompt_sent.split()) <= 100,
+                        "hidream_prompt_word_count_ok": len(hidream_prompt_sent.split()) <= 100,
                         "ltx_prompt_word_count_ok": len(ltx_prompt_sent.split()) <= 140,
                     },
                     "warnings": warnings,
@@ -1126,20 +1126,20 @@ class VideoAgent:
             "review_plan": (plan.metadata.get("stage_contracts") or {}).get("review_plan"),
             "backend_prompt_policy": first_policy or PromptBuilder.DEFAULT_BACKEND_PROMPT_POLICY,
             "backend_prompt_policy_notes": {
-                "zimage": "positive_only; zimage_prompt_sent must stay free of Avoid/debug/script content",
+                "hidream": "positive_only; hidream_prompt_sent must stay free of Avoid/debug/script content",
                 "ltx": "positive_plus_short_avoid; G2 records ltx_positive_prompt_sent and ltx_negative_prompt_sent for future adapter separation",
                 "ltx_negative_prompt_supported": False,
             },
             "scenes": scenes,
             "checks": {
                 "backend_prompt_policy_applied": all(
-                    scene["prompt_sent_to_backend_source"]["zimage"] != "debug_prompt"
+                    scene["prompt_sent_to_backend_source"]["hidream"] != "debug_prompt"
                     and scene["prompt_sent_to_backend_source"]["ltx"] != "debug_prompt"
                     for scene in scenes
                 ),
-                "zimage_positive_only_applied": all(
-                    scene["prompt_sent_to_backend_source"]["zimage"] == "positive_model_prompt"
-                    and "Avoid:" not in str(scene.get("zimage_prompt_sent") or "")
+                "hidream_positive_only_applied": all(
+                    scene["prompt_sent_to_backend_source"]["hidream"] == "positive_model_prompt"
+                    and "Avoid:" not in str(scene.get("hidream_prompt_sent") or "")
                     for scene in scenes
                 ),
                 "ltx_short_avoid_applied": all(
@@ -1147,11 +1147,11 @@ class VideoAgent:
                     for scene in scenes
                 ),
                 "no_debug_labels_in_backend_prompts": all(
-                    scene["prompt_checks"]["zimage_no_debug_labels"] and scene["prompt_checks"]["ltx_no_debug_labels"]
+                    scene["prompt_checks"]["hidream_no_debug_labels"] and scene["prompt_checks"]["ltx_no_debug_labels"]
                     for scene in scenes
                 ),
                 "no_script_snippets_in_backend_prompts": all(
-                    scene["prompt_checks"]["zimage_no_script_snippets"] and scene["prompt_checks"]["ltx_no_script_snippets"]
+                    scene["prompt_checks"]["hidream_no_script_snippets"] and scene["prompt_checks"]["ltx_no_script_snippets"]
                     for scene in scenes
                 ),
                 "no_risky_positive_terms": all(scene["prompt_checks"]["no_risky_positive_terms"] for scene in scenes),

@@ -207,7 +207,7 @@ class CockpitStateAdapter:
             ),
             artifacts=ArtifactsData(
                 lines=(
-                    (f"{_artifact_mark(inspection, 'zimage_prompts.json')} zimage_prompts.json", bool(inspection.artifacts.get("zimage_prompts.json"))),
+                    (f"{_artifact_mark(inspection, 'hidream_prompts.json')} hidream_prompts.json", bool(inspection.artifacts.get("hidream_prompts.json"))),
                     _keyframe_artifact_line(inspection, workspace_scenes),
                     (f"{_artifact_mark(inspection, 'keyframe_gallery.html')} keyframe_gallery.html", bool(inspection.artifacts.get("keyframe_gallery.html"))),
                     (
@@ -447,7 +447,7 @@ def _system_rows(inspection: RunInspection) -> tuple[tuple[str, str], ...]:
 def _image_backend_row(inspection: RunInspection) -> str:
     manifest = inspection.data.get("keyframe_manifest")
     if isinstance(manifest, dict):
-        backend = str(manifest.get("backend") or "zimage_http")
+        backend = str(manifest.get("backend") or "hidream_o1_dev")
         if manifest.get("backend_status") == "available":
             return f"✓ {backend}"
         reason = str(manifest.get("backend_reason") or "missing")
@@ -605,7 +605,7 @@ def _motion_items(inspection: RunInspection) -> list[WorkspaceSceneData]:
         return []
     prompts = inspection.data.get("ltx_motion_prompts") or []
     if not isinstance(prompts, list):
-        prompt_items = inspection.data.get("zimage_prompts") or []
+        prompt_items = inspection.data.get("hidream_prompts") or []
         if not isinstance(prompt_items, list):
             return []
         return [

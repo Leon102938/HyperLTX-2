@@ -20,7 +20,7 @@
     "stages/beat_planning",
     "stages/visual_direction",
     "stages/model_prompting",
-    "models/zimage_turbo",
+    "models/hidream_o1_dev",
     "models/ltx_video",
     "review/visual_quality_review",
     "review/boring_scene_detection"
@@ -121,7 +121,7 @@
       "stage": "model_prompt_compile",
       "required_inputs": ["scene_plan.json"],
       "produced_artifacts": ["prompt_audit.json", "model_prompts.json"],
-      "required_skills": ["stages/model_prompting", "prompting/positive_image_prompting", "prompting/video_prompting", "prompting/negative_prompt_policy", "models/zimage_turbo", "models/ltx_video"],
+      "required_skills": ["stages/model_prompting", "prompting/positive_image_prompting", "prompting/video_prompting", "prompting/negative_prompt_policy", "models/hidream_o1_dev", "models/ltx_video"],
       "checkpoint_id": "model_prompt_compile",
       "approval_required": false,
       "blocking": true
@@ -141,7 +141,7 @@
       "stage": "storyboard_optional",
       "required_inputs": ["model_prompts.json"],
       "produced_artifacts": ["storyboard_plan.json"],
-      "required_skills": ["models/zimage_turbo", "prompting/positive_image_prompting"],
+      "required_skills": ["models/hidream_o1_dev", "prompting/positive_image_prompting"],
       "checkpoint_id": "storyboard_optional",
       "approval_required": false,
       "blocking": false,

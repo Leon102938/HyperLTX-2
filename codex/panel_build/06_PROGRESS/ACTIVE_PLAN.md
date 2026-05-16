@@ -1,6 +1,6 @@
 # Active Plan
 
-Stand: 2026-05-14, Phase-1-Live-Orchestrator V3 Stage 00-09.
+Stand: 2026-05-15, Skill Tree V1 in Phase 1 Stage 03-08.
 
 ## Aktueller Build-Stand
 
@@ -13,6 +13,10 @@ Der zusaetzliche Live-Pfad `creative-os run-phase1-live` schreibt waehrend des R
 V2-Korrektur: Stage `09` wird nur `done`, wenn `keyframe_manifest.json` alle Jobs als `finished` mit `file_exists=true` meldet. Disabled/missing Backend bleibt `paused_missing_backend`, completed nur `00` bis `08`, Stage `09=error`.
 
 V3-Korrektur: Stage `10` bis `15` sind fuer Phase-1-Runs out-of-scope/not built und koennen in der Pipeline Map nicht gruen werden. Stage `09` zeigt echte Manifest-/Live-Daten im Workspace und schreibt das Manifest waehrend echter Image-Generierung fort. Watch-Refresh bleibt semantisch und ueberschreibt manuelle Stage-Auswahl nicht.
+
+Skill Tree V1 ist jetzt der echte Stage-03-Input fuer Phase 1. Der Loader liest `/workspace/skills/skill_manifest.json`, laedt Mode-, Style-, Hook- und Model-Skill-Dateien und schreibt `skill_match.json` sowie `skill_tree.json`. Fehlende Skill-Dateien werden als `missing`/`unknown` gemeldet, nicht gefaked.
+
+Stage `04` bis `08` lesen die geladenen Regeln minimal, aber echt: `creative_strategy.json` bekommt Mode/Style-Regeln, `beat_hook_plan.json` Hook-Regeln, `creative_judge.json` aktive Skill-Regeln, `scene_contracts.json` Style/Model-Regeln und `prompt_payload_compiled.json`/`zimage_prompts.json` die Z-Image-Textartefaktregeln.
 
 CLI:
 

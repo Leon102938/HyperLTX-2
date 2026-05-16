@@ -23,8 +23,8 @@ Use before sending prompts to image/storyboard backends.
 - Do not ask for typography.
 
 ## output_contract
-- positive_model_prompt is usable as zimage_prompt_sent.
-- zimage_prompt_sent has no Avoid section.
+- positive_model_prompt is usable as hidream_prompt_sent.
+- hidream_prompt_sent has no Avoid section.
 
 ## common_failures
 - Prompt mentions forbidden object and model draws it.

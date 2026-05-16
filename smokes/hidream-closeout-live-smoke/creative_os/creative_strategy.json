@@ -1,0 +1,52 @@
+{
+  "stage": "04",
+  "status": "ready",
+  "source": "skills loaded",
+  "skill_source": {
+    "source": "skills loaded",
+    "version": "skill_tree_v1",
+    "loaded": {
+      "modes": [
+        "modes/calm_evergreen"
+      ],
+      "styles": [
+        "styles/clean_warm_lifestyle"
+      ],
+      "hooks": [
+        "hooks/soft_observation_hook"
+      ],
+      "models": [
+        "models/hidream_o1_dev_prompt_rules",
+        "models/hidream_o1_storyboard_rules",
+        "models/hidream_o1_no_unwanted_text_rules",
+        "models/ltx_motion_rules",
+        "models/qwen_tts_delivery_rules"
+      ]
+    },
+    "missing": []
+  },
+  "inputs": {
+    "job_id": "hidream-closeout-live-smoke",
+    "pipeline": "shortform_storyboard_v1",
+    "mode": "calm_evergreen",
+    "style": "clean_warm_lifestyle",
+    "skills_loaded": 8
+  },
+  "strategy_pattern": "three-beat visual escalation",
+  "core_idea": "calm evergreen morning routine tip unfolds through a clear setup, discovery, and payoff.",
+  "camera_visual_rules": [
+    "one clear subject per scene",
+    "no readable text",
+    "strong foreground/midground/background",
+    "motion cue per shot",
+    "Open with a quiet observation.",
+    "Make the idea feel reusable tomorrow.",
+    "Prefer steady pacing and clear everyday actions.",
+    "Avoid urgency, hype, and dramatic conflict.",
+    "Warm daylight, soft shadows, clean surfaces.",
+    "Human-scale framing and believable home details.",
+    "Minimal props, no labels, no papers, no screens.",
+    "Colors should feel fresh, neutral, and warm without looking beige-only."
+  ],
+  "output_readiness": "ready_for_beat_hook_planner"
+}

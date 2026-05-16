@@ -10,10 +10,15 @@ from typing import Any
 from urllib import error, request
 
 from agent_core.creative_os.live_status import LIVE_STAGE_ARTIFACTS, LiveStatusWriter
+from agent_core.creative_os.skill_tree_v1 import load_skill_tree, skill_rules, skill_source_summary
 
 
 DEFAULT_RUNS_ROOT = Path("/workspace/agent_runs")
 DEFAULT_IMAGE_BACKEND_URL = os.environ.get("AGENT_CORE_BASE_URL", "http://127.0.0.1:8000")
+HIDREAM_BACKEND_ID = "hidream_o1_dev"
+HIDREAM_MODEL_ID = "HiDream-O1-Dev"
+HIDREAM_PROMPT_ARTIFACT = "hidream_prompts.json"
+HIDREAM_STEPS = 28
 
 
 @dataclass(frozen=True)
@@ -28,7 +33,7 @@ class Phase1RunConfig:
     scene_count: int = 3
     runs_root: Path = DEFAULT_RUNS_ROOT
     image_backend_url: str = DEFAULT_IMAGE_BACKEND_URL
-    image_backend: str = "zimage_http"
+    image_backend: str = HIDREAM_BACKEND_ID
     attempt_images: bool = True
     stage_delay_seconds: float = 0.0
 
@@ -38,7 +43,7 @@ class RetryKeyframeConfig:
     job_id: str
     runs_root: Path = DEFAULT_RUNS_ROOT
     image_backend_url: str = DEFAULT_IMAGE_BACKEND_URL
-    image_backend: str = "zimage_http"
+    image_backend: str = HIDREAM_BACKEND_ID
     scene_id: str | None = None
     force: bool = False
     dry_run: bool = False
@@ -54,11 +59,11 @@ def run_phase1(config: Phase1RunConfig) -> dict[str, Any]:
     pipeline_route = _pipeline_route(config)
     mode_style = _mode_style(config)
     skill_match, skill_tree = _skill_artifacts(config)
-    creative_strategy = _creative_strategy(config, normalized_job, mode_style, skill_match)
-    beat_hook_plan = _beat_hook_plan(config, creative_strategy)
-    creative_judge = _creative_judge(config, creative_strategy, beat_hook_plan)
-    scene_contracts = _scene_contracts(config, creative_judge)
-    prompt_payload, zimage_prompts = _prompt_payload(config, scene_contracts)
+    creative_strategy = _creative_strategy(config, normalized_job, mode_style, skill_match, skill_tree)
+    beat_hook_plan = _beat_hook_plan(config, creative_strategy, skill_tree)
+    creative_judge = _creative_judge(config, creative_strategy, beat_hook_plan, skill_tree)
+    scene_contracts = _scene_contracts(config, creative_judge, skill_tree)
+    prompt_payload, hidream_prompts = _prompt_payload(config, scene_contracts, skill_tree)
 
     _write_json(run_dir / "normalized_job.json", normalized_job)
     _write_json(run_dir / "pipeline_route.json", pipeline_route)
@@ -75,9 +80,9 @@ def run_phase1(config: Phase1RunConfig) -> dict[str, Any]:
     _write_json(run_dir / "scene_contracts.json", scene_contracts)
     _write_json(run_dir / "keyframe_contracts.json", scene_contracts)
     _write_json(run_dir / "prompt_payload_compiled.json", prompt_payload)
-    _write_json(run_dir / "zimage_prompts.json", zimage_prompts)
+    _write_json(run_dir / HIDREAM_PROMPT_ARTIFACT, hidream_prompts)
 
-    manifest = _run_image_jobs(config, run_dir, zimage_prompts)
+    manifest = _run_image_jobs(config, run_dir, hidream_prompts)
     gallery_path = _write_keyframe_gallery(run_dir, manifest)
     if gallery_path:
         manifest["gallery_path"] = str(gallery_path)
@@ -99,7 +104,7 @@ def run_phase1(config: Phase1RunConfig) -> dict[str, Any]:
             "05": "beat_hook_plan.json",
             "06": "creative_judge.json",
             "07": "scene_contracts.json",
-            "08": "prompt_payload_compiled.json / zimage_prompts.json",
+            "08": f"prompt_payload_compiled.json / {HIDREAM_PROMPT_ARTIFACT}",
             "09": "keyframe_manifest.json",
         },
     }
@@ -142,40 +147,40 @@ def run_phase1_live(config: Phase1RunConfig) -> dict[str, Any]:
         _stage_delay(config)
 
         live.stage_running("04")
-        creative_strategy = _creative_strategy(config, normalized_job, mode_style, skill_match)
+        creative_strategy = _creative_strategy(config, normalized_job, mode_style, skill_match, skill_tree)
         _write_live_stage(run_dir, live, "04", "creative_strategy.json", creative_strategy)
         _stage_delay(config)
 
         live.stage_running("05")
-        beat_hook_plan = _beat_hook_plan(config, creative_strategy)
+        beat_hook_plan = _beat_hook_plan(config, creative_strategy, skill_tree)
         _write_json(run_dir / "beat_hook_plan.json", beat_hook_plan)
         _write_json(run_dir / "selected_beat_plan.json", beat_hook_plan["selected_beat_plan"])
         _finish_live_artifact(run_dir, live, "05", "beat_hook_plan.json")
         _stage_delay(config)
 
         live.stage_running("06")
-        creative_judge = _creative_judge(config, creative_strategy, beat_hook_plan)
+        creative_judge = _creative_judge(config, creative_strategy, beat_hook_plan, skill_tree)
         _write_json(run_dir / "creative_judge.json", creative_judge)
         _write_json(run_dir / "stage6_review_decision.json", _stage6_compat_decision(creative_judge))
         _finish_live_artifact(run_dir, live, "06", "creative_judge.json")
         _stage_delay(config)
 
         live.stage_running("07")
-        scene_contracts = _scene_contracts(config, creative_judge)
+        scene_contracts = _scene_contracts(config, creative_judge, skill_tree)
         _write_json(run_dir / "scene_contracts.json", scene_contracts)
         _write_json(run_dir / "keyframe_contracts.json", scene_contracts)
         _finish_live_artifact(run_dir, live, "07", "scene_contracts.json")
         _stage_delay(config)
 
         live.stage_running("08")
-        prompt_payload, zimage_prompts = _prompt_payload(config, scene_contracts)
+        prompt_payload, hidream_prompts = _prompt_payload(config, scene_contracts, skill_tree)
         _write_json(run_dir / "prompt_payload_compiled.json", prompt_payload)
-        _write_json(run_dir / "zimage_prompts.json", zimage_prompts)
+        _write_json(run_dir / HIDREAM_PROMPT_ARTIFACT, hidream_prompts)
         _finish_live_artifact(run_dir, live, "08", "prompt_payload_compiled.json")
         _stage_delay(config)
 
         live.stage_running("09")
-        manifest = _run_image_jobs(config, run_dir, zimage_prompts, on_update=lambda payload: _write_json(run_dir / "keyframe_manifest.json", payload))
+        manifest = _run_image_jobs(config, run_dir, hidream_prompts, on_update=lambda payload: _write_json(run_dir / "keyframe_manifest.json", payload))
         gallery_path = _write_keyframe_gallery(run_dir, manifest)
         if gallery_path:
             manifest["gallery_path"] = str(gallery_path)
@@ -229,7 +234,7 @@ def retry_keyframes(config: RetryKeyframeConfig) -> dict[str, Any]:
         return summary
 
     started = time.monotonic()
-    backend = _probe_zimage(run_config.image_backend_url)
+    backend = _probe_hidream(run_config.image_backend_url)
     retry_scenes = {item["scene_id"] for item in retry_plan}
     for job in manifest["jobs"]:
         if not isinstance(job, dict) or str(job.get("scene_id") or "") not in retry_scenes:
@@ -254,7 +259,7 @@ def retry_keyframes(config: RetryKeyframeConfig) -> dict[str, Any]:
             }
         )
         if backend["available"]:
-            _submit_zimage_job(run_config, {"scene_id": scene_id, "prompt": prompt_text}, output_path, job, started)
+            _submit_hidream_job(run_config, {"scene_id": scene_id, "prompt": prompt_text}, output_path, job, started)
         else:
             job["status"] = "error"
             job["error"] = backend["reason"]
@@ -352,84 +357,59 @@ def _mode_style(config: Phase1RunConfig) -> dict[str, Any]:
 
 
 def _skill_artifacts(config: Phase1RunConfig) -> tuple[dict[str, Any], dict[str, Any]]:
-    root = Path("/workspace/agent_core/creative_system/skills")
-    requested = {
-        "mode_skills": [f"modes/{config.mode}", "stages/visual_direction"],
-        "style_skills": [f"styles/{config.style}", "directing/clean_lifestyle_direction"],
-        "hook_creative_skills": ["stages/creative_strategy", "stages/beat_planning", "directing/shortform_visual_director"],
-        "model_skills": ["stages/model_prompting", "prompting/positive_image_prompting", "prompting/negative_prompt_policy"],
-    }
-    loaded: list[str] = []
-    missing: list[str] = []
-    fallbacks: list[str] = []
-    reasons: dict[str, str] = {}
-    for group, skill_ids in requested.items():
-        for skill_id in skill_ids:
-            if _skill_exists(root, skill_id):
-                loaded.append(skill_id)
-            elif "/" in skill_id and (skill_id.startswith("modes/") or skill_id.startswith("styles/")):
-                missing.append(skill_id)
-                fallback = "stages/visual_direction" if skill_id.startswith("modes/") else "directing/clean_lifestyle_direction"
-                fallbacks.append(fallback)
-                reasons[skill_id] = f"fallback for missing {skill_id}"
-            else:
-                missing.append(skill_id)
-                reasons[skill_id] = "not found"
-    fallbacks = sorted(set(fallbacks))
-    loaded = sorted(set(loaded + fallbacks))
-    missing = sorted(set(missing))
-    skill_match = {
-        "stage": "03",
-        "status": "ok",
-        "loaded_skill_ids": loaded,
-        "fallback_skill_ids": fallbacks,
-        "missing_skill_ids": missing,
-        "missing_optional": [skill for skill in missing if skill in reasons and reasons[skill].startswith("fallback")],
-        "blocking_missing": [skill for skill in missing if not reasons.get(skill, "").startswith("fallback")],
-        "reasons": reasons,
-        "groups": requested,
-        "note": "Pipeline has no skills; skills are selected from mode, style, hook/creative, and model needs.",
-    }
-    return skill_match, {"stage": "03", "skill_tree_v1": requested, "match": skill_match}
+    return load_skill_tree(config)
 
 
-def _creative_strategy(config: Phase1RunConfig, job: dict[str, Any], mode_style: dict[str, Any], skill_match: dict[str, Any]) -> dict[str, Any]:
+def _creative_strategy(config: Phase1RunConfig, job: dict[str, Any], mode_style: dict[str, Any], skill_match: dict[str, Any], skill_tree: dict[str, Any]) -> dict[str, Any]:
+    mode_style_rules = skill_rules(skill_tree, ("modes", "styles"))
     return {
         "stage": "04",
         "status": "ready",
+        "source": "skills loaded",
+        "skill_source": skill_source_summary(skill_tree),
         "inputs": {"job_id": config.job_id, "pipeline": config.pipeline, "mode": config.mode, "style": config.style, "skills_loaded": len(skill_match["loaded_skill_ids"])},
         "strategy_pattern": "three-beat visual escalation",
         "core_idea": f"{config.topic} unfolds through a clear setup, discovery, and payoff.",
-        "camera_visual_rules": ["one clear subject per scene", "no readable text", "strong foreground/midground/background", "motion cue per shot"],
+        "camera_visual_rules": ["one clear subject per scene", "no readable text", "strong foreground/midground/background", "motion cue per shot", *mode_style_rules[:8]],
         "output_readiness": "ready_for_beat_hook_planner",
     }
 
 
-def _beat_hook_plan(config: Phase1RunConfig, strategy: dict[str, Any]) -> dict[str, Any]:
+def _beat_hook_plan(config: Phase1RunConfig, strategy: dict[str, Any], skill_tree: dict[str, Any]) -> dict[str, Any]:
+    hook_rules = skill_rules(skill_tree, ("hooks",))
+    hook_text = _hook_text_from_rules(config, hook_rules)
+    hook_type = _hook_type_from_rules(hook_rules)
     options = [
-        {"id": "hook_a", "text": f"Open on an immediate visual mystery in {config.topic}."},
-        {"id": "hook_b", "text": f"Start calm, then reveal movement inside {config.topic}."},
-        {"id": "hook_c", "text": f"Use a strong foreground reveal to pull viewers into {config.topic}."},
+        {"id": "hook_a", "type": hook_type, "text": hook_text, "source": "skills loaded"},
+        {"id": "hook_b", "type": "practical visual setup", "text": f"Begin with the first clear action in {config.topic}."},
+        {"id": "hook_c", "type": "benefit opener", "text": f"Show the useful payoff of {config.topic} in a simple visual moment."},
     ]
-    beats = ["setup: establish the world", "discovery: introduce motion and tension", "payoff: reveal the memorable final image"]
+    beats = ["setup: establish the everyday moment", "development: show the useful action", "payoff: end on the calm practical result"]
     return {
         "stage": "05",
         "status": "selected",
+        "source": "skills loaded",
+        "skill_source": skill_source_summary(skill_tree),
+        "active_hook_rules": hook_rules,
         "hook_brief": {"goal": "fast visual clarity", "topic": config.topic},
         "hook_options": options,
         "beat_candidates": beats,
-        "selected_beat_plan": {"hook": options[0]["text"], "beats": beats, "status": "ready", "handoff": "creative_judge"},
+        "selected_beat_plan": {"hook": options[0]["text"], "hook_type": hook_type, "beats": beats, "status": "ready", "handoff": "creative_judge"},
     }
 
 
-def _creative_judge(config: Phase1RunConfig, strategy: dict[str, Any], beat_plan: dict[str, Any]) -> dict[str, Any]:
+def _creative_judge(config: Phase1RunConfig, strategy: dict[str, Any], beat_plan: dict[str, Any], skill_tree: dict[str, Any]) -> dict[str, Any]:
+    active_rules = skill_rules(skill_tree, ("modes", "styles", "hooks", "models"))
     return {
         "stage": "06",
         "status": "approved",
+        "source": "skills loaded",
+        "skill_source": skill_source_summary(skill_tree),
         "decision": "approved",
         "checks": {"visual_clarity": "passed", "text_risk": "needs_guardrails", "scene_progression": "passed"},
         "risks": ["avoid readable text and signage", "keep subject readable at small mobile size"],
         "fixes": ["add explicit no-text rule to every scene contract", "anchor each scene with one main subject"],
+        "active_skill_rules": active_rules,
         "concept_notes": [strategy["core_idea"], beat_plan["selected_beat_plan"]["hook"]],
         "handoff": "scene_contracts",
     }
@@ -439,48 +419,206 @@ def _stage6_compat_decision(judge: dict[str, Any]) -> dict[str, Any]:
     return {"status": judge["status"], "decision": judge["decision"], "reviewer": "phase1_runtime", "issues": judge["risks"], "fixes": judge["fixes"]}
 
 
-def _scene_contracts(config: Phase1RunConfig, judge: dict[str, Any]) -> list[dict[str, Any]]:
+def _hook_text_from_rules(config: Phase1RunConfig, hook_rules: list[str]) -> str:
+    joined = " ".join(hook_rules).lower()
+    if "quiet observation" in joined or "calm observation" in joined or "small everyday moment" in joined:
+        return f"Start with a small everyday observation in {config.topic}, using a soft visual opening."
+    if "benefit" in joined or "useful outcome" in joined:
+        return f"Show the useful outcome of {config.topic} first."
+    if "problem" in joined or "friction" in joined:
+        return f"Start with the small friction inside {config.topic}."
+    if "market" in joined or "neutral" in joined:
+        return f"Open on one visible shift in {config.topic}, with unknown values left unstated."
+    return f"Open on an immediate visual question in {config.topic}."
+
+
+def _hook_type_from_rules(hook_rules: list[str]) -> str:
+    joined = " ".join(hook_rules).lower()
+    if "quiet observation" in joined or "small everyday moment" in joined:
+        return "soft observation"
+    if "benefit" in joined or "useful outcome" in joined:
+        return "benefit opener"
+    if "problem" in joined or "friction" in joined:
+        return "small problem"
+    if "market" in joined:
+        return "market shift"
+    return "curiosity question"
+
+
+def _is_hidream_text_rule(rule: str) -> bool:
+    text = rule.lower()
+    return any(
+        token in text
+        for token in (
+            "text",
+            "letter",
+            "number",
+            "logo",
+            "label",
+            "ui",
+            "screen",
+            "caption",
+            "subtitle",
+            "watermark",
+            "document",
+            "chart",
+            "poster",
+            "title card",
+            "quote card",
+            "typography",
+            "headline",
+            "social media graphic",
+        )
+    )
+
+
+def _model_rules_for_ids(skill_tree: dict[str, Any], skill_ids: tuple[str, ...]) -> list[str]:
+    wanted = set(skill_ids)
+    loaded = skill_tree.get("loaded_skills") if isinstance(skill_tree.get("loaded_skills"), dict) else {}
+    rules: list[str] = []
+    for skill in loaded.get("models", []) or []:
+        if isinstance(skill, dict) and str(skill.get("id") or "") in wanted:
+            rules.extend(str(rule) for rule in skill.get("rules", []) or [])
+    return rules
+
+
+def _prompt_mood(config: Phase1RunConfig) -> str:
+    if config.mode == "calm_evergreen":
+        return "calm, gentle, useful"
+    if config.mode == "finance_short":
+        return "neutral, clear, grounded"
+    if config.mode == "practical_tip":
+        return "practical, focused, helpful"
+    return "clear, cinematic, composed"
+
+
+def _clean_image_prompt(config: Phase1RunConfig, scene: dict[str, Any]) -> str:
+    motif = scene.get("visual_motif") if isinstance(scene.get("visual_motif"), dict) else {}
+    physical_objects = motif.get("physical_objects") if isinstance(motif.get("physical_objects"), list) else []
+    object_text = ", ".join(str(item) for item in physical_objects[:6])
+    parts = [
+        f"subject: {motif.get('subject') or scene.get('visual_anchor') or 'clear physical subject'}",
+        f"environment: {motif.get('environment') or scene.get('environment') or 'real photographed environment'}",
+        f"physical objects: {object_text or 'plain unmarked everyday objects'}",
+        f"action: {motif.get('action') or scene.get('action') or 'simple visible action'}",
+        f"camera: {motif.get('camera') or scene.get('camera') or 'steady camera'}",
+        f"lighting: {motif.get('lighting') or scene.get('lighting') or 'natural light'}",
+        f"style: {config.style}",
+        f"mood: {scene.get('mood') or _prompt_mood(config)}",
+        f"composition: {scene.get('composition') or 'one clear subject, uncluttered frame, plain unmarked surfaces'}",
+    ]
+    return ", ".join(parts)
+
+
+def _visual_motif(config: Phase1RunConfig, index: int) -> dict[str, Any]:
+    if config.mode == "calm_evergreen" and config.style == "clean_warm_lifestyle":
+        motifs = [
+            {
+                "subject": "warm morning kitchen counter still life",
+                "environment": "quiet home kitchen beside a window",
+                "physical_objects": ["ceramic mug", "folded linen towel", "small green plant", "wood counter", "plain saucer"],
+                "action": "soft morning light settling across the counter",
+                "camera": "gentle close establishing frame",
+                "lighting": "soft window light",
+                "forbidden_composition": ["poster", "title card", "quote card", "typography layout", "centered text composition", "wall headline"],
+                "text_risk": "high_if_topic_words_rendered",
+            },
+            {
+                "subject": "person preparing a simple morning habit",
+                "environment": "calm home detail near a kitchen window",
+                "physical_objects": ["hand", "ceramic mug", "clear water carafe", "curtain edge", "small green plant"],
+                "action": "hand pouring water and placing the mug into a quiet routine setup",
+                "camera": "natural over-the-counter close shot",
+                "lighting": "soft daylight through curtains",
+                "forbidden_composition": ["poster", "title card", "quote card", "typography layout", "centered text composition", "social media graphic"],
+                "text_risk": "avoid labels, packaging, screens, and printed words",
+            },
+            {
+                "subject": "finished quiet morning routine setup",
+                "environment": "clean table in warm daylight",
+                "physical_objects": ["ceramic mug", "closed plain unmarked notebook", "small green plant", "folded linen towel", "wood table"],
+                "action": "finished calm setup resting in place",
+                "camera": "steady composed tabletop frame",
+                "lighting": "warm soft daylight",
+                "forbidden_composition": ["poster", "title card", "quote card", "blank wall headline", "typography layout", "printed words"],
+                "text_risk": "closed notebook must be plain and unmarked",
+            },
+        ]
+        return motifs[(index - 1) % len(motifs)]
+    return {
+        "subject": "real photographed physical scene",
+        "environment": "concrete everyday environment",
+        "physical_objects": ["plain unmarked object", "natural surface", "simple background"],
+        "action": "clear physical action related to the idea",
+        "camera": "steady composed shot",
+        "lighting": "natural light",
+        "forbidden_composition": ["poster", "title card", "quote card", "typography layout", "centered text composition"],
+        "text_risk": "never render topic words as visible text",
+    }
+
+
+def _scene_contracts(config: Phase1RunConfig, judge: dict[str, Any], skill_tree: dict[str, Any]) -> list[dict[str, Any]]:
     anchors = ["wide establishing reveal", "close subject action", "final cinematic payoff"]
+    style_rules = skill_rules(skill_tree, ("styles",))
+    model_rules = skill_rules(skill_tree, ("models",))
     scenes: list[dict[str, Any]] = []
     for index in range(1, config.scene_count + 1):
         scene_id = f"scene_{index:02d}"
         anchor = anchors[(index - 1) % len(anchors)]
+        motif = _visual_motif(config, index)
         scenes.append(
             {
                 "stage": "07",
+                "source": "skills loaded",
+                "skill_rules_applied": {"style": style_rules, "model": model_rules},
                 "scene_id": scene_id,
                 "title": f"{config.topic} / {anchor}",
+                "topic_metadata": config.topic,
                 "visual_anchor": anchor,
-                "environment": f"{config.topic}, natural environment, no signs or readable text",
-                "action": ["establish location", "show subject motion", "resolve with memorable image"][(index - 1) % 3],
-                "camera": ["slow push-in", "low tracking shot", "controlled reveal"][(index - 1) % 3],
-                "lighting": "cinematic natural light",
-                "allowed_visuals": ["natural subjects", "clear depth", "cinematic atmosphere"],
+                "visual_motif": motif,
+                "environment": motif["environment"],
+                "physical_objects": motif["physical_objects"],
+                "action": motif["action"],
+                "camera": motif["camera"],
+                "lighting": motif["lighting"],
+                "mood": _prompt_mood(config),
+                "composition": "one clear subject, uncluttered frame, plain unmarked surfaces",
+                "allowed_visuals": ["everyday subjects", "clear depth", "plain unmarked surfaces"],
                 "forbidden_visuals": ["readable text", "logos", "UI screens", "paper labels"],
+                "forbidden_composition": motif["forbidden_composition"],
                 "text_glyph_risk": "blocked_by_prompt_rules",
+                "text_risk": motif["text_risk"],
                 "status": "ready_for_prompt_compiler",
             }
         )
     return scenes
 
 
-def _prompt_payload(config: Phase1RunConfig, scene_contracts: list[dict[str, Any]]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+def _prompt_payload(config: Phase1RunConfig, scene_contracts: list[dict[str, Any]], skill_tree: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     prompts: list[dict[str, Any]] = []
+    model_rules = _model_rules_for_ids(skill_tree, ("hidream_o1_dev_prompt_rules", "hidream_o1_storyboard_rules", "hidream_o1_no_unwanted_text_rules"))
+    hidream_rules = [rule for rule in model_rules if _is_hidream_text_rule(rule)]
+    negative_prompt = (
+        "readable text, fake text, typography, letters, numbers, logos, labels, UI, screens, captions, subtitles, "
+        "watermarks, documents, charts, paper labels, distorted letters, poster, title card, quote card, "
+        "typography layout, headline, centered text, wall text, printed words, social media graphic"
+    )
     for scene in scene_contracts:
-        prompt = (
-            f"{scene['visual_anchor']} of {config.topic}, {scene['environment']}, "
-            f"{scene['action']}, {scene['camera']}, {scene['lighting']}, {config.style}, "
-            "high detail, clean subject, no readable text, no logos, no UI"
-        )
+        prompt = _clean_image_prompt(config, scene)
         prompts.append(
             {
                 "stage": "08",
+                "source": "skills loaded",
                 "scene_id": scene["scene_id"],
                 "prompt": prompt,
                 "model_prompt": prompt,
                 "positive_prompt": prompt,
-                "negative_prompt": "readable text, logos, watermarks, UI, paper labels, distorted letters",
-                "backend": "zimage_http",
+                "negative_prompt": negative_prompt,
+                "model_skill_rules": model_rules,
+                "hidream_text_artifact_rules": hidream_rules,
+                "backend": HIDREAM_BACKEND_ID,
+                "model": HIDREAM_MODEL_ID,
+                "steps": HIDREAM_STEPS,
                 "status": "compiled",
                 "source_contract": "scene_contracts.json",
             }
@@ -488,6 +626,9 @@ def _prompt_payload(config: Phase1RunConfig, scene_contracts: list[dict[str, Any
     return {
         "stage": "08",
         "status": "compiled",
+        "source": "skills loaded",
+        "skill_source": skill_source_summary(skill_tree),
+        "model_skill_rules": model_rules,
         "image_prompts": prompts,
         "video_prompt_compiler": "pending_later",
         "audio_prompt_compiler": "pending_later",
@@ -503,7 +644,7 @@ def _run_image_jobs(
     on_update: Any | None = None,
 ) -> dict[str, Any]:
     started = time.monotonic()
-    backend = _probe_zimage(config.image_backend_url) if config.attempt_images else {"available": False, "reason": "disabled_by_cli"}
+    backend = _probe_hidream(config.image_backend_url) if config.attempt_images else {"available": False, "reason": "disabled_by_cli"}
     jobs: list[dict[str, Any]] = []
 
     def refresh_manifest() -> dict[str, Any]:
@@ -531,7 +672,7 @@ def _run_image_jobs(
         jobs.append(job)
         refresh_manifest()
         if backend["available"]:
-            _submit_zimage_job(config, prompt, output_path, job, started, on_update=refresh_manifest)
+            _submit_hidream_job(config, prompt, output_path, job, started, on_update=refresh_manifest)
         else:
             job["status"] = "error"
             job["error"] = backend["reason"]
@@ -545,6 +686,8 @@ def _keyframe_manifest(config: Phase1RunConfig, backend: dict[str, Any], jobs: l
     return {
         "stage": "09",
         "backend": config.image_backend,
+        "model": HIDREAM_MODEL_ID,
+        "steps": HIDREAM_STEPS,
         "backend_url": config.image_backend_url,
         "backend_status": "available" if backend["available"] else "missing",
         "backend_reason": backend["reason"],
@@ -554,7 +697,7 @@ def _keyframe_manifest(config: Phase1RunConfig, backend: dict[str, Any], jobs: l
     }
 
 
-def _submit_zimage_job(
+def _submit_hidream_job(
     config: Phase1RunConfig,
     prompt: dict[str, Any],
     output_path: Path,
@@ -563,17 +706,17 @@ def _submit_zimage_job(
     *,
     on_update: Any | None = None,
 ) -> None:
-    # Phase 1 supports the existing local zimage HTTP contract when present.
     payload = {
         "job_id": f"{config.job_id}_{prompt['scene_id']}",
         "prompt": prompt["prompt"],
+        "model": HIDREAM_MODEL_ID,
         "width": 512 if config.orientation == "portrait" else 768,
         "height": 768 if config.orientation == "portrait" else 512,
-        "steps": 9,
+        "steps": HIDREAM_STEPS,
         "guidance_scale": 0.0,
     }
     try:
-        submit = _http_json(f"{config.image_backend_url.rstrip('/')}/zimage/jobs", method="POST", payload=payload, timeout=60)
+        submit = _http_json(f"{config.image_backend_url.rstrip('/')}/hidream/jobs", method="POST", payload=payload, timeout=60)
         backend_job_id = str(submit.get("job_id") or payload["job_id"])
         job["backend_job_id"] = backend_job_id
         if on_update is not None:
@@ -581,7 +724,7 @@ def _submit_zimage_job(
         latest: dict[str, Any] = {}
         deadline = time.monotonic() + 900
         while time.monotonic() < deadline:
-            latest = _http_json(f"{config.image_backend_url.rstrip('/')}/zimage/jobs/{backend_job_id}", timeout=60)
+            latest = _http_json(f"{config.image_backend_url.rstrip('/')}/hidream/jobs/{backend_job_id}", timeout=60)
             state = str(latest.get("state") or latest.get("status") or "")
             if state in {"succeeded", "failed", "error"}:
                 break
@@ -596,7 +739,7 @@ def _submit_zimage_job(
             time.sleep(2)
         if str(latest.get("state") or latest.get("status")) != "succeeded":
             job["status"] = "error"
-            job["error"] = str(latest.get("error") or "zimage job failed")
+            job["error"] = str(latest.get("error") or "hidream job failed")
             if on_update is not None:
                 on_update()
             return
@@ -622,14 +765,14 @@ def _submit_zimage_job(
             on_update()
 
 
-def _probe_zimage(base_url: str) -> dict[str, Any]:
+def _probe_hidream(base_url: str) -> dict[str, Any]:
     try:
-        payload = _http_json(f"{base_url.rstrip('/')}/DW/zimage_ready", timeout=5)
+        payload = _http_json(f"{base_url.rstrip('/')}/DW/hidream_ready", timeout=5)
         if payload.get("ready"):
             return {"available": True, "reason": "ready"}
-        return {"available": False, "reason": f"zimage readiness false: {payload}"}
+        return {"available": False, "reason": f"hidream readiness false: {payload}"}
     except Exception as exc:
-        return {"available": False, "reason": f"zimage readiness probe failed: {exc}"}
+        return {"available": False, "reason": f"hidream readiness probe failed: {exc}"}
 
 
 def _phase1_status(config: Phase1RunConfig, started: str, manifest: dict[str, Any]) -> dict[str, Any]:
@@ -672,7 +815,7 @@ def _phase1_config_from_run(config: RetryKeyframeConfig, run_dir: Path, manifest
 
 def _prompts_by_scene(run_dir: Path) -> dict[str, str]:
     prompts: dict[str, str] = {}
-    payload = _read_json(run_dir / "zimage_prompts.json")
+    payload = _read_json(run_dir / HIDREAM_PROMPT_ARTIFACT)
     if isinstance(payload, list):
         for item in payload:
             if isinstance(item, dict) and item.get("scene_id"):
@@ -816,7 +959,7 @@ def _phase1_summary(config: Phase1RunConfig, run_dir: Path, manifest: dict[str, 
             "05": "beat_hook_plan.json",
             "06": "creative_judge.json",
             "07": "scene_contracts.json",
-            "08": "prompt_payload_compiled.json / zimage_prompts.json",
+            "08": f"prompt_payload_compiled.json / {HIDREAM_PROMPT_ARTIFACT}",
             "09": "keyframe_manifest.json",
         },
     }

@@ -62,7 +62,7 @@
     "text_policy": "no generated readable text or label-like surfaces"
   },
   "backend_prompt_policy": {
-    "zimage": "positive_only",
+    "hidream": "positive_only",
     "ltx": "positive_plus_short_avoid"
   },
   "scene_arc": {

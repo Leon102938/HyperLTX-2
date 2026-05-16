@@ -5,7 +5,7 @@ Model Prompting Stage Skill
 Compile debug prompts, positive prompts, negative prompts, and backend-specific sent prompts without leakage.
 
 ## when_to_use
-Use whenever prompt_builder prepares prompts for Z-Image, LTX, or review.
+Use whenever prompt_builder prepares prompts for HiDream-O1-Dev, LTX, or review.
 
 ## rules
 - Keep debug_prompt human-readable but never send it to image/video backends.
@@ -13,9 +13,9 @@ Use whenever prompt_builder prepares prompts for Z-Image, LTX, or review.
 - Respect backend prompt policy.
 
 ## do
-- Trace zimage_prompt_sent and ltx prompt fields.
+- Trace hidream_prompt_sent and ltx prompt fields.
 - Warn if fallback/debug prompt would reach a backend.
-- Keep Z-Image positive-only.
+- Keep HiDream-O1-Dev positive-only.
 
 ## dont
 - Do not merge long negative lists into positive image prompts.

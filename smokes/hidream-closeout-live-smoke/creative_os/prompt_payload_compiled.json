@@ -1,0 +1,162 @@
+{
+  "stage": "08",
+  "status": "compiled",
+  "source": "skills loaded",
+  "skill_source": {
+    "source": "skills loaded",
+    "version": "skill_tree_v1",
+    "loaded": {
+      "modes": [
+        "modes/calm_evergreen"
+      ],
+      "styles": [
+        "styles/clean_warm_lifestyle"
+      ],
+      "hooks": [
+        "hooks/soft_observation_hook"
+      ],
+      "models": [
+        "models/hidream_o1_dev_prompt_rules",
+        "models/hidream_o1_storyboard_rules",
+        "models/hidream_o1_no_unwanted_text_rules",
+        "models/ltx_motion_rules",
+        "models/qwen_tts_delivery_rules"
+      ]
+    },
+    "missing": []
+  },
+  "model_skill_rules": [
+    "Compile positive-only image prompts from scene contracts, not topic titles or debug notes.",
+    "Use concrete physical subjects, environments, actions, camera language, lighting, mood, and composition.",
+    "Keep prompts text-sparse and visual-first for HiDream-O1-Dev.",
+    "Default image generation uses HiDream-O1-Dev at 28 inference steps.",
+    "Preserve the selected scene order and one clear visual subject per keyframe.",
+    "Ground each prompt in the scene contract's physical objects, environment, action, camera, and lighting.",
+    "Do not create poster layouts, typography compositions, title cards, quote cards, UI screens, or social-media graphics.",
+    "Prefer photographed, practical visual moments over symbolic diagrams or written explanations.",
+    "Do not generate readable text, fake text, letters, numbers, logos, labels, UI, screens, captions, subtitles, watermarks, documents, charts, paper labels, or distorted letters.",
+    "Use text-sparse visual composition and avoid any written-word focal point.",
+    "Add negative prompt terms for readable text, typography, logos, labels, UI, screens, captions, subtitles, watermarks, documents, charts, poster, title card, quote card, headline, and social media graphic.",
+    "Use plain unmarked surfaces for notebooks, mugs, packages, walls, screens, signs, and paper-like objects.",
+    "Block any composition that depends on written words, centered headlines, text overlays, or poster-style graphic design."
+  ],
+  "image_prompts": [
+    {
+      "stage": "08",
+      "source": "skills loaded",
+      "scene_id": "scene_01",
+      "prompt": "subject: warm morning kitchen counter still life, environment: quiet home kitchen beside a window, physical objects: ceramic mug, folded linen towel, small green plant, wood counter, plain saucer, action: soft morning light settling across the counter, camera: gentle close establishing frame, lighting: soft window light, style: clean_warm_lifestyle, mood: calm, gentle, useful, composition: one clear subject, uncluttered frame, plain unmarked surfaces",
+      "model_prompt": "subject: warm morning kitchen counter still life, environment: quiet home kitchen beside a window, physical objects: ceramic mug, folded linen towel, small green plant, wood counter, plain saucer, action: soft morning light settling across the counter, camera: gentle close establishing frame, lighting: soft window light, style: clean_warm_lifestyle, mood: calm, gentle, useful, composition: one clear subject, uncluttered frame, plain unmarked surfaces",
+      "positive_prompt": "subject: warm morning kitchen counter still life, environment: quiet home kitchen beside a window, physical objects: ceramic mug, folded linen towel, small green plant, wood counter, plain saucer, action: soft morning light settling across the counter, camera: gentle close establishing frame, lighting: soft window light, style: clean_warm_lifestyle, mood: calm, gentle, useful, composition: one clear subject, uncluttered frame, plain unmarked surfaces",
+      "negative_prompt": "readable text, fake text, typography, letters, numbers, logos, labels, UI, screens, captions, subtitles, watermarks, documents, charts, paper labels, distorted letters, poster, title card, quote card, typography layout, headline, centered text, wall text, printed words, social media graphic",
+      "model_skill_rules": [
+        "Compile positive-only image prompts from scene contracts, not topic titles or debug notes.",
+        "Use concrete physical subjects, environments, actions, camera language, lighting, mood, and composition.",
+        "Keep prompts text-sparse and visual-first for HiDream-O1-Dev.",
+        "Default image generation uses HiDream-O1-Dev at 28 inference steps.",
+        "Preserve the selected scene order and one clear visual subject per keyframe.",
+        "Ground each prompt in the scene contract's physical objects, environment, action, camera, and lighting.",
+        "Do not create poster layouts, typography compositions, title cards, quote cards, UI screens, or social-media graphics.",
+        "Prefer photographed, practical visual moments over symbolic diagrams or written explanations.",
+        "Do not generate readable text, fake text, letters, numbers, logos, labels, UI, screens, captions, subtitles, watermarks, documents, charts, paper labels, or distorted letters.",
+        "Use text-sparse visual composition and avoid any written-word focal point.",
+        "Add negative prompt terms for readable text, typography, logos, labels, UI, screens, captions, subtitles, watermarks, documents, charts, poster, title card, quote card, headline, and social media graphic.",
+        "Use plain unmarked surfaces for notebooks, mugs, packages, walls, screens, signs, and paper-like objects.",
+        "Block any composition that depends on written words, centered headlines, text overlays, or poster-style graphic design."
+      ],
+      "hidream_text_artifact_rules": [
+        "Keep prompts text-sparse and visual-first for HiDream-O1-Dev.",
+        "Do not create poster layouts, typography compositions, title cards, quote cards, UI screens, or social-media graphics.",
+        "Do not generate readable text, fake text, letters, numbers, logos, labels, UI, screens, captions, subtitles, watermarks, documents, charts, paper labels, or distorted letters.",
+        "Use text-sparse visual composition and avoid any written-word focal point.",
+        "Add negative prompt terms for readable text, typography, logos, labels, UI, screens, captions, subtitles, watermarks, documents, charts, poster, title card, quote card, headline, and social media graphic.",
+        "Use plain unmarked surfaces for notebooks, mugs, packages, walls, screens, signs, and paper-like objects.",
+        "Block any composition that depends on written words, centered headlines, text overlays, or poster-style graphic design."
+      ],
+      "backend": "hidream_o1_dev",
+      "model": "HiDream-O1-Dev",
+      "steps": 28,
+      "status": "compiled",
+      "source_contract": "scene_contracts.json"
+    },
+    {
+      "stage": "08",
+      "source": "skills loaded",
+      "scene_id": "scene_02",
+      "prompt": "subject: person preparing a simple morning habit, environment: calm home detail near a kitchen window, physical objects: hand, ceramic mug, clear water carafe, curtain edge, small green plant, action: hand pouring water and placing the mug into a quiet routine setup, camera: natural over-the-counter close shot, lighting: soft daylight through curtains, style: clean_warm_lifestyle, mood: calm, gentle, useful, composition: one clear subject, uncluttered frame, plain unmarked surfaces",
+      "model_prompt": "subject: person preparing a simple morning habit, environment: calm home detail near a kitchen window, physical objects: hand, ceramic mug, clear water carafe, curtain edge, small green plant, action: hand pouring water and placing the mug into a quiet routine setup, camera: natural over-the-counter close shot, lighting: soft daylight through curtains, style: clean_warm_lifestyle, mood: calm, gentle, useful, composition: one clear subject, uncluttered frame, plain unmarked surfaces",
+      "positive_prompt": "subject: person preparing a simple morning habit, environment: calm home detail near a kitchen window, physical objects: hand, ceramic mug, clear water carafe, curtain edge, small green plant, action: hand pouring water and placing the mug into a quiet routine setup, camera: natural over-the-counter close shot, lighting: soft daylight through curtains, style: clean_warm_lifestyle, mood: calm, gentle, useful, composition: one clear subject, uncluttered frame, plain unmarked surfaces",
+      "negative_prompt": "readable text, fake text, typography, letters, numbers, logos, labels, UI, screens, captions, subtitles, watermarks, documents, charts, paper labels, distorted letters, poster, title card, quote card, typography layout, headline, centered text, wall text, printed words, social media graphic",
+      "model_skill_rules": [
+        "Compile positive-only image prompts from scene contracts, not topic titles or debug notes.",
+        "Use concrete physical subjects, environments, actions, camera language, lighting, mood, and composition.",
+        "Keep prompts text-sparse and visual-first for HiDream-O1-Dev.",
+        "Default image generation uses HiDream-O1-Dev at 28 inference steps.",
+        "Preserve the selected scene order and one clear visual subject per keyframe.",
+        "Ground each prompt in the scene contract's physical objects, environment, action, camera, and lighting.",
+        "Do not create poster layouts, typography compositions, title cards, quote cards, UI screens, or social-media graphics.",
+        "Prefer photographed, practical visual moments over symbolic diagrams or written explanations.",
+        "Do not generate readable text, fake text, letters, numbers, logos, labels, UI, screens, captions, subtitles, watermarks, documents, charts, paper labels, or distorted letters.",
+        "Use text-sparse visual composition and avoid any written-word focal point.",
+        "Add negative prompt terms for readable text, typography, logos, labels, UI, screens, captions, subtitles, watermarks, documents, charts, poster, title card, quote card, headline, and social media graphic.",
+        "Use plain unmarked surfaces for notebooks, mugs, packages, walls, screens, signs, and paper-like objects.",
+        "Block any composition that depends on written words, centered headlines, text overlays, or poster-style graphic design."
+      ],
+      "hidream_text_artifact_rules": [
+        "Keep prompts text-sparse and visual-first for HiDream-O1-Dev.",
+        "Do not create poster layouts, typography compositions, title cards, quote cards, UI screens, or social-media graphics.",
+        "Do not generate readable text, fake text, letters, numbers, logos, labels, UI, screens, captions, subtitles, watermarks, documents, charts, paper labels, or distorted letters.",
+        "Use text-sparse visual composition and avoid any written-word focal point.",
+        "Add negative prompt terms for readable text, typography, logos, labels, UI, screens, captions, subtitles, watermarks, documents, charts, poster, title card, quote card, headline, and social media graphic.",
+        "Use plain unmarked surfaces for notebooks, mugs, packages, walls, screens, signs, and paper-like objects.",
+        "Block any composition that depends on written words, centered headlines, text overlays, or poster-style graphic design."
+      ],
+      "backend": "hidream_o1_dev",
+      "model": "HiDream-O1-Dev",
+      "steps": 28,
+      "status": "compiled",
+      "source_contract": "scene_contracts.json"
+    },
+    {
+      "stage": "08",
+      "source": "skills loaded",
+      "scene_id": "scene_03",
+      "prompt": "subject: finished quiet morning routine setup, environment: clean table in warm daylight, physical objects: ceramic mug, closed plain unmarked notebook, small green plant, folded linen towel, wood table, action: finished calm setup resting in place, camera: steady composed tabletop frame, lighting: warm soft daylight, style: clean_warm_lifestyle, mood: calm, gentle, useful, composition: one clear subject, uncluttered frame, plain unmarked surfaces",
+      "model_prompt": "subject: finished quiet morning routine setup, environment: clean table in warm daylight, physical objects: ceramic mug, closed plain unmarked notebook, small green plant, folded linen towel, wood table, action: finished calm setup resting in place, camera: steady composed tabletop frame, lighting: warm soft daylight, style: clean_warm_lifestyle, mood: calm, gentle, useful, composition: one clear subject, uncluttered frame, plain unmarked surfaces",
+      "positive_prompt": "subject: finished quiet morning routine setup, environment: clean table in warm daylight, physical objects: ceramic mug, closed plain unmarked notebook, small green plant, folded linen towel, wood table, action: finished calm setup resting in place, camera: steady composed tabletop frame, lighting: warm soft daylight, style: clean_warm_lifestyle, mood: calm, gentle, useful, composition: one clear subject, uncluttered frame, plain unmarked surfaces",
+      "negative_prompt": "readable text, fake text, typography, letters, numbers, logos, labels, UI, screens, captions, subtitles, watermarks, documents, charts, paper labels, distorted letters, poster, title card, quote card, typography layout, headline, centered text, wall text, printed words, social media graphic",
+      "model_skill_rules": [
+        "Compile positive-only image prompts from scene contracts, not topic titles or debug notes.",
+        "Use concrete physical subjects, environments, actions, camera language, lighting, mood, and composition.",
+        "Keep prompts text-sparse and visual-first for HiDream-O1-Dev.",
+        "Default image generation uses HiDream-O1-Dev at 28 inference steps.",
+        "Preserve the selected scene order and one clear visual subject per keyframe.",
+        "Ground each prompt in the scene contract's physical objects, environment, action, camera, and lighting.",
+        "Do not create poster layouts, typography compositions, title cards, quote cards, UI screens, or social-media graphics.",
+        "Prefer photographed, practical visual moments over symbolic diagrams or written explanations.",
+        "Do not generate readable text, fake text, letters, numbers, logos, labels, UI, screens, captions, subtitles, watermarks, documents, charts, paper labels, or distorted letters.",
+        "Use text-sparse visual composition and avoid any written-word focal point.",
+        "Add negative prompt terms for readable text, typography, logos, labels, UI, screens, captions, subtitles, watermarks, documents, charts, poster, title card, quote card, headline, and social media graphic.",
+        "Use plain unmarked surfaces for notebooks, mugs, packages, walls, screens, signs, and paper-like objects.",
+        "Block any composition that depends on written words, centered headlines, text overlays, or poster-style graphic design."
+      ],
+      "hidream_text_artifact_rules": [
+        "Keep prompts text-sparse and visual-first for HiDream-O1-Dev.",
+        "Do not create poster layouts, typography compositions, title cards, quote cards, UI screens, or social-media graphics.",
+        "Do not generate readable text, fake text, letters, numbers, logos, labels, UI, screens, captions, subtitles, watermarks, documents, charts, paper labels, or distorted letters.",
+        "Use text-sparse visual composition and avoid any written-word focal point.",
+        "Add negative prompt terms for readable text, typography, logos, labels, UI, screens, captions, subtitles, watermarks, documents, charts, poster, title card, quote card, headline, and social media graphic.",
+        "Use plain unmarked surfaces for notebooks, mugs, packages, walls, screens, signs, and paper-like objects.",
+        "Block any composition that depends on written words, centered headlines, text overlays, or poster-style graphic design."
+      ],
+      "backend": "hidream_o1_dev",
+      "model": "HiDream-O1-Dev",
+      "steps": 28,
+      "status": "compiled",
+      "source_contract": "scene_contracts.json"
+    }
+  ],
+  "video_prompt_compiler": "pending_later",
+  "audio_prompt_compiler": "pending_later",
+  "music_prompt_compiler": "pending_later"
+}

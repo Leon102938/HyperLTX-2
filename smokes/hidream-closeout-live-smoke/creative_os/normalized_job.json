@@ -1,0 +1,29 @@
+{
+  "stage": "00",
+  "job_id": "hidream-closeout-live-smoke",
+  "topic": "calm evergreen morning routine tip",
+  "pipeline": "shortform_storyboard_v1",
+  "mode": "calm_evergreen",
+  "style": "clean_warm_lifestyle",
+  "orientation": "portrait",
+  "format": "portrait",
+  "resolution": "512x768",
+  "duration_sec": 9,
+  "scene_count": 3,
+  "output_targets": [
+    "pipeline_route",
+    "mode_style",
+    "skills",
+    "strategy",
+    "beats",
+    "judge",
+    "scene_contracts",
+    "image_prompts",
+    "keyframes"
+  ],
+  "created_at": "2026-05-15T12:22:49Z",
+  "command_center": {
+    "source": "agent_core_cli creative-os run-phase1-live",
+    "execution": "cli"
+  }
+}

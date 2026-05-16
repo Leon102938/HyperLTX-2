@@ -11,7 +11,7 @@ LEGACY_STAGES = [
     ("02", "Intent routed", "intent_route.json"),
     ("03", "Skills loaded", "skill_match.json"),
     ("04", "Creative strategy", "creative_strategy.json"),
-    ("05", "Z-Image prompts", "zimage_prompts.json"),
+    ("05", "HiDream prompts", "hidream_prompts.json"),
     ("06", "Keyframes generated", "keyframe_manifest.json"),
     ("07", "Keyframe QA", "keyframe_review.json"),
     ("08", "LTX motion prompts", "ltx_motion_prompts.json"),
@@ -102,7 +102,7 @@ class CreativeOSRunInspector:
             "scene_contracts.json",
             "keyframe_contracts.json",
             "prompt_payload_compiled.json",
-            "zimage_prompts.json",
+            "hidream_prompts.json",
             "keyframe_manifest.json",
             "phase1_status.json",
             "live_status.json",
@@ -158,8 +158,8 @@ class CreativeOSRunInspector:
 
     def _single_stage_status(self, inspection: RunInspection, artifact: str) -> tuple[str, str]:
         run_dir = inspection.run_dir
-        if artifact == "zimage_prompts.json":
-            prompts = inspection.data.get("zimage_prompts")
+        if artifact == "hidream_prompts.json":
+            prompts = inspection.data.get("hidream_prompts")
             if isinstance(prompts, list) and prompts:
                 return "passed", f"{len(prompts)} prompts"
             return ("missing", "missing or empty") if not (run_dir / artifact).exists() else ("unknown", "empty")
@@ -279,7 +279,7 @@ class CreativeOSRunInspector:
         if inspection.status == "ready_for_ltx_i2v_takes":
             return "Stage 09: render 1 LTX I2V take per scene"
         if inspection.status == "phase1_paused_missing_image_backend":
-            return "Start/restore Z-Image backend, then rerun Phase 1 image generation."
+            return "Start/restore HiDream-O1-Dev backend, then rerun Phase 1 image generation."
         if inspection.status == "phase1_finished_stage09":
             return "Phase 1 complete through Stage 09; Stage 10+ runtime is not built."
         for stage in inspection.stages:
@@ -306,15 +306,21 @@ class CreativeOSRunInspector:
         fallbacks = list(match.get("fallback_skill_ids") or [])
         missing = list(match.get("missing_skill_ids") or [])
         reasons = match.get("reasons") or {}
+        explicit_missing_optional = match.get("missing_optional")
+        explicit_blocking_missing = match.get("blocking_missing")
 
-        fallback_covered: set[str] = set()
-        for reason in reasons.values():
-            marker = "fallback for missing "
-            if isinstance(reason, str) and marker in reason:
-                fallback_covered.add(reason.split(marker, 1)[1].strip())
+        if isinstance(explicit_missing_optional, list) or isinstance(explicit_blocking_missing, list):
+            missing_optional = [str(skill_id) for skill_id in (explicit_missing_optional or [])]
+            blocking_missing = [str(skill_id) for skill_id in (explicit_blocking_missing or [])]
+        else:
+            fallback_covered: set[str] = set()
+            for reason in reasons.values():
+                marker = "fallback for missing "
+                if isinstance(reason, str) and marker in reason:
+                    fallback_covered.add(reason.split(marker, 1)[1].strip())
 
-        missing_optional = [skill_id for skill_id in missing if skill_id in fallback_covered]
-        blocking_missing = [skill_id for skill_id in missing if skill_id not in fallback_covered]
+            missing_optional = [skill_id for skill_id in missing if skill_id in fallback_covered]
+            blocking_missing = [skill_id for skill_id in missing if skill_id not in fallback_covered]
         if blocking_missing:
             health = "blocked"
             mark = "✗"

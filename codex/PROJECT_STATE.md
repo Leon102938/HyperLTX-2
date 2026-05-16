@@ -6,6 +6,18 @@ Status: Phase-1-Kern abgeschlossen; Phase 2A, 2B, 2C, 2D, 2E, 3A, 3B, 4A, 4B und
 - Kanonische Capability-Uebersicht: `/workspace/codex/CAPABILITY_MAP.md`
 
 ## Verifizierte Fakten
+- 2026-05-15 HiDream O1 Closeout: Aktives Stage-09-Bildbackend ist `hidream_o1_dev` mit `HiDream-O1-Dev` und `28` Steps. Z-Image ist aus aktivem FastAPI-Router, Backend-Registry, Phase1 Runtime, Skill Tree, Cockpit/Status, CLI, `init.sh`, `tools.config` und aktiven Tests entfernt.
+- Stage `08` schreibt aktuell `hidream_prompts.json`; Stage `09` schreibt `keyframe_manifest.json` mit `backend=hidream_o1_dev`, `model=HiDream-O1-Dev`, `steps=28`. Kein Z-Image-Fallback ist vorhanden.
+- Readiness ist `/DW/hidream_ready`; Jobs laufen ueber `/hidream/jobs`. Wenn HiDream nicht ready ist, bleibt Phase 1 korrekt `paused_missing_image_backend` statt Fake-Erfolg.
+- Aktiver Z-Image-Audit: `rg -n "zimage|Z-Image|ZIMG|Z_Turbo" app agent_core scripts skills tests tools.config init.sh upscaler_installer_minimal` -> keine Treffer. Historische Docs/Snapshots sind nicht bereinigt.
+- Tests gruen: `test_skill_tree_v1.py`, `test_creative_os_status.py`, `test_creative_os_cockpit.py`, `test_output_quality_utils.py`; py_compile fuer HiDream/FastAPI/Phase1/SkillTree.
+- Aktuelle Modell-/Projektpfade: `/workspace/HiDream-O1-Image` existiert und gehoert in Closeout-Archiv; grosse Checkpoints/Caches bleiben ausserhalb des Archivs und werden nur in Restore-Notizen referenziert.
+- 2026-05-15 Skill Tree V1 ist live in Phase 1: `/workspace/skills/skill_manifest.json` und die vier Skill-Gruppen `modes`, `styles`, `hooks`, `models` werden von `agent_core/creative_os/skill_tree_v1.py` geladen.
+- Stage `03` schreibt echte `skill_match.json` und `skill_tree.json`; fehlende Skills/Dateien werden als `missing` gemeldet und crashen den Run nicht.
+- Stage `04` bis `08` lesen Skill-Daten nachweisbar: Creative Strategy nutzt Mode+Style-Regeln, Beat/Hook nutzt Hook-Regeln, Creative Judge sieht aktive Skill-Regeln, Scene Contracts nutzen Style+Model-Regeln, Prompt Compiler schreibt Z-Image-Text-/Artefaktregeln inklusive `text-sparse, image-first` in Prompts.
+- Cockpit zeigt in Stage `03` echte Skill-IDs und Missing-Liste; Stage `04` bis `08` zeigen `Source: skills loaded`. Pipeline Map und Phase-1-Grenze `00` bis `09` bleiben unveraendert.
+- Smoke `skill-tree-v1-smoke-20260515` liegt unter `/workspace/agent_runs/skill-tree-v1-smoke-20260515/creative_os`; Backend war missing, daher Stage `09` korrekt pausiert statt Fake-Erfolg.
+- Tests gruen: Skill-Tree 6, Status 25, Cockpit 17.
 - 2026-05-14 V3 Live-Fix: In Phase-1-Runs bleiben Stage `10` bis `15` in der Pipeline Map grau/pending/not built; completed-Stages oder vorhandene Legacy-/Alias-Artefakte koennen sie nicht gruen machen.
 - Stage `09` Workspace zeigt echte `keyframe_manifest.json`-/`live_status.json`-Daten: Backend Status/Reason, Overall Status, Live Stage, Finished Files, Gallery und pro Job Status/Datei-Metadaten.
 - Watch-Refresh ignoriert reine Refresh-Zeit-Aenderungen und ueberschreibt manuelle Stage-Auswahl nicht mehr; Pfeilnavigation bleibt deterministisch.

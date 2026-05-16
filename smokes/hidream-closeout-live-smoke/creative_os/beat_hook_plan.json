@@ -1,0 +1,72 @@
+{
+  "stage": "05",
+  "status": "selected",
+  "source": "skills loaded",
+  "skill_source": {
+    "source": "skills loaded",
+    "version": "skill_tree_v1",
+    "loaded": {
+      "modes": [
+        "modes/calm_evergreen"
+      ],
+      "styles": [
+        "styles/clean_warm_lifestyle"
+      ],
+      "hooks": [
+        "hooks/soft_observation_hook"
+      ],
+      "models": [
+        "models/hidream_o1_dev_prompt_rules",
+        "models/hidream_o1_storyboard_rules",
+        "models/hidream_o1_no_unwanted_text_rules",
+        "models/ltx_motion_rules",
+        "models/qwen_tts_delivery_rules"
+      ]
+    },
+    "missing": []
+  },
+  "active_hook_rules": [
+    "First beat notices a small everyday moment.",
+    "Hook phrasing should feel gentle and specific.",
+    "Visual opening should be quiet but clear.",
+    "Avoid shock, countdowns, or exaggerated urgency."
+  ],
+  "hook_brief": {
+    "goal": "fast visual clarity",
+    "topic": "calm evergreen morning routine tip"
+  },
+  "hook_options": [
+    {
+      "id": "hook_a",
+      "type": "soft observation",
+      "text": "Start with a small everyday observation in calm evergreen morning routine tip, using a soft visual opening.",
+      "source": "skills loaded"
+    },
+    {
+      "id": "hook_b",
+      "type": "practical visual setup",
+      "text": "Begin with the first clear action in calm evergreen morning routine tip."
+    },
+    {
+      "id": "hook_c",
+      "type": "benefit opener",
+      "text": "Show the useful payoff of calm evergreen morning routine tip in a simple visual moment."
+    }
+  ],
+  "beat_candidates": [
+    "setup: establish the everyday moment",
+    "development: show the useful action",
+    "payoff: end on the calm practical result"
+  ],
+  "selected_beat_plan": {
+    "hook": "Start with a small everyday observation in calm evergreen morning routine tip, using a soft visual opening.",
+    "hook_type": "soft observation",
+    "beats": [
+      "setup: establish the everyday moment",
+      "development: show the useful action",
+      "payoff: end on the calm practical result"
+    ],
+    "status": "ready",
+    "handoff": "creative_judge"
+  }
+}

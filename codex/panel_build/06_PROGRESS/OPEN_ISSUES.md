@@ -1,10 +1,12 @@
 # Open Issues
 
-Stand: 2026-05-14, nach Phase-1-Live-Orchestrator V3 Stage 00-09.
+Stand: 2026-05-15, nach Skill Tree V1 Stage 03-08 Wiring.
 
 ## Offene Fragen
 
 - Textual muss auf der stabilen 0.89.x-Linie bleiben. Runtime aktuell `0.89.1`, Pin `textual>=0.89,<1.0`.
+- Skill Tree V1 ist bewusst auf Mode, Style, Hook und Models begrenzt; Pipeline-Skills sind weiterhin nicht Teil von V1.
+- Fehlende Skills bleiben ehrlich `missing`/`unknown`; es gibt keine Fake-Skill-Fallbacks fuer Real-Runs.
 - Stage `00` bis `08` sind stabile Terminal-Panels, aber keine perfekte Pixel-Kopie der Referenzbilder.
 - Stage `08` bleibt ohne echte Thumbnails und ohne echte Unterstufen `08.1` bis `08.4`; die Referenzstruktur wird als stabile Textual-Ansicht abgebildet.
 - Stage `05` zeigt bewusst keine Fake-Bilder oder Keyframes, sondern nur textbasierte Hook-/Beat-Kandidaten.
@@ -41,6 +43,8 @@ Stand: 2026-05-14, nach Phase-1-Live-Orchestrator V3 Stage 00-09.
 - Stage `00` bis `09` rendern im Fixture-/Phase-1-Smoke.
 - Stage `08` hat weiterhin einen sichtbaren, geschlossenen Image-Compiler-Hauptbereich.
 - Cockpit- und Status-Tests sind gruen.
+- Skill-Tree-Tests sind gruen.
+- Skill-Tree-Smoke `skill-tree-v1-smoke-20260515` ist vorhanden; Stage `09` pausiert korrekt bei fehlendem Z-Image-Backend.
 - Live-Smoke `live-smoke-20260514` ist vorhanden und Cockpit/Status-Tests sind gruen.
 - V2-Smokes `live-v2-smoke-20260514` und `live-v2-smoke-images-20260514` sind vorhanden.
 - V3-Smokes `live-v3-smoke-noimages-20260514` und `live-v3-smoke-images-20260514` sind vorhanden.

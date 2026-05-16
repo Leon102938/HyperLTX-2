@@ -1,0 +1,74 @@
+{
+  "stage": "09",
+  "backend": "hidream_o1_dev",
+  "model": "HiDream-O1-Dev",
+  "steps": 28,
+  "backend_url": "http://127.0.0.1:8000",
+  "backend_status": "missing",
+  "backend_reason": "hidream readiness probe failed: Not Found",
+  "overall_status": "paused_missing_backend",
+  "jobs": [
+    {
+      "scene_id": "scene_01",
+      "prompt": "subject: warm morning kitchen counter still life, environment: quiet home kitchen beside a window, physical objects: ceramic mug, folded linen towel, small green plant, wood counter, plain saucer, action: soft morning light settling across the counter, camera: gentle close establishing frame, lighting: soft window light, style: clean_warm_lifestyle, mood: calm, gentle, useful, composition: one clear subject, uncluttered frame, plain unmarked surfaces",
+      "backend": "hidream_o1_dev",
+      "status": "error",
+      "output_path": "/tmp/hidream-closeout-runs/hidream-closeout-live-smoke/creative_os/keyframes/scene_01.png",
+      "progress_percent": null,
+      "elapsed": "00:00",
+      "error": "hidream readiness probe failed: Not Found",
+      "backend_job_id": null,
+      "file_exists": false,
+      "file_size_bytes": 0,
+      "file_mtime": null
+    },
+    {
+      "scene_id": "scene_02",
+      "prompt": "subject: person preparing a simple morning habit, environment: calm home detail near a kitchen window, physical objects: hand, ceramic mug, clear water carafe, curtain edge, small green plant, action: hand pouring water and placing the mug into a quiet routine setup, camera: natural over-the-counter close shot, lighting: soft daylight through curtains, style: clean_warm_lifestyle, mood: calm, gentle, useful, composition: one clear subject, uncluttered frame, plain unmarked surfaces",
+      "backend": "hidream_o1_dev",
+      "status": "error",
+      "output_path": "/tmp/hidream-closeout-runs/hidream-closeout-live-smoke/creative_os/keyframes/scene_02.png",
+      "progress_percent": null,
+      "elapsed": "00:00",
+      "error": "hidream readiness probe failed: Not Found",
+      "backend_job_id": null,
+      "file_exists": false,
+      "file_size_bytes": 0,
+      "file_mtime": null
+    },
+    {
+      "scene_id": "scene_03",
+      "prompt": "subject: finished quiet morning routine setup, environment: clean table in warm daylight, physical objects: ceramic mug, closed plain unmarked notebook, small green plant, folded linen towel, wood table, action: finished calm setup resting in place, camera: steady composed tabletop frame, lighting: warm soft daylight, style: clean_warm_lifestyle, mood: calm, gentle, useful, composition: one clear subject, uncluttered frame, plain unmarked surfaces",
+      "backend": "hidream_o1_dev",
+      "status": "error",
+      "output_path": "/tmp/hidream-closeout-runs/hidream-closeout-live-smoke/creative_os/keyframes/scene_03.png",
+      "progress_percent": null,
+      "elapsed": "00:00",
+      "error": "hidream readiness probe failed: Not Found",
+      "backend_job_id": null,
+      "file_exists": false,
+      "file_size_bytes": 0,
+      "file_mtime": null
+    }
+  ],
+  "generated_keyframes": [
+    {
+      "scene_id": "scene_01",
+      "success": false,
+      "image_path": "/tmp/hidream-closeout-runs/hidream-closeout-live-smoke/creative_os/keyframes/scene_01.png",
+      "error": "hidream readiness probe failed: Not Found"
+    },
+    {
+      "scene_id": "scene_02",
+      "success": false,
+      "image_path": "/tmp/hidream-closeout-runs/hidream-closeout-live-smoke/creative_os/keyframes/scene_02.png",
+      "error": "hidream readiness probe failed: Not Found"
+    },
+    {
+      "scene_id": "scene_03",
+      "success": false,
+      "image_path": "/tmp/hidream-closeout-runs/hidream-closeout-live-smoke/creative_os/keyframes/scene_03.png",
+      "error": "hidream readiness probe failed: Not Found"
+    }
+  ]
+}

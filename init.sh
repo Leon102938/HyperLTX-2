@@ -349,19 +349,12 @@ if [ "${Ace_Step1_5:-off}" = "on" ]; then
 fi
 
 # ----------------------------------------------------
-# 6. Z-Image Sektion
+# 6. HiDream-O1-Dev Sektion
 # ----------------------------------------------------
-if [ "${Z_Image_Turbo:-off}" = "on" ]; then
-  echo "[zimage] Z_Image_Turbo is ON. Checking cache..."
-  if hf_download_all "Tongyi-MAI/Z-Image-Turbo"; then
-    touch "/workspace/status/zimage_ready"
-  fi
-fi
-
-if [ "${Z_Image_Base:-off}" = "on" ]; then
-  echo "[zimage] Z_Image_Base is ON. Starting download..."
-  if hf_download_all "Tongyi-MAI/Z-Image"; then
-    touch "/workspace/status/zimage_base_ready"
+if [ "${HiDream_O1_Dev:-off}" = "on" ]; then
+  echo "[hidream] HiDream_O1_Dev is ON. Checking cache..."
+  if hf_download_all "${HIDREAM_O1_DEV_REPO:-HiDream-ai/HiDream-O1-Dev}"; then
+    touch "/workspace/status/hidream_ready"
   fi
 fi
 

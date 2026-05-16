@@ -1,5 +1,28 @@
 # HANDOFF.md
 
+## 2026-05-15 HiDream O1 Closeout / Pod schliessbar
+- Aktiver Image-Backend-Stand: Z-Image ist aus aktiver Runtime, FastAPI-Router, Backend-Registry, Phase-1-Stage-09, Skill Tree V1, CLI-Hilfetexten, `init.sh` und `tools.config` entfernt.
+- Neues aktives Bildmodell: `HiDream-O1-Dev`, Backend-ID `hidream_o1_dev`, Default `28` Steps, Readiness `/DW/hidream_ready`, Jobs `/hidream/jobs`.
+- Stage `08` schreibt `hidream_prompts.json`; Stage `09` schreibt `keyframe_manifest.json` mit `backend=hidream_o1_dev`, `model=HiDream-O1-Dev`, `steps=28`.
+- Wenn HiDream nicht erreichbar ist, bleibt Phase 1 ehrlich auf `paused_missing_image_backend`/`paused_missing_backend`; kein Z-Image-Fallback und kein Fake-Gruen.
+- Aktiver Z-Image-Audit ist sauber: `rg -n "zimage|Z-Image|ZIMG|Z_Turbo" app agent_core scripts skills tests tools.config init.sh upscaler_installer_minimal` liefert keine Treffer. Historische Docs/Snapshots koennen noch alte Begriffe enthalten.
+- Tests gruen: Skill Tree V1, Creative-OS Status, Creative-OS Cockpit, Output Quality Utils; py_compile fuer HiDream/FastAPI/Phase1/SkillTree.
+- Live-Smoke `hidream-migration-live-smoke`: Stage 08 erzeugte 3 HiDream-Prompts, Stage 09 manifestiert HiDream O1; keine PNGs, weil `/DW/hidream_ready` im laufenden lokalen API-Prozess `Not Found` lieferte.
+- Relevante lokale Pfade: Projektcode `/workspace/HiDream-O1-Image` vorhanden; manuelle HiDream-Probe unter `/workspace/manual_hidream_test`; grosse HF-/Checkpoint-Caches nicht archivieren, nur Restore-Hinweise dokumentieren.
+- Director-/llama.cpp-Startup-Fixes bleiben im Stand: `config/director_llm.env`, `scripts/ensure_llama_cpp.sh`, `scripts/serve_director_llm.sh`, `scripts/check_director_llm.py`, `init.sh` Director-Sektion.
+- Pod ist nach Archivierung schliessbar; Restore zuerst Code/Archiv entpacken, dann Modelle/Caches anhand `MODEL_PATHS_AND_CACHE_NOTES.md` pruefen.
+
+## 2026-05-15 Skill Tree V1 + Stage 03-08 Real Wiring
+- Root Skill Tree V1 ist gebaut unter `/workspace/skills/` mit `skill_manifest.json` sowie `modes/`, `styles/`, `hooks/` und `models/`.
+- V1-Skills: Modes `calm_evergreen`, `practical_tip`, `finance_short`, `nature_story`, `product_explainer`; Styles `clean_warm_lifestyle`, `cinematic_nature`, `fast_social_energy`, `soft_premium`, `dark_premium`; Hooks `soft_observation_hook`, `small_problem_hook`, `curiosity_hook`, `fast_market_hook`, `benefit_hook`; Models `zimage_avoid_text_artifacts`, `zimage_positive_prompt_rules`, `ltx_motion_rules`, `qwen_tts_delivery_rules`.
+- Neuer Loader: `agent_core/creative_os/skill_tree_v1.py` liest `skills/skill_manifest.json`, laedt `.md`-Skill-Dateien, markiert fehlende Dateien als `missing` und liefert `skill_match.json` plus `skill_tree.json`.
+- Phase 1 Stage `03` nutzt jetzt echte Skills aus Job-Mode, Job-Style, Topic/Mode-Hook-Auswahl und Model-Regeln; Pipeline bleibt feste technische Route und bekommt keine Pipeline-Skills.
+- Stage `04` nutzt Mode+Style-Regeln in `creative_strategy.json`; Stage `05` nutzt Hook-Regeln in `beat_hook_plan.json`; Stage `06` speichert aktive Skill-Regeln in `creative_judge.json`; Stage `07` schreibt Style+Model-Regeln in `scene_contracts.json`; Stage `08` schreibt Model-Regeln und Z-Image-Text-/Artefaktregeln in `prompt_payload_compiled.json` und `zimage_prompts.json`.
+- Cockpit Stage `03` zeigt Skill Tree V1 mit echten Mode/Style/Hook/Model-Skills und Missing-Liste. Stage `04` bis `08` zeigen `Source: skills loaded`, ohne Pipeline Map oder Stage-09-Flow umzubauen.
+- Smoke: `/workspace/agent_runs/skill-tree-v1-smoke-20260515/creative_os`; Backend war nicht verfuegbar, daher Stage `09` korrekt `paused_missing_image_backend`, Stage `00` bis `08` inklusive Skill-Wiring erfolgreich.
+- Tests gruen: `python3 -m unittest /workspace/tests/test_skill_tree_v1.py -v`, `python3 -m unittest /workspace/tests/test_creative_os_status.py -v`, `python3 -m unittest /workspace/tests/test_creative_os_cockpit.py -v`.
+- Nicht gebaut: Stage `10+` Runtime, LTX-Render-Ausbau, n8n/API-Ausbau, Redesign, Pipeline-Skills oder neue Textual-Version.
+
 ## 2026-05-14 Phase 1 Live Cockpit Orchestration
 - V3-Fix: Phase-1-Runs sperren Stage `10` bis `15` in der Pipeline Map als out-of-scope/pending; vorhandene Alias-Artefakte wie `stage6_review_decision.json` koennen Stage `10` nicht mehr gruen faerben.
 - Stage `09` Active Workspace zeigt jetzt echte Manifest-/Live-Daten sichtbar: Backend Status/Reason, Overall Status, Live Stage 09, Finished Files und Gallery.

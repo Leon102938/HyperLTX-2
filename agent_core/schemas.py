@@ -145,7 +145,7 @@ class ModelPromptPlan(BaseModel):
     backend_prompt_policy: dict[str, str] = Field(default_factory=dict)
     positive_model_prompt: str | None = None
     negative_model_prompt: str | None = None
-    zimage_prompt_sent: str | None = None
+    hidream_prompt_sent: str | None = None
     ltx_positive_prompt_sent: str | None = None
     ltx_negative_prompt_sent: str | None = None
     warnings: list[str] = Field(default_factory=list)

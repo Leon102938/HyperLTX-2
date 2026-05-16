@@ -10,7 +10,7 @@ Use whenever compiling model prompts or auditing backend prompt policy.
 ## rules
 - Use negative prompts only where the backend supports or accepts them.
 - Keep negative lists compact and high-risk.
-- Never send negative spam to Z-Image.
+- Never send negative spam to HiDream-O1-Dev.
 
 ## do
 - Include text/UI/device/collage bans when relevant.
@@ -23,7 +23,7 @@ Use whenever compiling model prompts or auditing backend prompt policy.
 - Do not expand avoid lists as a substitute for better visual direction.
 
 ## output_contract
-- backend_prompt_policy documents zimage and ltx behavior.
+- backend_prompt_policy documents hidream and ltx behavior.
 - ltx_negative_prompt_sent is present when planned or supported.
 
 ## common_failures
@@ -32,4 +32,4 @@ Use whenever compiling model prompts or auditing backend prompt policy.
 - Image model receives avoid list.
 
 ## audit_hints
-- Check no_repeated_forbidden_spam and zimage_positive_only_applied.
+- Check no_repeated_forbidden_spam and hidream_positive_only_applied.

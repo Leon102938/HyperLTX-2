@@ -549,15 +549,15 @@ def _skill_tree_lines(state: CockpitState) -> list[Text]:
     return [
         _literal_line("Skill Sources"),
         _literal_line("├─ Mode Skills"),
-        _literal_line(f"│  └─ {state.header.mode or 'unknown'} / {_mode_skill_status(state)}"),
+        _literal_line(f"│  └─ {_skills_by_prefix(state, 'modes/', 2)} / {_mode_skill_status(state)}"),
         _literal_line("├─ Style Skills"),
-        _literal_line(f"│  └─ {_style_package_hint(state)} / loaded"),
+        _literal_line(f"│  └─ {_skills_by_prefix(state, 'styles/', 2)} / loaded"),
         _literal_line("├─ Hook / Creative Skills"),
-        _literal_line("│  └─ beat planner, hook builder / prepared"),
+        _literal_line(f"│  └─ {_skills_by_prefix(state, 'hooks/', 2)} / loaded"),
         _literal_line("├─ Model Skills"),
-        _literal_line(f"│  └─ zimage / {_skill_present_value(state, 'models/zimage')}"),
-        _literal_line("└─ Safety Skills"),
-        _literal_line("   └─ artifact avoidance / loaded"),
+        _literal_line(f"│  └─ {_skills_by_prefix(state, 'models/', 4)}"),
+        _literal_line("└─ Missing Skills"),
+        _literal_line(f"   └─ {_missing_skills_value(state)}"),
     ]
 
 
@@ -593,12 +593,12 @@ def _skill_context_lines(state: CockpitState) -> list[Text]:
 def _skill_loading_status_lines(state: CockpitState) -> list[Text]:
     return [
         _label_value_line("Skill Sources", f"{state.skill_health.loaded_count} loaded / {state.skill_health.fallback_count} fallback"),
-        _compact_status_line("✓", "Core", _skills_by_prefix(state, "core/", 2)),
+        _compact_status_line("✓", "Source", "skills loaded"),
         _compact_status_line("○", "Mode", _mode_skill_status(state)),
         _compact_status_line("✓", "Style", _style_package_hint(state)),
-        _compact_status_line("○", "Hook / Creative", "beat planner / hook builder prepared"),
-        _compact_status_line("✓", "Model", _skill_present_value(state, "models/zimage")),
-        _compact_status_line("✓", "Safety", "artifact avoidance"),
+        _compact_status_line("✓", "Hook", _skills_by_prefix(state, "hooks/", 1)),
+        _compact_status_line("✓", "Model", _skills_by_prefix(state, "models/", 2)),
+        _compact_status_line("✓", "Safety", _skill_present_value(state, "models/hidream_o1_no_unwanted_text_rules")),
         _compact_status_line("○", "Missing optional", str(state.skill_health.missing_optional_count)),
     ]
 
@@ -616,7 +616,7 @@ def _skill_match_detail_lines(state: CockpitState, stage: StageDefinition) -> li
         _metric_row(
             (
                 ("Mode", state.header.mode or "unknown"),
-                ("Model", _skill_present_value(state, "models/zimage")),
+                ("Model", _skills_by_prefix(state, "models/", 2)),
                 ("Next Action", "handoff to Creative Strategy"),
             ),
             value_width=34,
@@ -640,6 +640,7 @@ def _stage04_position_lines(state: CockpitState) -> list[Text]:
 
 def _strategy_engine_lines(state: CockpitState) -> list[Text]:
     return [
+        _label_value_line("Source", _stage_skill_source(state, "creative_strategy")),
         _label_value_line("Director", "enabled"),
         _label_value_line("Strategy model", "Qwen / Director module"),
         _label_value_line("Image target", _image_backend_status(state)),
@@ -674,9 +675,9 @@ def _strategy_preview_lines(state: CockpitState) -> list[Text]:
     return [
         _literal_line("{"),
         _literal_line(f'  "story_arc": "{_shorten(_topic_goal(state), 42)}",'),
-        _literal_line('  "hook_style": "curiosity reveal",'),
-        _literal_line('  "scene_plan": ["setup", "tension", "reveal"],'),
-        _literal_line('  "camera_language": "slow push-ins / controlled glides",'),
+        _literal_line(f'  "hook_style": "{_hook_type_value(state)}",'),
+        _literal_line('  "scene_plan": ["setup", "development", "payoff"],'),
+        _literal_line('  "camera_language": "steady composed movement",'),
         _literal_line('  "visual_rules": ["clear subject", "no readable text", "artifact safe"],'),
         _literal_line('  "output": "creative_strategy.json",'),
         _literal_line('  "next": "beat_hook_plan.json"'),
@@ -721,32 +722,35 @@ def _stage05_position_lines(state: CockpitState) -> list[Text]:
 
 def _hook_brief_lines(state: CockpitState) -> list[Text]:
     return [
+        _label_value_line("Source", _stage_skill_source(state, "beat_hook_plan")),
         _label_value_line("Goal", "stop scroll in first 1.5 seconds"),
-        _label_value_line("Audience pull", "curiosity + cinematic wonder"),
+        _label_value_line("Audience pull", _hook_audience_pull(state)),
         _label_value_line("Visual angle", _topic_goal(state)),
-        _label_value_line("Opening logic", "immediate reveal into motion"),
-        _label_value_line("Tone", "adventurous, mysterious, premium"),
+        _label_value_line("Opening logic", _hook_opening_logic(state)),
+        _label_value_line("Tone", _hook_tone(state)),
     ]
 
 
 def _hook_candidate_lines(state: CockpitState) -> list[Text]:
+    hook_type = _hook_type_value(state)
+    selected_hook = _stage_hook_value(state)
     return [
-        _compact_status_line("✓", "Candidate 1", "selected · curiosity reveal"),
-        _compact_field_line("Hook type", "curiosity reveal"),
-        _compact_field_line("Opening visual", "misty jungle canopy"),
-        _compact_field_line("Camera idea", "slow push-in"),
-        _compact_field_line("Beat feel", "suspense + wonder"),
+        _compact_status_line("✓", "Candidate 1", f"selected · {hook_type}"),
+        _compact_field_line("Hook type", hook_type),
+        _compact_field_line("Opening visual", _shorten(selected_hook, 38)),
+        _compact_field_line("Camera idea", "steady soft opening"),
+        _compact_field_line("Beat feel", _hook_tone(state)),
         _plain_line(""),
-        _compact_status_line("○", "Candidate 2", "discovery"),
-        _compact_field_line("Hook type", "discovery"),
-        _compact_field_line("Opening visual", "sunlight through leaves"),
-        _compact_field_line("Camera idea", "faster foliage push-in"),
-        _compact_field_line("Beat feel", "energy + exploration"),
+        _compact_status_line("○", "Candidate 2", "practical setup"),
+        _compact_field_line("Hook type", "practical visual setup"),
+        _compact_field_line("Opening visual", _shorten(_topic_goal(state), 38)),
+        _compact_field_line("Camera idea", "simple close framing"),
+        _compact_field_line("Beat feel", "clear + useful"),
         _plain_line(""),
-        _compact_status_line("○", "Candidate 3", "tension opener"),
-        _compact_field_line("Hook type", "tension opener"),
-        _compact_field_line("Opening visual", "narrow trail with distant glow"),
-        _compact_field_line("Beat feel", "mystery + anticipation"),
+        _compact_status_line("○", "Candidate 3", "benefit opener"),
+        _compact_field_line("Hook type", "benefit opener"),
+        _compact_field_line("Opening visual", "visible useful result"),
+        _compact_field_line("Beat feel", "grounded + calm"),
     ]
 
 
@@ -777,7 +781,7 @@ def _beat_output_preview_lines(state: CockpitState) -> list[Text]:
             value_width=34,
         ),
         _literal_line("{"),
-        _literal_line('  "hook_type": "curiosity_reveal",'),
+        _literal_line(f'  "hook_type": "{_hook_type_value(state)}",'),
         _literal_line(f'  "opening_visual": "{_shorten(_stage_hook_value(state), 34)}",'),
         _literal_line(f'  "beats": ["{beats[0]}", "{beats[1]}", "{beats[2]}"],'),
         _literal_line('  "transition_note": "flow into scene contracts"'),
@@ -801,10 +805,11 @@ def _stage06_position_lines(state: CockpitState) -> list[Text]:
 
 def _judge_input_lines(state: CockpitState) -> list[Text]:
     return [
+        _label_value_line("Source", _stage_skill_source(state, "creative_judge")),
         _label_value_line("Strategy source", "creative_strategy.json"),
         _label_value_line("Hook source", "beat_hook_plan.json"),
         _label_value_line("Goal", "strong shortform opening"),
-        _label_value_line("Audience", "curiosity + cinematic wonder"),
+        _label_value_line("Audience", _hook_audience_pull(state)),
         _label_value_line("Mode / Style", f"{state.header.mode or 'unknown'} / {_style_package_hint(state)}"),
         _label_value_line("Key risk", "weak opening or visual clutter"),
     ]
@@ -887,6 +892,7 @@ def _scene_contract_position_lines(state: CockpitState) -> list[Text]:
 
 def _scene_contract_input_status_lines(state: CockpitState) -> list[Text]:
     return [
+        _compact_status_line("✓", "Source", _stage_skill_source(state, "scene_contracts")),
         _compact_status_line("✓", "Creative Strategy", _artifact_ready_demo_missing(state, "creative_strategy.json", "creative_strategy")),
         _compact_status_line("✓", "Selected Beat / Hook", _artifact_ready_demo_missing(state, "selected_beat_plan.json", "selected_beat_plan")),
         _compact_status_line("✓", "Creative Judge Decision", _creative_judge_status(state)),
@@ -947,7 +953,7 @@ def _scene_contract_output_lines(state: CockpitState) -> list[Text]:
         _literal_line("{"),
         _literal_line('  "file": "scene_contracts.json",'),
         _literal_line(f'  "scene_count": {len(scenes) or state.header.scene_count or 0},'),
-        _literal_line('  "continuity_rule": "jungle sunrise progression",'),
+        _literal_line(f'  "continuity_rule": "{_shorten(_topic_goal(state), 38)} progression",'),
         _literal_line('  "text_policy": "no readable text",'),
         _literal_line('  "ready_for": "image_prompt_compiler"'),
         _literal_line("}"),
@@ -1151,6 +1157,7 @@ def _indented_lines(lines: list[Text]) -> list[Text]:
 def _scene_contract_input_lines(state: CockpitState) -> list[Text]:
     first = _compiler_scenes(state)[0] if _compiler_scenes(state) else {}
     return [
+        _compact_kv_line("Source", _stage_skill_source(state, "prompt_payload_compiled"), 13, 14),
         _compact_kv_line("Style", _style_hint(state), 13, 14),
         _compact_kv_line("Mode", state.header.mode or "unknown", 13, 14),
         _compact_kv_line("Tone", _scene_field(first, "tone", "mood", default="not_checked"), 13, 14),
@@ -1191,13 +1198,14 @@ def _final_prompt_payload_lines(state: CockpitState) -> list[Text]:
         _compact_kv_line("mode", state.header.mode or "unknown", 9, 58),
         _compact_kv_line("format", f"{state.header.orientation} / {state.header.resolution}", 9, 58),
         _compact_kv_line("scenes", scene_list, 9, 58),
+        _compact_kv_line("source", _stage_skill_source(state, "prompt_payload_compiled"), 9, 58),
         _compact_kv_line("output", "prompt_payload_compiled.json", 9, 58),
     ]
 
 
 def _model_rule_lines(state: CockpitState) -> list[Text]:
     return [
-        _label_value_line("zimage rules", _model_rules_status(state)),
+        _label_value_line("HiDream rules", _model_rules_status(state)),
         _label_value_line("avoid text artifacts", _artifact_policy_active_status(state)),
         _label_value_line("no readable text", _policy_rule_status(state, "no_readable_text")),
         _label_value_line("no screens/paper/labels", _policy_rule_status(state, "no_screens_paper_labels")),
@@ -1651,7 +1659,7 @@ def _image_job_progress(state: CockpitState, index: int, scene: object, status: 
     if progress:
         return {"percent": progress, "elapsed": elapsed, "backend": backend, "demo": False}
     if state.session_mode == "fixture/demo" and status == "generating":
-        return {"percent": 62, "elapsed": "00:18 demo", "backend": "zimage_http demo", "demo": True}
+        return {"percent": 62, "elapsed": "00:18 demo", "backend": "hidream_o1_dev demo", "demo": True}
     file_exists = _scene_optional(scene, "file_exists") == "True"
     if status in {"finished", "ready"} and (file_exists or state.session_mode == "fixture/demo"):
         return {"percent": None if state.session_mode == "real_run" else 100, "elapsed": elapsed or "unavailable", "backend": backend, "demo": False}
@@ -1672,7 +1680,7 @@ def _scene_contracts(state: CockpitState) -> list[object]:
 
 
 def _compiler_scenes(state: CockpitState) -> list[object]:
-    return _scene_contracts(state) or _data_list(state, "zimage_prompts") or _model_prompt_scenes(state)
+    return _scene_contracts(state) or _data_list(state, "hidream_prompts") or _model_prompt_scenes(state)
 
 
 def _present_missing(items: list[object], source: str) -> str:
@@ -1714,32 +1722,32 @@ def _artifact_policy_contract_status(state: CockpitState) -> str:
 def _fixture_scene_contract(scene_id: str) -> dict[str, str]:
     fixtures = {
         "scene_01": {
-            "visual_anchor": "misty canopy reveal",
-            "environment": "sunrise jungle canopy",
-            "action": "slow opening reveal through leaves",
+            "visual_anchor": "soft opening moment",
+            "environment": "calm everyday setting",
+            "action": "gentle opening action",
             "camera": "controlled push-in",
-            "lighting": "warm shafts through mist",
-            "allowed_visuals": "leaves, vines, depth haze",
-            "forbidden_visuals": "text, logos, extra animals",
+            "lighting": "soft natural light",
+            "allowed_visuals": "plain surfaces, clear subject, depth",
+            "forbidden_visuals": "text, logos, UI",
             "text_risk": "low / no readable text",
         },
         "scene_02": {
-            "visual_anchor": "suspense jungle trail",
-            "environment": "narrow dense path",
-            "action": "cautious forward motion",
+            "visual_anchor": "useful action detail",
+            "environment": "simple uncluttered space",
+            "action": "focused practical movement",
             "camera": "low forward glide",
-            "lighting": "filtered green-gold light",
-            "allowed_visuals": "wet leaves, foliage depth, trail",
-            "forbidden_visuals": "captions, UI text, crowd elements",
+            "lighting": "clean directional light",
+            "allowed_visuals": "hands, surfaces, clear depth",
+            "forbidden_visuals": "captions, UI text, labels",
             "text_risk": "medium / avoid captions",
         },
         "scene_03": {
-            "visual_anchor": "golden path payoff",
-            "environment": "opening jungle corridor",
-            "action": "reveal into brighter destination",
+            "visual_anchor": "calm practical payoff",
+            "environment": "bright clean endpoint",
+            "action": "settle into finished result",
             "camera": "steady forward push",
-            "lighting": "strong golden end light",
-            "allowed_visuals": "path, sun rays, layered foliage",
+            "lighting": "warm final light",
+            "allowed_visuals": "clear subject, simple background, depth",
             "forbidden_visuals": "signage, duplicate subjects, overlays",
             "text_risk": "medium / avoid signage",
         },
@@ -1852,9 +1860,9 @@ def _model_rules_status(state: CockpitState) -> str:
 
 
 def _prompt_compiler_status(state: CockpitState) -> str:
-    if artifact_status(state, "zimage_prompts.json") == "present" or artifact_status(state, "model_prompts.json") == "present":
+    if artifact_status(state, "hidream_prompts.json") == "present" or artifact_status(state, "model_prompts.json") == "present":
         return "present"
-    prompts = _data_list(state, "zimage_prompts") or _model_prompt_scenes(state)
+    prompts = _data_list(state, "hidream_prompts") or _model_prompt_scenes(state)
     return "present" if prompts else "missing"
 
 
@@ -1873,8 +1881,8 @@ def _image_backend_status(state: CockpitState) -> str:
         if backend:
             return backend
     provider = _prompt_provider(state)
-    if provider == "zimage":
-        return "zimage_http" if state.session_mode == "fixture/demo" else "zimage"
+    if provider == "hidream_o1_dev":
+        return "hidream_o1_dev"
     if provider != "unknown":
         return provider
     for _label, value in state.system_status.rows:
@@ -1915,7 +1923,7 @@ def _camera_lighting_value(scene: object) -> str:
 
 
 def _compiled_prompt_preview(state: CockpitState, scene_id: str) -> str:
-    for prompt in _data_list(state, "zimage_prompts"):
+    for prompt in _data_list(state, "hidream_prompts"):
         if isinstance(prompt, dict) and str(prompt.get("scene_id") or "") == scene_id:
             for key in ("positive_prompt", "model_prompt", "prompt", "prompt_text"):
                 value = prompt.get(key)
@@ -1936,7 +1944,7 @@ def _artifact_bans_value(state: CockpitState) -> str:
 def _image_prompt_status(state: CockpitState, scene_id: str, prompt: str) -> str:
     if state.session_mode == "fixture/demo" and _prompt_compiler_status(state) == "present":
         return "demo"
-    for prompt_item in _data_list(state, "zimage_prompts") + _model_prompt_scenes(state):
+    for prompt_item in _data_list(state, "hidream_prompts") + _model_prompt_scenes(state):
         if isinstance(prompt_item, dict) and str(prompt_item.get("scene_id") or "") == scene_id:
             status = str(prompt_item.get("status") or "")
             return status if status else "compiled"
@@ -1949,7 +1957,7 @@ def _scene_prompt_status_for_summary(state: CockpitState, index: int, prompt: st
     if state.session_mode == "fixture/demo":
         return "validating" if index == 3 else "compiled"
     scene_id = f"scene_{index:02d}"
-    for prompt_item in _data_list(state, "zimage_prompts") + _model_prompt_scenes(state):
+    for prompt_item in _data_list(state, "hidream_prompts") + _model_prompt_scenes(state):
         if isinstance(prompt_item, dict) and str(prompt_item.get("scene_id") or "") == scene_id:
             return str(prompt_item.get("status") or "compiled")
     if prompt not in {"missing", "not_checked", "unknown"}:
@@ -2160,14 +2168,14 @@ def _count_or_unknown(value: object) -> str:
 
 
 def _prompt_provider(state: CockpitState) -> str:
-    prompts = _data_list(state, "zimage_prompts")
+    prompts = _data_list(state, "hidream_prompts")
     for prompt in prompts:
         if isinstance(prompt, dict):
             value = prompt.get("provider") or prompt.get("backend") or prompt.get("generator")
             if value:
                 return str(value)
-    if state.run_type == "creative_os" and artifact_status(state, "zimage_prompts.json") == "present":
-        return "zimage"
+    if state.run_type == "creative_os" and artifact_status(state, "hidream_prompts.json") == "present":
+        return "hidream_o1_dev"
     if state.run_type == "agent_core" and artifact_status(state, "model_prompts.json") == "present":
         return "agent_core"
     return "unknown"
@@ -2263,7 +2271,8 @@ def _fallback_skill_value(state: CockpitState) -> str:
 
 
 def _skill_present_value(state: CockpitState, skill_id: str) -> str:
-    return "loaded" if skill_id in _skill_ids(state) else "not_checked"
+    values = _skill_ids(state)
+    return "loaded" if skill_id in values or any(value.startswith(f"{skill_id}_") for value in values) else "not_checked"
 
 
 def _skills_by_prefix(state: CockpitState, prefix: str, limit: int) -> str:
@@ -2273,12 +2282,70 @@ def _skills_by_prefix(state: CockpitState, prefix: str, limit: int) -> str:
     return ", ".join(values[:limit])
 
 
+def _missing_skills_value(state: CockpitState) -> str:
+    values = [_basename(skill) for skill in _missing_skill_ids(state)]
+    return ", ".join(values[:3]) if values else "none"
+
+
+def _stage_skill_source(state: CockpitState, key: str) -> str:
+    data = state.inspection.data.get(key)
+    if isinstance(data, dict) and data.get("source"):
+        return str(data["source"])
+    if key == "scene_contracts":
+        scenes = _data_list(state, "scene_contracts")
+        if scenes and isinstance(scenes[0], dict) and scenes[0].get("source"):
+            return str(scenes[0]["source"])
+    return "skills loaded" if _skill_ids(state) else "unknown"
+
+
 def _stage_hook_value(state: CockpitState) -> str:
     beat_plan = _data_dict(state, "selected_beat_plan")
     value = _first_value(beat_plan, "hook", "opening_hook", "selected_hook")
     if value != "unknown":
         return value
-    return "misty canopy reveal"
+    return f"soft opening for {_topic_goal(state)}"
+
+
+def _hook_type_value(state: CockpitState) -> str:
+    beat_plan = _data_dict(state, "selected_beat_plan")
+    value = _first_value(beat_plan, "hook_type", "type", "selected_hook_type")
+    if value != "unknown":
+        return value
+    rules = " ".join(_data_dict(state, "beat_hook_plan").get("active_hook_rules", []) or []).lower()
+    if "small everyday moment" in rules or "quiet observation" in rules:
+        return "soft observation"
+    if "benefit" in rules:
+        return "benefit opener"
+    if "problem" in rules:
+        return "small problem"
+    if "market" in rules:
+        return "market shift"
+    return "topic-led opening"
+
+
+def _hook_audience_pull(state: CockpitState) -> str:
+    hook_type = _hook_type_value(state)
+    if hook_type == "soft observation":
+        return "small everyday observation"
+    if hook_type == "benefit opener":
+        return "clear useful payoff"
+    if hook_type == "small problem":
+        return "recognizable friction"
+    if hook_type == "market shift":
+        return "neutral change signal"
+    return "visual question"
+
+
+def _hook_opening_logic(state: CockpitState) -> str:
+    if _hook_type_value(state) == "soft observation":
+        return "small everyday observation into gentle visual start"
+    return "selected hook guides first visual beat"
+
+
+def _hook_tone(state: CockpitState) -> str:
+    if _hook_type_value(state) == "soft observation":
+        return "calm, gentle, practical"
+    return "clear, focused, composed"
 
 
 def _beat_values(state: CockpitState) -> list[str]:

@@ -197,9 +197,9 @@ def _build_phase1_parser() -> argparse.ArgumentParser:
     parser.add_argument("--duration", default="9s", help="Target duration, e.g. 9s. Default: %(default)s")
     parser.add_argument("--scenes", type=int, default=3, help="Scene count. Default: %(default)s")
     parser.add_argument("--runs-root", type=Path, default=DEFAULT_RUNS_ROOT, help="Runs root. Default: %(default)s")
-    parser.add_argument("--image-backend-url", default=DEFAULT_BASE_URL, help="Local backend base URL for zimage readiness/jobs. Default: %(default)s")
+    parser.add_argument("--image-backend-url", default=DEFAULT_BASE_URL, help="Local backend base URL for HiDream-O1-Dev readiness/jobs. Default: %(default)s")
     parser.add_argument("--no-images", action="store_true", help="Compatibility alias for --no-generate-images.")
-    parser.add_argument("--generate-images", dest="generate_images", action="store_true", default=None, help="Probe/submit real Z-Image jobs during Stage 09.")
+    parser.add_argument("--generate-images", dest="generate_images", action="store_true", default=None, help="Probe/submit real HiDream-O1-Dev jobs during Stage 09.")
     parser.add_argument("--no-generate-images", dest="generate_images", action="store_false", help="Create Stage 09 manifest without probing/submitting image backend jobs.")
     parser.add_argument("--print-json", action="store_true", help="Print machine-readable summary JSON.")
     return parser
@@ -242,7 +242,7 @@ def _build_retry_keyframes_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--job-id", required=True, help="Run/job id under --runs-root.")
     parser.add_argument("--runs-root", type=Path, default=DEFAULT_RUNS_ROOT, help="Runs root. Default: %(default)s")
-    parser.add_argument("--image-backend-url", default=DEFAULT_BASE_URL, help="Local backend base URL for zimage readiness/jobs. Default: %(default)s")
+    parser.add_argument("--image-backend-url", default=DEFAULT_BASE_URL, help="Local backend base URL for HiDream-O1-Dev readiness/jobs. Default: %(default)s")
     parser.add_argument("--scene", dest="scene_id", help="Retry only one scene id, e.g. scene_02.")
     parser.add_argument("--force", action="store_true", help="Retry even if a finished output file already exists.")
     parser.add_argument("--dry-run", action="store_true", help="Show retry plan without writing files or calling the backend.")
@@ -902,7 +902,7 @@ def summarize_system_mode(payload: dict[str, Any], state: dict[str, Any], takes:
         ("API", f"{_plain_icon('enabled')} {base_url or DEFAULT_BASE_URL}"),
         ("Director", f"{_plain_icon('enabled' if director_bits else 'pending')} {' · '.join(director_bits) if director_bits else 'pending'}"),
         ("Voice", f"{_plain_icon(voice.get('status', 'pending'))} {voice.get('status', 'pending')} · {voice.get('backend_name', 'qwen_tts')}"),
-        ("Storyboard", f"{_plain_icon(storyboard.get('status', 'pending'))} {storyboard.get('status', 'pending')} · {storyboard.get('backend_name', 'zimage_storyboard')}"),
+        ("Storyboard", f"{_plain_icon(storyboard.get('status', 'pending'))} {storyboard.get('status', 'pending')} · {storyboard.get('backend_name', 'hidream_storyboard')}"),
         ("Video Backend", f"{_plain_icon(video.get('status', 'pending'))} {video.get('backend_name') or 'LTX-2.3'}"),
         ("Vision Review", f"{vision_icon} {vision_text}"),
     ]
@@ -1273,19 +1273,19 @@ def _format_live_lines(
     lines.append("CURRENT PROMPT")
     positive = scene_trace.get("positive_model_prompt") or "-"
     negative = scene_trace.get("negative_model_prompt") or "-"
-    zimage_prompt = scene_trace.get("zimage_prompt_sent")
+    hidream_prompt = scene_trace.get("hidream_prompt_sent")
     ltx_prompt = scene_trace.get("ltx_prompt_sent")
     policy = (trace.get("backend_prompt_policy") or scene_trace.get("backend_prompt_policy") or {})
-    if str(current.get("step")) == "storyboard" and zimage_prompt:
-        actual = zimage_prompt
+    if str(current.get("step")) == "storyboard" and hidream_prompt:
+        actual = hidream_prompt
     elif str(current.get("step")) == "video" and ltx_prompt:
         actual = ltx_prompt
     else:
-        actual = zimage_prompt or ltx_prompt or positive
+        actual = hidream_prompt or ltx_prompt or positive
     lines.append(_line("Positive", short_prompt(positive, 96), width=14))
     lines.append(_line("Negative", short_prompt(negative, 96), width=14))
     lines.append(_line("Actual", short_prompt(actual, 96), width=14))
-    lines.append(_line("Policy", f"zimage {policy.get('zimage', 'unknown')} / ltx {policy.get('ltx', 'unknown')}" if isinstance(policy, dict) else "unknown", width=14))
+    lines.append(_line("Policy", f"hidream {policy.get('hidream', 'unknown')} / ltx {policy.get('ltx', 'unknown')}" if isinstance(policy, dict) else "unknown", width=14))
     lines.append("")
     lines.append("SCENES")
     trace_scenes = trace.get("scenes") or []

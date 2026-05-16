@@ -18,7 +18,7 @@ from .ace_step_1_5 import get_ready_payload as ace_step_ready_payload
 from .ace_step_1_5 import router as ace_step_router
 from .LTX2 import LTX2JobRequest, LTX_BACKEND, submit_job, get_status
 from .qwen_tts import router as qwen_tts_router
-from .zimage import router as zimage_router
+from .hidream import router as hidream_router
 
 
 app = FastAPI(title="LTX-2.3 API", version="2.3")
@@ -67,13 +67,13 @@ app.mount("/agent-runs", StaticFiles(directory=str(runtime_dirs["agent_runs"])),
 
 # ---- Routers ----
 app.include_router(ace_step_router, prefix="/Ace_step_1.5", tags=["Ace_step_1.5"])
-app.include_router(zimage_router, prefix="/zimage", tags=["zimage"])
+app.include_router(hidream_router, prefix="/hidream", tags=["hidream"])
 app.include_router(qwen_tts_router, prefix="/qwen_tts", tags=["qwen_tts"])
 app.include_router(agent_core_router)
 
 # Flags
 INIT_FLAG = "/workspace/status/init_done"
-ZIMAGE_FLAG_FILE = "/workspace/status/zimage_ready"
+HIDREAM_FLAG_FILE = "/workspace/status/hidream_ready"
 QWEN_ENV_FLAG_FILE = "/workspace/status/qwen_tts_env_ready"
 QWEN_TOKENIZER_FLAG_FILE = "/workspace/status/qwen_tts_tokenizer_ready"
 QWEN_MODEL_FLAG_FILE = "/workspace/status/qwen_tts_model_ready"
@@ -85,10 +85,10 @@ def health():
     return {"status": "ok", "init_ready": os.path.exists(INIT_FLAG), "ltx_backend": LTX_BACKEND}
 
 
-@app.get("/DW/zimage_ready")
-def dw_zimage_ready():
-    ready = os.path.exists(ZIMAGE_FLAG_FILE)
-    return {"ready": ready, "message": "Z-Image bereit." if ready else "Z-Image wird noch vorbereitet."}
+@app.get("/DW/hidream_ready")
+def dw_hidream_ready():
+    ready = os.path.exists(HIDREAM_FLAG_FILE)
+    return {"ready": ready, "model": "HiDream-O1-Dev", "steps": 28, "message": "HiDream-O1-Dev bereit." if ready else "HiDream-O1-Dev wird noch vorbereitet."}
 
 
 @app.get("/DW/qwen_tts_ready")

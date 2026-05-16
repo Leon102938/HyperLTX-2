@@ -22,17 +22,17 @@ class G6PromptBuilderSkillPolicyTest(unittest.TestCase):
         )
         return planner.build_plan(job)
 
-    def test_zimage_positive_only_has_no_avoid_debug_or_script(self) -> None:
+    def test_hidream_positive_only_has_no_avoid_debug_or_script(self) -> None:
         scene = self._plan().scenes[1]
         meta = scene.prompt_build_metadata
-        zimage = meta["zimage_prompt_sent"]
-        self.assertEqual(zimage, meta["positive_model_prompt"])
-        self.assertNotIn("Avoid:", zimage)
+        hidream = meta["hidream_prompt_sent"]
+        self.assertEqual(hidream, meta["positive_model_prompt"])
+        self.assertNotIn("Avoid:", hidream)
         for label in PromptBuilder.DEBUG_LABELS:
-            self.assertNotIn(label, zimage)
-        self.assertNotIn("Place one clear glass", zimage)
-        self.assertGreaterEqual(len(zimage.split()), 25)
-        self.assertLessEqual(len(zimage.split()), 100)
+            self.assertNotIn(label, hidream)
+        self.assertNotIn("Place one clear glass", hidream)
+        self.assertGreaterEqual(len(hidream.split()), 25)
+        self.assertLessEqual(len(hidream.split()), 100)
 
     def test_ltx_positive_and_negative_trace_are_separate(self) -> None:
         scene = self._plan().scenes[1]
@@ -52,10 +52,10 @@ class G6PromptBuilderSkillPolicyTest(unittest.TestCase):
                 "action": "hand places one clear water glass",
                 "allowed_props": ["one clear water glass only", "plain empty wooden table"],
                 "forbidden_props": ["phones", "screens", "text"],
-                "backend_prompt_policy": {"zimage": "positive_only", "ltx": "positive_plus_short_avoid"},
+                "backend_prompt_policy": {"hidream": "positive_only", "ltx": "positive_plus_short_avoid"},
             }
         )
-        self.assertEqual(parts["zimage_prompt_sent"], parts["positive_model_prompt"])
+        self.assertEqual(parts["hidream_prompt_sent"], parts["positive_model_prompt"])
         self.assertEqual(parts["ltx_positive_prompt_sent"], parts["positive_model_prompt"])
         self.assertEqual(parts["ltx_negative_prompt_sent"], parts["negative_model_prompt"])
 

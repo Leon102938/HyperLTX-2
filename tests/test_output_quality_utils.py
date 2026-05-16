@@ -1,7 +1,7 @@
 import unittest
 from types import SimpleNamespace
 
-from agent_core.adapters.zimage_storyboard_adapter import ZImageStoryboardAdapter
+from agent_core.adapters.hidream_storyboard_adapter import HiDreamStoryboardAdapter
 from agent_core.schemas import ProductionPlan, ProductionStep
 from agent_core.utils import (
     build_scene_subtitle_entries,
@@ -62,8 +62,8 @@ class OutputQualityUtilsTest(unittest.TestCase):
         self.assertGreater(profile["font_divisor"], 20)
         self.assertGreaterEqual(profile["top_margin"], 44)
 
-    def test_zimage_storyboard_adapter_prefers_step_effective_prompt(self) -> None:
-        adapter = ZImageStoryboardAdapter()
+    def test_hidream_storyboard_adapter_prefers_step_effective_prompt(self) -> None:
+        adapter = HiDreamStoryboardAdapter()
         plan = ProductionPlan(
             job_id="storyboard-prompt-test",
             orientation="portrait",
@@ -92,8 +92,8 @@ class OutputQualityUtilsTest(unittest.TestCase):
         self.assertEqual(prompt, "scene specific keyframe prompt, no readable text, no screens, no paper.")
         self.assertEqual(source, "scene_world_contract_candidate_variation")
 
-    def test_zimage_storyboard_adapter_falls_back_to_compressed_global_prompt(self) -> None:
-        adapter = ZImageStoryboardAdapter()
+    def test_hidream_storyboard_adapter_falls_back_to_compressed_global_prompt(self) -> None:
+        adapter = HiDreamStoryboardAdapter()
         plan = ProductionPlan(
             job_id="storyboard-prompt-fallback",
             orientation="portrait",

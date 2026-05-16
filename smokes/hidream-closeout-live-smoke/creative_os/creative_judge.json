@@ -1,0 +1,82 @@
+{
+  "stage": "06",
+  "status": "approved",
+  "source": "skills loaded",
+  "skill_source": {
+    "source": "skills loaded",
+    "version": "skill_tree_v1",
+    "loaded": {
+      "modes": [
+        "modes/calm_evergreen"
+      ],
+      "styles": [
+        "styles/clean_warm_lifestyle"
+      ],
+      "hooks": [
+        "hooks/soft_observation_hook"
+      ],
+      "models": [
+        "models/hidream_o1_dev_prompt_rules",
+        "models/hidream_o1_storyboard_rules",
+        "models/hidream_o1_no_unwanted_text_rules",
+        "models/ltx_motion_rules",
+        "models/qwen_tts_delivery_rules"
+      ]
+    },
+    "missing": []
+  },
+  "decision": "approved",
+  "checks": {
+    "visual_clarity": "passed",
+    "text_risk": "needs_guardrails",
+    "scene_progression": "passed"
+  },
+  "risks": [
+    "avoid readable text and signage",
+    "keep subject readable at small mobile size"
+  ],
+  "fixes": [
+    "add explicit no-text rule to every scene contract",
+    "anchor each scene with one main subject"
+  ],
+  "active_skill_rules": [
+    "Open with a quiet observation.",
+    "Make the idea feel reusable tomorrow.",
+    "Prefer steady pacing and clear everyday actions.",
+    "Avoid urgency, hype, and dramatic conflict.",
+    "Warm daylight, soft shadows, clean surfaces.",
+    "Human-scale framing and believable home details.",
+    "Minimal props, no labels, no papers, no screens.",
+    "Colors should feel fresh, neutral, and warm without looking beige-only.",
+    "First beat notices a small everyday moment.",
+    "Hook phrasing should feel gentle and specific.",
+    "Visual opening should be quiet but clear.",
+    "Avoid shock, countdowns, or exaggerated urgency.",
+    "Compile positive-only image prompts from scene contracts, not topic titles or debug notes.",
+    "Use concrete physical subjects, environments, actions, camera language, lighting, mood, and composition.",
+    "Keep prompts text-sparse and visual-first for HiDream-O1-Dev.",
+    "Default image generation uses HiDream-O1-Dev at 28 inference steps.",
+    "Preserve the selected scene order and one clear visual subject per keyframe.",
+    "Ground each prompt in the scene contract's physical objects, environment, action, camera, and lighting.",
+    "Do not create poster layouts, typography compositions, title cards, quote cards, UI screens, or social-media graphics.",
+    "Prefer photographed, practical visual moments over symbolic diagrams or written explanations.",
+    "Do not generate readable text, fake text, letters, numbers, logos, labels, UI, screens, captions, subtitles, watermarks, documents, charts, paper labels, or distorted letters.",
+    "Use text-sparse visual composition and avoid any written-word focal point.",
+    "Add negative prompt terms for readable text, typography, logos, labels, UI, screens, captions, subtitles, watermarks, documents, charts, poster, title card, quote card, headline, and social media graphic.",
+    "Use plain unmarked surfaces for notebooks, mugs, packages, walls, screens, signs, and paper-like objects.",
+    "Block any composition that depends on written words, centered headlines, text overlays, or poster-style graphic design.",
+    "Motion prompts should preserve the keyframe subject and scene contract.",
+    "Use one primary camera move per shot.",
+    "Keep motion physically plausible.",
+    "Avoid text overlays and UI transitions.",
+    "Voice direction should be clear, natural, and concise.",
+    "Calm modes use measured pacing and soft emphasis.",
+    "Fast modes use tighter pacing without shouting.",
+    "Missing script or voice values must stay unknown."
+  ],
+  "concept_notes": [
+    "calm evergreen morning routine tip unfolds through a clear setup, discovery, and payoff.",
+    "Start with a small everyday observation in calm evergreen morning routine tip, using a soft visual opening."
+  ],
+  "handoff": "scene_contracts"
+}

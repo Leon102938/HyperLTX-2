@@ -63,9 +63,9 @@ class G6SkillInjectionTest(unittest.TestCase):
         payload = json.loads(json.dumps(context))
         self.assertEqual(payload["pipeline_id"], "clean_shortform_v1")
         self.assertIn("platforms/tiktok_shortform", payload["required_skills"])
-        self.assertIn("models/zimage_turbo", payload["model_skills"])
+        self.assertIn("models/hidream_o1_dev", payload["model_skills"])
         self.assertIn("directing/anti_boring_scene", payload["directing_skills"])
-        self.assertEqual(payload["prompt_policy"]["zimage"], "positive_only")
+        self.assertEqual(payload["prompt_policy"]["hidream"], "positive_only")
         self.assertEqual(payload["missing_skills"], [])
 
     def test_context_reports_missing_skill_without_hard_failure(self) -> None:

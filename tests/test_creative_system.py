@@ -85,12 +85,12 @@ class CreativeSystemTest(unittest.TestCase):
         self.assertIn("split screen", scene3_negative)
         self.assertIn("collage", scene3_negative)
         self.assertIn("panels", scene3_negative)
-        self.assertEqual(scene2_meta["backend_prompt_policy"]["zimage"], "positive_only")
+        self.assertEqual(scene2_meta["backend_prompt_policy"]["hidream"], "positive_only")
         self.assertEqual(scene2_meta["backend_prompt_policy"]["ltx"], "positive_plus_short_avoid")
-        self.assertEqual(scene2_meta["zimage_prompt_sent"], scene2_meta["positive_model_prompt"])
-        self.assertNotIn("Avoid:", scene2_meta["zimage_prompt_sent"])
+        self.assertEqual(scene2_meta["hidream_prompt_sent"], scene2_meta["positive_model_prompt"])
+        self.assertNotIn("Avoid:", scene2_meta["hidream_prompt_sent"])
         self.assertIn("Avoid:", scene2_meta["ltx_prompt_sent"])
-        self.assertLessEqual(len(scene2_meta["zimage_prompt_sent"].split()), 100)
+        self.assertLessEqual(len(scene2_meta["hidream_prompt_sent"].split()), 100)
         self.assertLessEqual(len(scene2_meta["ltx_prompt_sent"].split()), 140)
         self.assertEqual(scene2_meta["shot_recipe_id"], "water_glass_closeup")
         self.assertEqual(scene2_meta["hook_function"], "tactile_detail_hook")
@@ -105,7 +105,7 @@ class CreativeSystemTest(unittest.TestCase):
         self.assertNotIn("Vorhang auf", model_prompt)
         self.assertNotIn("Stell ein Glas Wasser ab", model_prompt)
         self.assertNotIn("Avoid:", model_prompt)
-        self.assertEqual(storyboard_plan.steps[0].params["prompt_sent_to_backend_source"]["zimage"], "positive_model_prompt")
+        self.assertEqual(storyboard_plan.steps[0].params["prompt_sent_to_backend_source"]["hidream"], "positive_model_prompt")
 
     def test_prompt_audit_file_is_written_for_plan_stage(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -127,7 +127,7 @@ class CreativeSystemTest(unittest.TestCase):
             self.assertTrue(audit["checks"]["scene_has_hook_function"])
             self.assertTrue(audit["checks"]["anti_patterns_checked"])
             self.assertTrue(audit["checks"]["backend_prompt_policy_applied"])
-            self.assertTrue(audit["checks"]["zimage_positive_only_applied"])
+            self.assertTrue(audit["checks"]["hidream_positive_only_applied"])
             self.assertTrue(audit["checks"]["ltx_short_avoid_applied"])
 
     def test_model_prompts_trace_file_is_written_for_plan_stage(self) -> None:
@@ -138,17 +138,17 @@ class CreativeSystemTest(unittest.TestCase):
             plan = agent.planner.build_plan(job)
             agent._save_model_prompts_trace(job, plan, state)
             trace = json.loads((Path(tmpdir) / "runs" / job.job_id / "model_prompts.json").read_text())
-            self.assertEqual(trace["backend_prompt_policy"]["zimage"], "positive_only")
-            self.assertTrue(trace["checks"]["zimage_positive_only_applied"])
+            self.assertEqual(trace["backend_prompt_policy"]["hidream"], "positive_only")
+            self.assertTrue(trace["checks"]["hidream_positive_only_applied"])
             self.assertTrue(trace["checks"]["ltx_short_avoid_applied"])
             self.assertTrue(trace["checks"]["no_debug_labels_in_backend_prompts"])
             self.assertTrue(trace["checks"]["no_script_snippets_in_backend_prompts"])
             self.assertTrue(trace["checks"]["scene_has_shot_recipe_id"])
             scene2 = trace["scenes"][1]
-            self.assertEqual(scene2["prompt_sent_to_backend_source"]["zimage"], "positive_model_prompt")
-            self.assertNotIn("Avoid:", scene2["zimage_prompt_sent"])
+            self.assertEqual(scene2["prompt_sent_to_backend_source"]["hidream"], "positive_model_prompt")
+            self.assertNotIn("Avoid:", scene2["hidream_prompt_sent"])
             self.assertIn("Avoid:", scene2["ltx_prompt_sent"])
-            self.assertLessEqual(len(scene2["zimage_prompt_sent"].split()), 100)
+            self.assertLessEqual(len(scene2["hidream_prompt_sent"].split()), 100)
             self.assertLessEqual(len(scene2["ltx_prompt_sent"].split()), 140)
 
 

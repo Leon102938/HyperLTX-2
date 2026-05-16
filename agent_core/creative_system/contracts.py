@@ -130,7 +130,7 @@ def build_stage_role_contracts(
         backend_prompt_policy=dict(plan.metadata.get("backend_prompt_policy") or {}),
         positive_model_prompt=str(first_meta.get("positive_model_prompt") or first_contract.get("positive_model_prompt") or ""),
         negative_model_prompt=str(first_meta.get("negative_model_prompt") or first_contract.get("negative_model_prompt") or ""),
-        zimage_prompt_sent=str(first_meta.get("zimage_prompt_sent") or first_contract.get("zimage_prompt_sent") or ""),
+        hidream_prompt_sent=str(first_meta.get("hidream_prompt_sent") or first_contract.get("hidream_prompt_sent") or ""),
         ltx_positive_prompt_sent=str(first_meta.get("positive_model_prompt") or first_contract.get("positive_model_prompt") or ""),
         ltx_negative_prompt_sent=str(first_meta.get("negative_model_prompt") or first_contract.get("negative_model_prompt") or ""),
         warnings=[],

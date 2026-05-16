@@ -1,6 +1,10 @@
 # MEMORY.md
 
 ## Dauerhafte Erkenntnisse
+- Aktueller Bildbackend-Grundsatz ab 2026-05-15: HiDream-O1-Dev ist das aktive Stage-09-Bildmodell. Backend-ID `hidream_o1_dev`, Prompt-Artefakt `hidream_prompts.json`, Readiness `/DW/hidream_ready`, Jobs `/hidream/jobs`, Default `28` Steps.
+- Z-Image darf nicht als aktiver Fallback, Skill, Readiness, CLI-Default oder init/autostart-Pfad zurueckkommen. Historische Docs/Snapshots duerfen alte Begriffe enthalten, aktive Runtime/Skills/Tests nicht.
+- Bei fehlendem HiDream bleibt Stage 09 ehrlich paused/missing; keine Fake-PNGs und kein gruenes Manifest ohne reale Outputs.
+- Closeout/Restore: `/workspace/HiDream-O1-Image` als Projektcode sichern; grosse HF-Caches/Checkpoints nicht ins Archiv packen, sondern in `MODEL_PATHS_AND_CACHE_NOTES.md` dokumentieren.
 - G6 aktiviert Skills als zentralen `SkillInjectionContext`: Pipeline Definition + Mode + Style + Job-Metadata werden vor Stage Contracts zusammengefuehrt.
 - Fehlende Skills duerfen den Run nicht hart abbrechen; sie muessen in `missing_skills` und Context-Warnungen sichtbar bleiben.
 - `stage_contracts.json`, `prompt_audit.json`, `model_prompts.json` und `decision_log.json` muessen ab G6 `skill_injection_context` enthalten.

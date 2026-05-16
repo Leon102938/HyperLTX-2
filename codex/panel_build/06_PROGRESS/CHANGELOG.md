@@ -2,6 +2,23 @@
 
 Diese Datei dokumentiert jede Session mit Datum, Umfang und Teststatus.
 
+## 2026-05-15 - Skill Tree V1 + Stage 03-08 Real Wiring
+
+### Geaendert
+
+- Root-`skills/` mit `skill_manifest.json`, Mode-, Style-, Hook- und Model-Skill-Dateien angelegt.
+- `agent_core/creative_os/skill_tree_v1.py` laedt Manifest und Markdown-Regeln robust; fehlende Skills werden `missing`.
+- Stage `03` schreibt echte `skill_match.json` und `skill_tree.json`.
+- Stage `04` bis `08` nutzen Skill-Regeln in Strategy, Beat/Hook, Judge, Scene Contracts und Prompt Compiler.
+- Cockpit Stage `03` zeigt echte Skill-Gruppen; Stage `04` bis `08` zeigen `Source: skills loaded`.
+
+### Tests / Smokes
+
+- `python3 -m unittest /workspace/tests/test_skill_tree_v1.py -v`: gruen, 6 Tests.
+- `python3 -m unittest /workspace/tests/test_creative_os_status.py -v`: gruen, 25 Tests.
+- `python3 -m unittest /workspace/tests/test_creative_os_cockpit.py -v`: gruen, 17 Tests.
+- Smoke: `skill-tree-v1-smoke-20260515`; Stage `09` pausiert korrekt wegen missing Z-Image-Backend.
+
 ## 2026-05-14 - Phase 1 Live Orchestrator V3 Fix
 
 ### Geaendert

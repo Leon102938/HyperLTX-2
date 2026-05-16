@@ -36,16 +36,16 @@ class G2SkillLayerTest(unittest.TestCase):
         )
 
     def test_skill_loader_loads_markdown_skill(self) -> None:
-        skill = load_skill("models/zimage_turbo")
+        skill = load_skill("models/hidream_o1_dev")
         self.assertIsNotNone(skill)
         assert skill is not None
-        self.assertEqual(skill.skill_id, "models/zimage_turbo")
+        self.assertEqual(skill.skill_id, "models/hidream_o1_dev")
         self.assertIn("positive", skill.purpose.lower())
         self.assertFalse(skill.missing_fields)
 
     def test_skill_loader_reports_missing_skills(self) -> None:
-        result = load_required_skills(["models/zimage_turbo", "missing/nope"])
-        self.assertEqual([skill.skill_id for skill in result.loaded], ["models/zimage_turbo"])
+        result = load_required_skills(["models/hidream_o1_dev", "missing/nope"])
+        self.assertEqual([skill.skill_id for skill in result.loaded], ["models/hidream_o1_dev"])
         self.assertEqual(result.missing, ["missing/nope"])
 
     def test_clean_shortform_pipeline_loads_required_skills(self) -> None:
@@ -53,7 +53,7 @@ class G2SkillLayerTest(unittest.TestCase):
         self.assertEqual(pipeline.pipeline_id, "clean_shortform_v1")
         self.assertIn("platforms/tiktok_shortform", pipeline.required_skills)
         prompt_step = next(step for step in pipeline.steps if step.step_id == "create_prompts")
-        self.assertIn("models/zimage_turbo", prompt_step.required_skills)
+        self.assertIn("models/hidream_o1_dev", prompt_step.required_skills)
         self.assertIn("creative_strategy", pipeline.stage_roles)
 
     def test_prompt_and_model_audit_contains_loaded_skills(self) -> None:
@@ -69,7 +69,7 @@ class G2SkillLayerTest(unittest.TestCase):
             self.assertEqual(prompt_audit["pipeline_id"], "clean_shortform_v1")
             self.assertEqual(model_prompts["pipeline_id"], "clean_shortform_v1")
             self.assertIn("platforms/tiktok_shortform", prompt_audit["required_skills"])
-            self.assertTrue(any(skill["skill_id"] == "models/zimage_turbo" for skill in model_prompts["loaded_skills"]))
+            self.assertTrue(any(skill["skill_id"] == "models/hidream_o1_dev" for skill in model_prompts["loaded_skills"]))
             self.assertEqual(model_prompts["missing_skills"], [])
 
     def test_model_prompt_policy_trace(self) -> None:
@@ -77,11 +77,11 @@ class G2SkillLayerTest(unittest.TestCase):
             agent = VideoAgent(state_store=__import__("agent_core.state_store", fromlist=["StateStore"]).StateStore(Path(tmpdir) / "runs"))
             agent.run_job(self._job())
             trace = json.loads((Path(tmpdir) / "runs" / "g2-skill-test" / "model_prompts.json").read_text())
-            self.assertEqual(trace["backend_prompt_policy"]["zimage"], "positive_only")
+            self.assertEqual(trace["backend_prompt_policy"]["hidream"], "positive_only")
             self.assertEqual(trace["backend_prompt_policy"]["ltx"], "positive_plus_short_avoid")
             self.assertFalse(trace["backend_prompt_policy_notes"]["ltx_negative_prompt_supported"])
             scene = trace["scenes"][0]
-            self.assertEqual(scene["prompt_sent_to_backend_source"]["zimage"], "positive_model_prompt")
+            self.assertEqual(scene["prompt_sent_to_backend_source"]["hidream"], "positive_model_prompt")
             self.assertIn("ltx_positive_prompt_sent", scene)
             self.assertIn("ltx_negative_prompt_sent", scene)
 
@@ -99,12 +99,12 @@ class G2SkillLayerTest(unittest.TestCase):
         job = self._job()
         plan = planner.build_plan(job)
         plan.metadata["pipeline_id"] = "clean_shortform_v1"
-        plan.metadata["required_skills"] = ["models/zimage_turbo"]
+        plan.metadata["required_skills"] = ["models/hidream_o1_dev"]
         log = build_initial_decision_log(
             job,
             plan,
             pipeline_id="clean_shortform_v1",
-            skill_trace={"required_skills": ["models/zimage_turbo"], "loaded_skills": [], "missing_skills": []},
+            skill_trace={"required_skills": ["models/hidream_o1_dev"], "loaded_skills": [], "missing_skills": []},
         )
         self.assertEqual(log.pipeline_id, "clean_shortform_v1")
         self.assertIn("selected_skill_set", [decision.decision_id for decision in log.decisions])
@@ -126,8 +126,8 @@ class G2SkillLayerTest(unittest.TestCase):
         self.assertTrue(metadata["pipeline_dry_run"])
         self.assertTrue(metadata["approval_gates_enabled"])
 
-    def test_zimage_policy_constant_remains_positive_only(self) -> None:
-        self.assertEqual(PromptBuilder.DEFAULT_BACKEND_PROMPT_POLICY["zimage"], "positive_only")
+    def test_hidream_policy_constant_remains_positive_only(self) -> None:
+        self.assertEqual(PromptBuilder.DEFAULT_BACKEND_PROMPT_POLICY["hidream"], "positive_only")
         self.assertEqual(PromptBuilder.DEFAULT_BACKEND_PROMPT_POLICY["ltx"], "positive_plus_short_avoid")
 
 

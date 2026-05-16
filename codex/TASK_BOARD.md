@@ -4,7 +4,6 @@
 - Stage-09-Keyframe-Review/Gate als naechsten engen Schritt spezifizieren, ohne Stage `10+` Runtime, LTX, n8n/API oder Redesign zu starten.
 - Creative OS Stage 8 enger Folgeschritt: kontrollierten LTX I2V Render-Plan/Executor-Gate entwerfen, ohne Batch/n8n/API und ohne sofortigen unkontrollierten Render.
 - Creative OS V1 Dry-Run-Artefakte manuell auditieren und dann genau einen Integrationspunkt in den bestehenden Stop-after-`model_prompts`-Pfad entscheiden.
-- G5-Folge: Skills und Stage Contracts aktiv in Director/Planner/PromptBuilder einspeisen und nicht nur laden/tracen.
 - G2-Folge: Decision Log um echte selected_take- und final_quality_decision-Eintraege nach Selection/Assembly erweitern.
 - G2-Folge: Adapter-seitigen LTX-`negative_prompt` Support pruefen und bei echter Backend-Unterstuetzung sauber getrennt verdrahten.
 - G1.2-Folge: Resume-Vertrag definieren und implementieren, damit ein nach Approval freigegebener blockierter Run kontrolliert weiterlaufen kann.
@@ -23,12 +22,18 @@
 - optional spaeter das Qwen-Serve-Profil weiter auf Latenz gegenueber LTX-Koexistenz optimieren
 
 ## IN PROGRESS
-- naechsten sinnvollen Schritt nach G2 festlegen: Skill-Vertraege aktiv in kreative Entscheidungen einspeisen
+- naechster enger Schritt: Stage-09-Keyframe-Review/Gate spezifizieren und dabei Stage `10+`, LTX, n8n/API und Redesign weiter ausklammern
 
 ## BLOCKED
 - noch leer
 
 ## DONE
+- Skill Tree V1 umgesetzt: `/workspace/skills/skill_manifest.json` plus Mode/Style/Hook/Model-Skill-Dateien.
+- Stage `03` laedt echte Skills und schreibt `skill_match.json`/`skill_tree.json`; Missing-Dateien werden `missing`, nicht Fake.
+- Stage `04` bis `08` lesen Skill-Daten nachweisbar und schreiben `Source: skills loaded` plus aktive Regeln in Artefakte/Prompts.
+- Z-Image Prompt Compiler uebernimmt `zimage_avoid_text_artifacts` inklusive `text-sparse, image-first` und No-Text/No-UI/No-Logo-Regeln.
+- Skill-Tree-Smoke erstellt: `/workspace/agent_runs/skill-tree-v1-smoke-20260515/creative_os`; Stage `09` pausierte korrekt wegen fehlendem Backend.
+- Skill-Tree-Tests gruen: `python3 -m unittest /workspace/tests/test_skill_tree_v1.py -v`.
 - V3 Live-Fix umgesetzt: Phase-1-Runs halten Stage `10-15` in Pipeline Map out-of-scope/pending, nie done/gruen.
 - Stage `09` zeigt echte Manifest-/Live-Daten im Workspace und schreibt Manifest waehrend echter Image-Generierung fort.
 - Watch-Refresh rendert nicht bei reiner Zeit-Aenderung und ueberschreibt manuelle Stage-Auswahl nicht.

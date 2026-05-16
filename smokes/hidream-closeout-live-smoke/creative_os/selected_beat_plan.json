@@ -1,0 +1,11 @@
+{
+  "hook": "Start with a small everyday observation in calm evergreen morning routine tip, using a soft visual opening.",
+  "hook_type": "soft observation",
+  "beats": [
+    "setup: establish the everyday moment",
+    "development: show the useful action",
+    "payoff: end on the calm practical result"
+  ],
+  "status": "ready",
+  "handoff": "creative_judge"
+}

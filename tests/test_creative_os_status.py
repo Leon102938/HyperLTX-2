@@ -73,7 +73,7 @@ class CreativeOSStatusTests(unittest.TestCase):
                 "creative_judge.json",
                 "scene_contracts.json",
                 "prompt_payload_compiled.json",
-                "zimage_prompts.json",
+                "hidream_prompts.json",
                 "keyframe_manifest.json",
                 "phase1_status.json",
             ):
@@ -604,7 +604,7 @@ class CreativeOSStatusTests(unittest.TestCase):
         self.assertIn("CURRENT POSITION", dashboard)
         self.assertIn("✓ 08 LTX motion prompts", dashboard)
         self.assertIn("○ 09 LTX video takes", dashboard)
-        self.assertIn("→ Z-Image Prompts", dashboard)
+        self.assertIn("→ HiDream Prompts", dashboard)
         self.assertIn("SKILL HEALTH", dashboard)
         self.assertIn("✓ ok · loaded 8 · fallbacks 2 · missing optional 1 · blocking 0", dashboard)
         self.assertIn("✓ 3 keyframes", dashboard)

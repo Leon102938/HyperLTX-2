@@ -1,0 +1,91 @@
+{
+  "stage": "03",
+  "version": "skill_tree_v1",
+  "status": "ok",
+  "manifest_status": "loaded",
+  "loaded_skill_ids": [
+    "hooks/soft_observation_hook",
+    "models/hidream_o1_dev_prompt_rules",
+    "models/hidream_o1_no_unwanted_text_rules",
+    "models/hidream_o1_storyboard_rules",
+    "models/ltx_motion_rules",
+    "models/qwen_tts_delivery_rules",
+    "modes/calm_evergreen",
+    "styles/clean_warm_lifestyle"
+  ],
+  "fallback_skill_ids": [],
+  "missing_skill_ids": [],
+  "missing_optional": [],
+  "blocking_missing": [],
+  "reasons": {
+    "modes/calm_evergreen": "selected from job mode calm_evergreen",
+    "styles/clean_warm_lifestyle": "selected from job style clean_warm_lifestyle",
+    "hooks/soft_observation_hook": "calm evergreen signal from mode/topic: calm_evergreen",
+    "models/hidream_o1_dev_prompt_rules": "Stage 08 compiles HiDream-O1-Dev image prompts",
+    "models/hidream_o1_storyboard_rules": "Stage 08 keeps image prompts tied to storyboard scene contracts",
+    "models/hidream_o1_no_unwanted_text_rules": "Stage 08 blocks text, poster, and typography artifacts for HiDream-O1-Dev",
+    "models/ltx_motion_rules": "Stage 07 prepares scene contracts for later motion handoff",
+    "models/qwen_tts_delivery_rules": "Phase 1 records audio/voice delivery rules as model context"
+  },
+  "groups": {
+    "modes": [
+      "calm_evergreen"
+    ],
+    "styles": [
+      "clean_warm_lifestyle"
+    ],
+    "hooks": [
+      "soft_observation_hook"
+    ],
+    "models": [
+      "hidream_o1_dev_prompt_rules",
+      "hidream_o1_storyboard_rules",
+      "hidream_o1_no_unwanted_text_rules",
+      "ltx_motion_rules",
+      "qwen_tts_delivery_rules"
+    ]
+  },
+  "selected": {
+    "modes": [
+      {
+        "id": "calm_evergreen",
+        "reason": "selected from job mode calm_evergreen"
+      }
+    ],
+    "styles": [
+      {
+        "id": "clean_warm_lifestyle",
+        "reason": "selected from job style clean_warm_lifestyle"
+      }
+    ],
+    "hooks": [
+      {
+        "id": "soft_observation_hook",
+        "reason": "calm evergreen signal from mode/topic: calm_evergreen"
+      }
+    ],
+    "models": [
+      {
+        "id": "hidream_o1_dev_prompt_rules",
+        "reason": "Stage 08 compiles HiDream-O1-Dev image prompts"
+      },
+      {
+        "id": "hidream_o1_storyboard_rules",
+        "reason": "Stage 08 keeps image prompts tied to storyboard scene contracts"
+      },
+      {
+        "id": "hidream_o1_no_unwanted_text_rules",
+        "reason": "Stage 08 blocks text, poster, and typography artifacts for HiDream-O1-Dev"
+      },
+      {
+        "id": "ltx_motion_rules",
+        "reason": "Stage 07 prepares scene contracts for later motion handoff"
+      },
+      {
+        "id": "qwen_tts_delivery_rules",
+        "reason": "Phase 1 records audio/voice delivery rules as model context"
+      }
+    ]
+  },
+  "note": "Pipeline route is fixed; Skill Tree V1 only selects mode, style, hook, and model skills."
+}

@@ -1,0 +1,293 @@
+[
+  {
+    "stage": "07",
+    "source": "skills loaded",
+    "skill_rules_applied": {
+      "style": [
+        "Warm daylight, soft shadows, clean surfaces.",
+        "Human-scale framing and believable home details.",
+        "Minimal props, no labels, no papers, no screens.",
+        "Colors should feel fresh, neutral, and warm without looking beige-only."
+      ],
+      "model": [
+        "Compile positive-only image prompts from scene contracts, not topic titles or debug notes.",
+        "Use concrete physical subjects, environments, actions, camera language, lighting, mood, and composition.",
+        "Keep prompts text-sparse and visual-first for HiDream-O1-Dev.",
+        "Default image generation uses HiDream-O1-Dev at 28 inference steps.",
+        "Preserve the selected scene order and one clear visual subject per keyframe.",
+        "Ground each prompt in the scene contract's physical objects, environment, action, camera, and lighting.",
+        "Do not create poster layouts, typography compositions, title cards, quote cards, UI screens, or social-media graphics.",
+        "Prefer photographed, practical visual moments over symbolic diagrams or written explanations.",
+        "Do not generate readable text, fake text, letters, numbers, logos, labels, UI, screens, captions, subtitles, watermarks, documents, charts, paper labels, or distorted letters.",
+        "Use text-sparse visual composition and avoid any written-word focal point.",
+        "Add negative prompt terms for readable text, typography, logos, labels, UI, screens, captions, subtitles, watermarks, documents, charts, poster, title card, quote card, headline, and social media graphic.",
+        "Use plain unmarked surfaces for notebooks, mugs, packages, walls, screens, signs, and paper-like objects.",
+        "Block any composition that depends on written words, centered headlines, text overlays, or poster-style graphic design.",
+        "Motion prompts should preserve the keyframe subject and scene contract.",
+        "Use one primary camera move per shot.",
+        "Keep motion physically plausible.",
+        "Avoid text overlays and UI transitions.",
+        "Voice direction should be clear, natural, and concise.",
+        "Calm modes use measured pacing and soft emphasis.",
+        "Fast modes use tighter pacing without shouting.",
+        "Missing script or voice values must stay unknown."
+      ]
+    },
+    "scene_id": "scene_01",
+    "title": "calm evergreen morning routine tip / wide establishing reveal",
+    "topic_metadata": "calm evergreen morning routine tip",
+    "visual_anchor": "wide establishing reveal",
+    "visual_motif": {
+      "subject": "warm morning kitchen counter still life",
+      "environment": "quiet home kitchen beside a window",
+      "physical_objects": [
+        "ceramic mug",
+        "folded linen towel",
+        "small green plant",
+        "wood counter",
+        "plain saucer"
+      ],
+      "action": "soft morning light settling across the counter",
+      "camera": "gentle close establishing frame",
+      "lighting": "soft window light",
+      "forbidden_composition": [
+        "poster",
+        "title card",
+        "quote card",
+        "typography layout",
+        "centered text composition",
+        "wall headline"
+      ],
+      "text_risk": "high_if_topic_words_rendered"
+    },
+    "environment": "quiet home kitchen beside a window",
+    "physical_objects": [
+      "ceramic mug",
+      "folded linen towel",
+      "small green plant",
+      "wood counter",
+      "plain saucer"
+    ],
+    "action": "soft morning light settling across the counter",
+    "camera": "gentle close establishing frame",
+    "lighting": "soft window light",
+    "mood": "calm, gentle, useful",
+    "composition": "one clear subject, uncluttered frame, plain unmarked surfaces",
+    "allowed_visuals": [
+      "everyday subjects",
+      "clear depth",
+      "plain unmarked surfaces"
+    ],
+    "forbidden_visuals": [
+      "readable text",
+      "logos",
+      "UI screens",
+      "paper labels"
+    ],
+    "forbidden_composition": [
+      "poster",
+      "title card",
+      "quote card",
+      "typography layout",
+      "centered text composition",
+      "wall headline"
+    ],
+    "text_glyph_risk": "blocked_by_prompt_rules",
+    "text_risk": "high_if_topic_words_rendered",
+    "status": "ready_for_prompt_compiler"
+  },
+  {
+    "stage": "07",
+    "source": "skills loaded",
+    "skill_rules_applied": {
+      "style": [
+        "Warm daylight, soft shadows, clean surfaces.",
+        "Human-scale framing and believable home details.",
+        "Minimal props, no labels, no papers, no screens.",
+        "Colors should feel fresh, neutral, and warm without looking beige-only."
+      ],
+      "model": [
+        "Compile positive-only image prompts from scene contracts, not topic titles or debug notes.",
+        "Use concrete physical subjects, environments, actions, camera language, lighting, mood, and composition.",
+        "Keep prompts text-sparse and visual-first for HiDream-O1-Dev.",
+        "Default image generation uses HiDream-O1-Dev at 28 inference steps.",
+        "Preserve the selected scene order and one clear visual subject per keyframe.",
+        "Ground each prompt in the scene contract's physical objects, environment, action, camera, and lighting.",
+        "Do not create poster layouts, typography compositions, title cards, quote cards, UI screens, or social-media graphics.",
+        "Prefer photographed, practical visual moments over symbolic diagrams or written explanations.",
+        "Do not generate readable text, fake text, letters, numbers, logos, labels, UI, screens, captions, subtitles, watermarks, documents, charts, paper labels, or distorted letters.",
+        "Use text-sparse visual composition and avoid any written-word focal point.",
+        "Add negative prompt terms for readable text, typography, logos, labels, UI, screens, captions, subtitles, watermarks, documents, charts, poster, title card, quote card, headline, and social media graphic.",
+        "Use plain unmarked surfaces for notebooks, mugs, packages, walls, screens, signs, and paper-like objects.",
+        "Block any composition that depends on written words, centered headlines, text overlays, or poster-style graphic design.",
+        "Motion prompts should preserve the keyframe subject and scene contract.",
+        "Use one primary camera move per shot.",
+        "Keep motion physically plausible.",
+        "Avoid text overlays and UI transitions.",
+        "Voice direction should be clear, natural, and concise.",
+        "Calm modes use measured pacing and soft emphasis.",
+        "Fast modes use tighter pacing without shouting.",
+        "Missing script or voice values must stay unknown."
+      ]
+    },
+    "scene_id": "scene_02",
+    "title": "calm evergreen morning routine tip / close subject action",
+    "topic_metadata": "calm evergreen morning routine tip",
+    "visual_anchor": "close subject action",
+    "visual_motif": {
+      "subject": "person preparing a simple morning habit",
+      "environment": "calm home detail near a kitchen window",
+      "physical_objects": [
+        "hand",
+        "ceramic mug",
+        "clear water carafe",
+        "curtain edge",
+        "small green plant"
+      ],
+      "action": "hand pouring water and placing the mug into a quiet routine setup",
+      "camera": "natural over-the-counter close shot",
+      "lighting": "soft daylight through curtains",
+      "forbidden_composition": [
+        "poster",
+        "title card",
+        "quote card",
+        "typography layout",
+        "centered text composition",
+        "social media graphic"
+      ],
+      "text_risk": "avoid labels, packaging, screens, and printed words"
+    },
+    "environment": "calm home detail near a kitchen window",
+    "physical_objects": [
+      "hand",
+      "ceramic mug",
+      "clear water carafe",
+      "curtain edge",
+      "small green plant"
+    ],
+    "action": "hand pouring water and placing the mug into a quiet routine setup",
+    "camera": "natural over-the-counter close shot",
+    "lighting": "soft daylight through curtains",
+    "mood": "calm, gentle, useful",
+    "composition": "one clear subject, uncluttered frame, plain unmarked surfaces",
+    "allowed_visuals": [
+      "everyday subjects",
+      "clear depth",
+      "plain unmarked surfaces"
+    ],
+    "forbidden_visuals": [
+      "readable text",
+      "logos",
+      "UI screens",
+      "paper labels"
+    ],
+    "forbidden_composition": [
+      "poster",
+      "title card",
+      "quote card",
+      "typography layout",
+      "centered text composition",
+      "social media graphic"
+    ],
+    "text_glyph_risk": "blocked_by_prompt_rules",
+    "text_risk": "avoid labels, packaging, screens, and printed words",
+    "status": "ready_for_prompt_compiler"
+  },
+  {
+    "stage": "07",
+    "source": "skills loaded",
+    "skill_rules_applied": {
+      "style": [
+        "Warm daylight, soft shadows, clean surfaces.",
+        "Human-scale framing and believable home details.",
+        "Minimal props, no labels, no papers, no screens.",
+        "Colors should feel fresh, neutral, and warm without looking beige-only."
+      ],
+      "model": [
+        "Compile positive-only image prompts from scene contracts, not topic titles or debug notes.",
+        "Use concrete physical subjects, environments, actions, camera language, lighting, mood, and composition.",
+        "Keep prompts text-sparse and visual-first for HiDream-O1-Dev.",
+        "Default image generation uses HiDream-O1-Dev at 28 inference steps.",
+        "Preserve the selected scene order and one clear visual subject per keyframe.",
+        "Ground each prompt in the scene contract's physical objects, environment, action, camera, and lighting.",
+        "Do not create poster layouts, typography compositions, title cards, quote cards, UI screens, or social-media graphics.",
+        "Prefer photographed, practical visual moments over symbolic diagrams or written explanations.",
+        "Do not generate readable text, fake text, letters, numbers, logos, labels, UI, screens, captions, subtitles, watermarks, documents, charts, paper labels, or distorted letters.",
+        "Use text-sparse visual composition and avoid any written-word focal point.",
+        "Add negative prompt terms for readable text, typography, logos, labels, UI, screens, captions, subtitles, watermarks, documents, charts, poster, title card, quote card, headline, and social media graphic.",
+        "Use plain unmarked surfaces for notebooks, mugs, packages, walls, screens, signs, and paper-like objects.",
+        "Block any composition that depends on written words, centered headlines, text overlays, or poster-style graphic design.",
+        "Motion prompts should preserve the keyframe subject and scene contract.",
+        "Use one primary camera move per shot.",
+        "Keep motion physically plausible.",
+        "Avoid text overlays and UI transitions.",
+        "Voice direction should be clear, natural, and concise.",
+        "Calm modes use measured pacing and soft emphasis.",
+        "Fast modes use tighter pacing without shouting.",
+        "Missing script or voice values must stay unknown."
+      ]
+    },
+    "scene_id": "scene_03",
+    "title": "calm evergreen morning routine tip / final cinematic payoff",
+    "topic_metadata": "calm evergreen morning routine tip",
+    "visual_anchor": "final cinematic payoff",
+    "visual_motif": {
+      "subject": "finished quiet morning routine setup",
+      "environment": "clean table in warm daylight",
+      "physical_objects": [
+        "ceramic mug",
+        "closed plain unmarked notebook",
+        "small green plant",
+        "folded linen towel",
+        "wood table"
+      ],
+      "action": "finished calm setup resting in place",
+      "camera": "steady composed tabletop frame",
+      "lighting": "warm soft daylight",
+      "forbidden_composition": [
+        "poster",
+        "title card",
+        "quote card",
+        "blank wall headline",
+        "typography layout",
+        "printed words"
+      ],
+      "text_risk": "closed notebook must be plain and unmarked"
+    },
+    "environment": "clean table in warm daylight",
+    "physical_objects": [
+      "ceramic mug",
+      "closed plain unmarked notebook",
+      "small green plant",
+      "folded linen towel",
+      "wood table"
+    ],
+    "action": "finished calm setup resting in place",
+    "camera": "steady composed tabletop frame",
+    "lighting": "warm soft daylight",
+    "mood": "calm, gentle, useful",
+    "composition": "one clear subject, uncluttered frame, plain unmarked surfaces",
+    "allowed_visuals": [
+      "everyday subjects",
+      "clear depth",
+      "plain unmarked surfaces"
+    ],
+    "forbidden_visuals": [
+      "readable text",
+      "logos",
+      "UI screens",
+      "paper labels"
+    ],
+    "forbidden_composition": [
+      "poster",
+      "title card",
+      "quote card",
+      "blank wall headline",
+      "typography layout",
+      "printed words"
+    ],
+    "text_glyph_risk": "blocked_by_prompt_rules",
+    "text_risk": "closed notebook must be plain and unmarked",
+    "status": "ready_for_prompt_compiler"
+  }
+]

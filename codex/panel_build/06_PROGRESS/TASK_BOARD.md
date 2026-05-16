@@ -1,6 +1,6 @@
 # Task Board
 
-Stand: 2026-05-14, Phase-1-Live-Orchestrator V3 Stage 00-09.
+Stand: 2026-05-15, Skill Tree V1 Stage 03-08.
 
 ## Done
 
@@ -51,10 +51,16 @@ Stand: 2026-05-14, Phase-1-Live-Orchestrator V3 Stage 00-09.
 - [x] V3 Stage-09-Real-Anzeige: Backend/Overall/Live/Gallery und Jobdaten sichtbar.
 - [x] V3 Watch/Interaktion: manuelle Stage-Auswahl bleibt bei Watch erhalten; reine Timer-Ticks rendern nicht voll neu.
 - [x] V3-Smokes: `live-v3-smoke-noimages-20260514`, `live-v3-smoke-images-20260514`.
+- [x] Skill Tree V1 gebaut: Root-`skills/` mit Manifest, Modes, Styles, Hooks und Models.
+- [x] Stage `03` laedt echte Skill-Dateien und schreibt `skill_match.json`/`skill_tree.json`.
+- [x] Stage `04` bis `08` lesen Skill-Regeln und schreiben `Source: skills loaded` in Artefakte/Prompts.
+- [x] Stage `08` uebernimmt Z-Image-Textartefaktregeln inklusive `text-sparse, image-first`.
+- [x] Skill-Tree-Smoke `skill-tree-v1-smoke-20260515` erzeugt; Stage `09` pausiert korrekt bei missing Backend.
+- [x] Skill-Tree-, Cockpit- und Status-Tests gruen.
 
 ## In Progress
 
-- [ ] Kein aktiver Build-Durchlauf. Phase 1 ist lokal live-orchestriert; Stage 10+ ist bewusst nicht gebaut.
+- [ ] Kein aktiver Build-Durchlauf. Skill Tree V1 ist in Phase 1 verdrahtet; Stage 10+ ist bewusst nicht gebaut.
 
 ## Next Build Backlog
 

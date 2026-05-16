@@ -100,7 +100,7 @@ class PromptBuilder:
         "clean physical space",
     )
     DEFAULT_BACKEND_PROMPT_POLICY = {
-        "zimage": "positive_only",
+        "hidream": "positive_only",
         "ltx": "positive_plus_short_avoid",
     }
     LTX_SHORT_AVOID_TERMS = (
@@ -215,7 +215,7 @@ class PromptBuilder:
         scene_world_contract["positive_model_prompt"] = prompt_parts["positive_model_prompt"]
         scene_world_contract["negative_model_prompt"] = prompt_parts["negative_model_prompt"]
         scene_world_contract["backend_prompt_policy"] = prompt_parts["backend_prompt_policy"]
-        scene_world_contract["zimage_prompt_sent"] = prompt_parts["zimage_prompt_sent"]
+        scene_world_contract["hidream_prompt_sent"] = prompt_parts["hidream_prompt_sent"]
         scene_world_contract["ltx_prompt_sent"] = prompt_parts["ltx_prompt_sent"]
         scene_world_contract["ltx_positive_prompt_sent"] = prompt_parts["ltx_positive_prompt_sent"]
         scene_world_contract["ltx_negative_prompt_sent"] = prompt_parts["ltx_negative_prompt_sent"]
@@ -231,7 +231,7 @@ class PromptBuilder:
             "positive_model_prompt": prompt_parts["positive_model_prompt"],
             "negative_model_prompt": prompt_parts["negative_model_prompt"],
             "backend_prompt_policy": prompt_parts["backend_prompt_policy"],
-            "zimage_prompt_sent": prompt_parts["zimage_prompt_sent"],
+            "hidream_prompt_sent": prompt_parts["hidream_prompt_sent"],
             "ltx_prompt_sent": prompt_parts["ltx_prompt_sent"],
             "ltx_positive_prompt_sent": prompt_parts["ltx_positive_prompt_sent"],
             "ltx_negative_prompt_sent": prompt_parts["ltx_negative_prompt_sent"],
@@ -319,7 +319,7 @@ class PromptBuilder:
             "positive_model_prompt": prompt_parts["positive_model_prompt"],
             "negative_model_prompt": prompt_parts["negative_model_prompt"],
             "backend_prompt_policy": prompt_parts["backend_prompt_policy"],
-            "zimage_prompt_sent": prompt_parts["zimage_prompt_sent"],
+            "hidream_prompt_sent": prompt_parts["hidream_prompt_sent"],
             "ltx_prompt_sent": prompt_parts["ltx_prompt_sent"],
             "ltx_positive_prompt_sent": prompt_parts["ltx_positive_prompt_sent"],
             "ltx_negative_prompt_sent": prompt_parts["ltx_negative_prompt_sent"],
@@ -434,12 +434,12 @@ class PromptBuilder:
             "positive_model_prompt": prompt_parts["positive_model_prompt"],
             "negative_model_prompt": prompt_parts["negative_model_prompt"],
             "backend_prompt_policy": prompt_parts["backend_prompt_policy"],
-            "zimage_prompt_sent": prompt_parts["zimage_prompt_sent"],
+            "hidream_prompt_sent": prompt_parts["hidream_prompt_sent"],
             "ltx_prompt_sent": prompt_parts["ltx_prompt_sent"],
             "ltx_positive_prompt_sent": prompt_parts["ltx_positive_prompt_sent"],
             "ltx_negative_prompt_sent": prompt_parts["ltx_negative_prompt_sent"],
             "prompt_sent_to_backend_source": prompt_parts["prompt_sent_to_backend_source"],
-            "effective_model_prompt": prompt_parts["zimage_prompt_sent"],
+            "effective_model_prompt": prompt_parts["hidream_prompt_sent"],
             "prompt_audit": self.audit_model_prompt(model_prompt),
             "prompt_source": "scene_world_contract_candidate_variation",
             "contract_fields_used": [
@@ -494,7 +494,7 @@ class PromptBuilder:
             "model_prompt": combined,
             "combined_model_prompt": combined,
             "backend_prompt_policy": backend_prompts["backend_prompt_policy"],
-            "zimage_prompt_sent": backend_prompts["zimage_prompt_sent"],
+            "hidream_prompt_sent": backend_prompts["hidream_prompt_sent"],
             "ltx_prompt_sent": combined,
             "ltx_positive_prompt_sent": positive,
             "ltx_negative_prompt_sent": negative_prompt,
@@ -531,16 +531,16 @@ class PromptBuilder:
         negative_terms: list[str],
     ) -> dict[str, Any]:
         policy = self._backend_prompt_policy(contract)
-        zimage_policy = str(policy.get("zimage") or "positive_only")
+        hidream_policy = str(policy.get("hidream") or "positive_only")
         ltx_policy = str(policy.get("ltx") or "positive_plus_short_avoid")
         ltx_short_terms = self._short_avoid_terms(negative_terms, limit=12)
 
-        if zimage_policy == "positive_only":
-            zimage_prompt = positive_model_prompt
-            zimage_source = "positive_model_prompt"
+        if hidream_policy == "positive_only":
+            hidream_prompt = positive_model_prompt
+            hidream_source = "positive_model_prompt"
         else:
-            zimage_prompt = self._join_clauses([positive_model_prompt, f"Avoid: {', '.join(ltx_short_terms[:6])}"])
-            zimage_source = "combined_model_prompt"
+            hidream_prompt = self._join_clauses([positive_model_prompt, f"Avoid: {', '.join(ltx_short_terms[:6])}"])
+            hidream_source = "combined_model_prompt"
 
         if ltx_policy == "positive_plus_short_avoid" and ltx_short_terms:
             ltx_prompt = self._join_clauses([positive_model_prompt, f"Avoid: {', '.join(ltx_short_terms)}"])
@@ -551,11 +551,11 @@ class PromptBuilder:
 
         return {
             "backend_prompt_policy": policy,
-            "zimage_prompt_sent": self._limit_words(self._strip_debug_and_leaked_terms(zimage_prompt), 100),
+            "hidream_prompt_sent": self._limit_words(self._strip_debug_and_leaked_terms(hidream_prompt), 100),
             "ltx_prompt_sent": self._limit_words(self._strip_debug_and_leaked_terms(ltx_prompt), 140),
             "ltx_short_avoid_terms": ltx_short_terms,
             "prompt_sent_to_backend_source": {
-                "zimage": zimage_source,
+                "hidream": hidream_source,
                 "ltx": ltx_source,
             },
         }
@@ -564,7 +564,7 @@ class PromptBuilder:
         explicit = contract.get("backend_prompt_policy")
         if isinstance(explicit, dict):
             return {
-                "zimage": str(explicit.get("zimage") or self.DEFAULT_BACKEND_PROMPT_POLICY["zimage"]),
+                "hidream": str(explicit.get("hidream") or self.DEFAULT_BACKEND_PROMPT_POLICY["hidream"]),
                 "ltx": str(explicit.get("ltx") or self.DEFAULT_BACKEND_PROMPT_POLICY["ltx"]),
             }
         return dict(self.DEFAULT_BACKEND_PROMPT_POLICY)
