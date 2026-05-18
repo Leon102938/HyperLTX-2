@@ -4,7 +4,12 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from .agent_core_api import router as agent_core_router
+try:
+    from .agent_core_api import router as agent_core_router
+except ModuleNotFoundError as exc:
+    if exc.name != "agent_core":
+        raise
+    agent_core_router = None
 from .editor_api import EditRequest, render_edit
 from .upscaler_api import (
     UpscaleVideoRequest,
@@ -24,29 +29,11 @@ from .hidream import router as hidream_router
 app = FastAPI(title="LTX-2.3 API", version="2.3")
 
 BASE_DIR = Path("/workspace")
-DIRECTOR_ENV_FILES = (
-    BASE_DIR / "config" / "director_llm.env",
-    BASE_DIR / "config" / "director_llm.env.local",
-)
 RUNTIME_DIRS = {
     "exports": BASE_DIR / "exports",
     "jobs": BASE_DIR / "jobs",
     "agent_runs": BASE_DIR / "agent_runs",
 }
-
-
-def _load_env_defaults(paths: tuple[Path, ...]) -> None:
-    for path in paths:
-        if not path.exists():
-            continue
-        for raw_line in path.read_text().splitlines():
-            line = raw_line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, value = line.split("=", 1)
-            key = key.strip()
-            value = value.strip().strip("'").strip('"')
-            os.environ.setdefault(key, value)
 
 
 def _ensure_runtime_dirs() -> dict[str, Path]:
@@ -55,7 +42,6 @@ def _ensure_runtime_dirs() -> dict[str, Path]:
     return RUNTIME_DIRS
 
 
-_load_env_defaults(DIRECTOR_ENV_FILES)
 runtime_dirs = _ensure_runtime_dirs()
 
 # Exports für n8n (Link-basiert statt Binary)
@@ -69,7 +55,8 @@ app.mount("/agent-runs", StaticFiles(directory=str(runtime_dirs["agent_runs"])),
 app.include_router(ace_step_router, prefix="/Ace_step_1.5", tags=["Ace_step_1.5"])
 app.include_router(hidream_router, prefix="/hidream", tags=["hidream"])
 app.include_router(qwen_tts_router, prefix="/qwen_tts", tags=["qwen_tts"])
-app.include_router(agent_core_router)
+if agent_core_router is not None:
+    app.include_router(agent_core_router)
 
 # Flags
 INIT_FLAG = "/workspace/status/init_done"

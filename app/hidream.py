@@ -19,7 +19,9 @@ HF_HOME = os.environ.get("HF_HOME", "/workspace/.cache/hf")
 BASE_URL = os.environ.get("BASE_URL", "").rstrip("/")
 STATUS_DIR = Path(os.environ.get("STATUS_DIR", "/workspace/status"))
 HIDREAM_READY_FLAG = Path(os.environ.get("HIDREAM_READY_FLAG", str(STATUS_DIR / "hidream_ready")))
-HIDREAM_MODEL_ID = os.environ.get("HIDREAM_MODEL_ID", "HiDream-ai/HiDream-O1-Dev")
+HIDREAM_MODEL_ID = os.environ.get("HIDREAM_MODEL_ID", "HiDream-ai/HiDream-O1-Image-Dev")
+HIDREAM_REPO_ROOT = Path(os.environ.get("HIDREAM_REPO_ROOT", "/workspace/HiDream-O1-Image"))
+HIDREAM_INFERENCE = Path(os.environ.get("HIDREAM_INFERENCE", str(HIDREAM_REPO_ROOT / "inference.py")))
 JOBS_ROOT = Path(os.environ.get("HIDREAM_JOBS_ROOT", "/workspace/jobs/hidream"))
 
 
@@ -66,71 +68,40 @@ async def _run_job(job_id: str) -> None:
 
     _write_status(job_id, "running")
 
-    worker = r"""
-import os, json, torch, sys
-try:
-    from diffusers import AutoPipelineForText2Image
-
-    with open(os.environ["JOB_JSON"], "r", encoding="utf-8") as f:
-        req = json.load(f)
-
-    prompt = req["prompt"]
-    width = int(req["width"])
-    height = int(req["height"])
-    steps = int(req["steps"])
-    guidance = float(req["guidance_scale"])
-    seed = req.get("seed", None)
-    out_path = req["out_path"]
-    model_id = os.environ.get("HIDREAM_MODEL_ID", "HiDream-ai/HiDream-O1-Dev")
-
-    dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float16
-    print(f"Loading {model_id}...")
-    pipe = AutoPipelineForText2Image.from_pretrained(
-        model_id,
-        torch_dtype=dtype,
-        low_cpu_mem_usage=False,
-    )
-
-    if torch.cuda.is_available():
-        pipe = pipe.to("cuda")
-
-    gen = None
-    if seed is not None:
-        gen = torch.Generator("cuda" if torch.cuda.is_available() else "cpu").manual_seed(int(seed))
-
-    print(f"Generating HiDream image for: {prompt}")
-    img = pipe(
-        prompt=prompt,
-        height=height,
-        width=width,
-        num_inference_steps=steps,
-        guidance_scale=guidance,
-        generator=gen,
-    ).images[0]
-
-    os.makedirs(os.path.dirname(out_path), exist_ok=True)
-    img.save(out_path)
-    print(f"Saved image to {out_path}.")
-except Exception as e:
-    print(f"ERROR: {str(e)}", file=sys.stderr)
-    sys.exit(1)
-"""
-
     env = os.environ.copy()
     env["HF_HOME"] = HF_HOME
-    env["JOB_JSON"] = str(req_path)
     env["HIDREAM_MODEL_ID"] = HIDREAM_MODEL_ID
-    env["PYTHONPATH"] = os.environ.get("PYTHONPATH", "") + ":" + str(Path.cwd())
+    env["PYTHONPATH"] = os.pathsep.join(
+        p for p in [str(HIDREAM_REPO_ROOT), os.environ.get("PYTHONPATH", "")] if p
+    )
 
     try:
+        req = json.loads(req_path.read_text(encoding="utf-8"))
+        cmd = [
+            HIDREAM_PY,
+            str(HIDREAM_INFERENCE),
+            "--model_path",
+            HIDREAM_MODEL_ID,
+            "--model_type",
+            "dev",
+            "--prompt",
+            req["prompt"],
+            "--output_image",
+            str(out_path),
+            "--height",
+            str(int(req["height"])),
+            "--width",
+            str(int(req["width"])),
+            "--seed",
+            str(int(req.get("seed") or 0)),
+        ]
         with open(stdout_path, "wb") as out_f, open(stderr_path, "wb") as err_f:
             proc = await asyncio.create_subprocess_exec(
-                HIDREAM_PY,
-                "-c",
-                worker,
+                *cmd,
                 stdout=out_f,
                 stderr=err_f,
                 env=env,
+                cwd=str(HIDREAM_REPO_ROOT),
             )
             return_code = await proc.wait()
 

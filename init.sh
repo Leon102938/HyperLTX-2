@@ -28,16 +28,6 @@ fi
 
 sed -i 's/\r$//' /workspace/tools.config 2>/dev/null || true
 source /workspace/tools.config 2>/dev/null || true
-for config_file in \
-  /workspace/config/director_llm.env \
-  /workspace/config/director_llm.env.local
-do
-  if [ -f "$config_file" ]; then
-    sed -i 's/\r$//' "$config_file" 2>/dev/null || true
-    source "$config_file" 2>/dev/null || true
-  fi
-done
-
 export PATH="/opt/venv/bin:/usr/local/bin:/root/.local/bin:/usr/local/cuda/bin:/usr/bin:/bin:$PATH"
 export DEBIAN_FRONTEND=noninteractive
 export GIT_TERMINAL_PROMPT=0
@@ -168,14 +158,6 @@ ACE_STEP_ROOT="/workspace/ACE-Step-1.5"
 ACE_STEP_CKPT_DIR="$ACE_STEP_ROOT/checkpoints"
 ACE_STEP_READY_FLAG="/workspace/status/ace_step_ready"
 ACE_STEP_ENV_FLAG="/workspace/status/ace_step_env_ready"
-DIRECTOR_LLM_MODEL_DIR="${DIRECTOR_LLM_MODEL_DIR:-/workspace/models/director/qwen3.6-35b-a3b/gguf}"
-DIRECTOR_LLM_MODEL_FILE="${DIRECTOR_LLM_MODEL_FILE:-Qwen_Qwen3.6-35B-A3B-Q4_K_M.gguf}"
-DIRECTOR_LLM_MODEL_PATH="${DIRECTOR_LLM_MODEL_PATH:-$DIRECTOR_LLM_MODEL_DIR/$DIRECTOR_LLM_MODEL_FILE}"
-DIRECTOR_LLM_AUTO_SETUP="${DIRECTOR_LLM_AUTO_SETUP:-on}"
-DIRECTOR_LLM_AUTO_START="${DIRECTOR_LLM_AUTO_START:-off}"
-DIRECTOR_LLM_MODEL_READY_FLAG="/workspace/status/director_llm_model_ready"
-DIRECTOR_LLM_SERVER_READY_FLAG="/workspace/status/director_llm_server_ready"
-DIRECTOR_LLM_SETUP_FAILED_FLAG="/workspace/status/director_llm_setup_failed"
 Qwen3_VL_Review="${Qwen3_VL_Review:-off}"
 Vision_Review_Model="${Vision_Review_Model:-off}"
 QWEN3_VL_MODEL_DIR="/workspace/models/Qwen3-VL-4B-Instruct-FP8"
@@ -183,7 +165,6 @@ QWEN3_VL_READY_FLAG="/workspace/status/qwen3_vl_ready"
 mkdir -p "$MODELS_DIR/ltx-2.3" "$MODELS_DIR/gemma-3" "$LORA_DIR"
 mkdir -p "$QWEN_MODELS_DIR"
 mkdir -p "$ACE_STEP_CKPT_DIR"
-mkdir -p "$DIRECTOR_LLM_MODEL_DIR"
 mkdir -p /workspace/scripts
 
 # ----------------------------------------------------
@@ -353,7 +334,7 @@ fi
 # ----------------------------------------------------
 if [ "${HiDream_O1_Dev:-off}" = "on" ]; then
   echo "[hidream] HiDream_O1_Dev is ON. Checking cache..."
-  if hf_download_all "${HIDREAM_O1_DEV_REPO:-HiDream-ai/HiDream-O1-Dev}"; then
+  if hf_download_all "${HIDREAM_O1_DEV_REPO:-HiDream-ai/HiDream-O1-Image-Dev}"; then
     touch "/workspace/status/hidream_ready"
   fi
 fi
@@ -380,51 +361,7 @@ if [ ! -f "$MODELS_DIR/ltx-2.3/ltx-2.3-22b-dev.safetensors" ] || \
 fi
 
 # ----------------------------------------------------
-# 8. Director-LLM Sektion
-# ----------------------------------------------------
-if [ "$DIRECTOR_LLM_AUTO_SETUP" = "on" ]; then
-  echo "[director-llm] Ensuring local Qwen3.6 Director model..."
-  rm -f "$DIRECTOR_LLM_MODEL_READY_FLAG"
-  rm -f "$DIRECTOR_LLM_SERVER_READY_FLAG"
-  rm -f "$DIRECTOR_LLM_SETUP_FAILED_FLAG"
-
-  if [ -f "/workspace/scripts/download_director_model.py" ]; then
-    if python3 /workspace/scripts/download_director_model.py; then
-      if [ -f "$DIRECTOR_LLM_MODEL_PATH" ]; then
-        touch "$DIRECTOR_LLM_MODEL_READY_FLAG"
-        echo "[director-llm] Model ready at $DIRECTOR_LLM_MODEL_PATH"
-      else
-        echo "[director-llm] ERROR: download script completed without expected model file $DIRECTOR_LLM_MODEL_PATH"
-        touch "$DIRECTOR_LLM_SETUP_FAILED_FLAG"
-      fi
-    else
-      echo "[director-llm] ERROR: model download/preparation failed."
-      touch "$DIRECTOR_LLM_SETUP_FAILED_FLAG"
-    fi
-  else
-    echo "[director-llm] WARN: /workspace/scripts/download_director_model.py missing; skipping Director model setup."
-    touch "$DIRECTOR_LLM_SETUP_FAILED_FLAG"
-  fi
-
-  if [ "$DIRECTOR_LLM_AUTO_START" = "on" ] && [ -f "$DIRECTOR_LLM_MODEL_PATH" ]; then
-    if [ -f "/workspace/scripts/serve_director_llm.sh" ]; then
-      chmod +x "/workspace/scripts/serve_director_llm.sh" 2>/dev/null || true
-      if DIRECTOR_LLM_DAEMON=1 bash /workspace/scripts/serve_director_llm.sh; then
-        touch "$DIRECTOR_LLM_SERVER_READY_FLAG"
-        echo "[director-llm] Local Director server is ready."
-      else
-        echo "[director-llm] ERROR: local Director server failed to start."
-        touch "$DIRECTOR_LLM_SETUP_FAILED_FLAG"
-      fi
-    else
-      echo "[director-llm] WARN: /workspace/scripts/serve_director_llm.sh missing or not executable; skipping auto-start."
-      touch "$DIRECTOR_LLM_SETUP_FAILED_FLAG"
-    fi
-  fi
-fi
-
-# ----------------------------------------------------
-# 8b. Optional Qwen3-VL Vision Review Modell
+# 8. Optional Qwen3-VL Vision Review Modell
 # ----------------------------------------------------
 if [ "$Qwen3_VL_Review" = "on" ] || [ "$Vision_Review_Model" = "on" ]; then
   echo "[qwen3-vl] Qwen3-VL review model is ON. Checking model path..."
@@ -436,6 +373,8 @@ if [ "$Qwen3_VL_Review" = "on" ] || [ "$Vision_Review_Model" = "on" ]; then
     rm -f "$QWEN3_VL_READY_FLAG"
     echo "[qwen3-vl] ERROR: model download/verify failed."
   fi
+else
+  rm -f "$QWEN3_VL_READY_FLAG"
 fi
 
 # ----------------------------------------------------
@@ -462,7 +401,6 @@ chmod -R 777 "$MODELS_DIR" || true
 chmod -R 777 "$QWEN_MODELS_DIR" || true
 chmod -R 777 "$QWEN_VENV" || true
 chmod -R 777 "$ACE_STEP_CKPT_DIR" || true
-chmod -R 777 "/workspace/models/director" || true
 chmod +x /workspace/scripts/*.sh 2>/dev/null || true
 chmod +x /workspace/scripts/*.py 2>/dev/null || true
 echo "🏁 init.sh erfolgreich beendet."
