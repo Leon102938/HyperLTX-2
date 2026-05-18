@@ -1,1 +1,0 @@
-Storyboard prompts are model-facing image prompts. Use only concise English visual prose. Do not include debug labels, narration, script snippets, title text, captions, UI terms as positive content, or German imperative phrases. Prefer one full-frame physical scene with clear safe props.
