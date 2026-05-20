@@ -24,6 +24,7 @@ from .ace_step_1_5 import router as ace_step_router
 from .LTX2 import LTX2JobRequest, LTX_BACKEND, submit_job, get_status
 from .qwen_tts import router as qwen_tts_router
 from .hidream import router as hidream_router
+from .model_status import get_model_status, get_models_status
 
 
 app = FastAPI(title="LTX-2.3 API", version="2.3")
@@ -106,6 +107,25 @@ def dw_ace_step_ready():
 def dw_ready():
     ready = os.path.exists(INIT_FLAG)
     return {"ready": ready, "message": "Modelle bereit." if ready else "Download läuft noch..."}
+
+
+@app.get("/DW/models/status")
+def dw_models_status():
+    return get_models_status()
+
+
+@app.get("/DW/models/{model_id}/ready")
+def dw_model_ready(model_id: str):
+    status = get_model_status(model_id)
+    return {
+        "model_id": model_id,
+        "ready": status.get("ready"),
+        "enabled": status.get("enabled"),
+        "required": status.get("required"),
+        "disabled": status.get("disabled"),
+        "failed": status.get("failed"),
+        "message": status.get("message"),
+    }
 
 
 # ---------------- LTX-2 / LTX-2.3 ENDPUNKTE ----------------

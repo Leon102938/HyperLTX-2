@@ -27,7 +27,13 @@ if [ -f /app/tools.config ] && [ ! -f /workspace/tools.config ]; then
 fi
 
 sed -i 's/\r$//' /workspace/tools.config 2>/dev/null || true
-source /workspace/tools.config 2>/dev/null || true
+python3 /workspace/scripts/apply_boot_model_profile.py || true
+if [ -f /workspace/runtime/effective_tools.config ]; then
+  sed -i 's/\r$//' /workspace/runtime/effective_tools.config 2>/dev/null || true
+  source /workspace/runtime/effective_tools.config 2>/dev/null || true
+else
+  source /workspace/tools.config 2>/dev/null || true
+fi
 export PATH="/opt/venv/bin:/usr/local/bin:/root/.local/bin:/usr/local/cuda/bin:/usr/bin:/bin:$PATH"
 export DEBIAN_FRONTEND=noninteractive
 export GIT_TERMINAL_PROMPT=0
@@ -342,22 +348,26 @@ fi
 # ----------------------------------------------------
 # 7. LTX-2 Basis-Modelle
 # ----------------------------------------------------
-if [ ! -f "$MODELS_DIR/ltx-2.3/ltx-2.3-22b-dev.safetensors" ] || \
-   [ ! -f "$MODELS_DIR/ltx-2.3/ltx-2.3-spatial-upscaler-x2-1.0.safetensors" ] || \
-   [ ! -f "$MODELS_DIR/ltx-2.3/ltx-2.3-22b-distilled-lora-384.safetensors" ] || \
-   ! gemma_model_ready "$MODELS_DIR/gemma-3"; then
-  echo "🚀 Hauptmodelle fehlen – Starte Setup..."
+if [ "${DW_LTX2:-off}" = "on" ]; then
+  if [ ! -f "$MODELS_DIR/ltx-2.3/ltx-2.3-22b-dev.safetensors" ] || \
+     [ ! -f "$MODELS_DIR/ltx-2.3/ltx-2.3-spatial-upscaler-x2-1.0.safetensors" ] || \
+     [ ! -f "$MODELS_DIR/ltx-2.3/ltx-2.3-22b-distilled-lora-384.safetensors" ] || \
+     ! gemma_model_ready "$MODELS_DIR/gemma-3"; then
+    echo "🚀 Hauptmodelle fehlen – Starte Setup..."
 
-  if [ -n "${HF_TOKEN:-}" ]; then
-    python3 -c "from huggingface_hub import login; login(token='${HF_TOKEN}')"
+    if [ -n "${HF_TOKEN:-}" ]; then
+      python3 -c "from huggingface_hub import login; login(token='${HF_TOKEN}')"
+    fi
+
+    hf_download_file "Lightricks/LTX-2.3" "ltx-2.3-22b-dev.safetensors" "$MODELS_DIR/ltx-2.3"
+    hf_download_file "Lightricks/LTX-2.3" "ltx-2.3-spatial-upscaler-x2-1.0.safetensors" "$MODELS_DIR/ltx-2.3"
+    hf_download_file "Lightricks/LTX-2.3" "ltx-2.3-22b-distilled-lora-384.safetensors" "$MODELS_DIR/ltx-2.3"
+
+    echo "🚀 Lade Gemma-3..."
+    hf_download_snapshot_to_dir "google/gemma-3-12b-it-qat-q4_0-unquantized" "$MODELS_DIR/gemma-3"
   fi
-
-  hf_download_file "Lightricks/LTX-2.3" "ltx-2.3-22b-dev.safetensors" "$MODELS_DIR/ltx-2.3"
-  hf_download_file "Lightricks/LTX-2.3" "ltx-2.3-spatial-upscaler-x2-1.0.safetensors" "$MODELS_DIR/ltx-2.3"
-  hf_download_file "Lightricks/LTX-2.3" "ltx-2.3-22b-distilled-lora-384.safetensors" "$MODELS_DIR/ltx-2.3"
-
-  echo "🚀 Lade Gemma-3..."
-  hf_download_snapshot_to_dir "google/gemma-3-12b-it-qat-q4_0-unquantized" "$MODELS_DIR/gemma-3"
+else
+  echo "⏭️  DW_LTX2=off – überspringe LTX-2 Basis-Modelle."
 fi
 
 # ----------------------------------------------------

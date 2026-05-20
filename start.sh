@@ -13,8 +13,14 @@ fi
 
 
 
-# -------- tools.config nur laden, wenn vorhanden --------
-if [ -f /workspace/tools.config ]; then
+# -------- Boot Profile anwenden, dann effective/default tools.config laden --------
+if [ -f /workspace/scripts/apply_boot_model_profile.py ]; then
+  python3 /workspace/scripts/apply_boot_model_profile.py || true
+fi
+
+if [ -f /workspace/runtime/effective_tools.config ]; then
+  source /workspace/runtime/effective_tools.config
+elif [ -f /workspace/tools.config ]; then
   source /workspace/tools.config
 fi
 
