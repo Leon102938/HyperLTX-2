@@ -6,6 +6,16 @@ set -euo pipefail
 
 # ============ 🔧 Anti-Fragmentation für PyTorch ============
 export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-max_split_size_mb:256}"
+export HF_HUB_DISABLE_TELEMETRY=1
+export HF_HUB_ENABLE_HF_TRANSFER="${HF_HUB_ENABLE_HF_TRANSFER:-1}"
+export HF_HUB_DOWNLOAD_TIMEOUT="${HF_HUB_DOWNLOAD_TIMEOUT:-120}"
+export HF_HUB_ETAG_TIMEOUT="${HF_HUB_ETAG_TIMEOUT:-30}"
+export HF_HOME="${HF_HOME:-/workspace/.cache/hf}"
+export HUGGINGFACE_HUB_CACHE="${HUGGINGFACE_HUB_CACHE:-/workspace/.cache/hf/hub}"
+mkdir -p "$HF_HOME" "$HUGGINGFACE_HUB_CACHE"
+echo "[hf] HF_HUB_ENABLE_HF_TRANSFER=${HF_HUB_ENABLE_HF_TRANSFER:-0}"
+echo "[hf] HF_HOME=${HF_HOME:-}"
+echo "[hf] HUGGINGFACE_HUB_CACHE=${HUGGINGFACE_HUB_CACHE:-}"
 # (optional; falls root nicht erlaubt, diesen Block weglassen)
 if [ -w /etc/profile.d ]; then
   echo 'export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:256' > /etc/profile.d/pytorch_alloc.sh || true

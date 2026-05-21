@@ -54,7 +54,7 @@ def _string_list(profile: dict[str, Any], key: str) -> list[str]:
 
 
 def decode_profile_from_env(env: dict[str, str] | None = None) -> tuple[dict[str, Any] | None, list[str]]:
-    env = env or os.environ
+    env = os.environ if env is None else env
     encoded = env.get(BOOT_PROFILE_ENV)
     if not encoded:
         return None, []
@@ -153,7 +153,7 @@ def build_effective_tools_config(default_config: str, profile: dict[str, Any]) -
 
 
 def apply_boot_model_profile(env: dict[str, str] | None = None) -> dict[str, Any]:
-    env = env or os.environ
+    env = os.environ if env is None else env
     RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
 
     try:

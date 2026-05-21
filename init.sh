@@ -39,10 +39,32 @@ export DEBIAN_FRONTEND=noninteractive
 export GIT_TERMINAL_PROMPT=0
 export GCM_INTERACTIVE=never
 export HF_HUB_DISABLE_TELEMETRY=1
-export HF_HUB_ENABLE_HF_TRANSFER="${HF_HUB_ENABLE_HF_TRANSFER:-0}"
-export HF_HUB_DISABLE_XET="${HF_HUB_DISABLE_XET:-1}"
+export HF_HUB_ENABLE_HF_TRANSFER="${HF_HUB_ENABLE_HF_TRANSFER:-1}"
+export HF_HUB_DOWNLOAD_TIMEOUT="${HF_HUB_DOWNLOAD_TIMEOUT:-120}"
+export HF_HUB_ETAG_TIMEOUT="${HF_HUB_ETAG_TIMEOUT:-30}"
+export HF_HOME="${HF_HOME:-/workspace/.cache/hf}"
+export HUGGINGFACE_HUB_CACHE="${HUGGINGFACE_HUB_CACHE:-/workspace/.cache/hf/hub}"
 export PYTHONUNBUFFERED=1
 export PIP_NO_INPUT=1
+mkdir -p "$HF_HOME" "$HUGGINGFACE_HUB_CACHE"
+
+echo "[hf] HF_HUB_ENABLE_HF_TRANSFER=${HF_HUB_ENABLE_HF_TRANSFER:-0}"
+echo "[hf] HF_HUB_DOWNLOAD_TIMEOUT=${HF_HUB_DOWNLOAD_TIMEOUT:-}"
+echo "[hf] HF_HUB_ETAG_TIMEOUT=${HF_HUB_ETAG_TIMEOUT:-}"
+echo "[hf] HF_HOME=${HF_HOME:-}"
+echo "[hf] HUGGINGFACE_HUB_CACHE=${HUGGINGFACE_HUB_CACHE:-}"
+echo "[hf] HF_HUB_DISABLE_XET=${HF_HUB_DISABLE_XET:-unset}"
+if python3 -c "import importlib.util; raise SystemExit(0 if importlib.util.find_spec('hf_transfer') else 1)" >/dev/null 2>&1; then
+  echo "[hf] hf_transfer installed=yes"
+else
+  echo "[hf] hf_transfer installed=no"
+fi
+if [ -f /workspace/runtime/boot_model_profile.json ]; then
+  echo "[boot] profile active=/workspace/runtime/boot_model_profile.json"
+else
+  echo "[boot] profile active=none"
+fi
+echo "[boot] tools: HiDream_O1_Dev=${HiDream_O1_Dev:-off} DW_LTX2=${DW_LTX2:-off} Ace_Step1_5=${Ace_Step1_5:-off} Qwen_TTS_Tokenizer=${Qwen_TTS_Tokenizer:-off} Qwen_TTS_Model=${Qwen_TTS_Model:-off} Qwen3_VL_Review=${Qwen3_VL_Review:-off} Vision_Review_Model=${Vision_Review_Model:-off}"
 
 
 # SoX systemweit sicherstellen
@@ -149,10 +171,6 @@ for path in root.rglob("*"):
         raise SystemExit(1)
 PY
 }
-
-# 3) Caches setzen
-export HF_HUB_ENABLE_HF_TRANSFER="${HF_HUB_ENABLE_HF_TRANSFER:-0}"
-export HF_HOME=/workspace/.cache/hf
 
 MODELS_DIR="/workspace/LTX-2/checkpoints"
 LORA_DIR="$MODELS_DIR/loras"
