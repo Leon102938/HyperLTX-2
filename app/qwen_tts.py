@@ -24,7 +24,7 @@ ENV_FLAG = STATUS_DIR / "qwen_tts_env_ready"
 TOKENIZER_FLAG = STATUS_DIR / "qwen_tts_tokenizer_ready"
 MODEL_FLAG = STATUS_DIR / "qwen_tts_model_ready"
 RUNTIME_FLAG = STATUS_DIR / "qwen_tts_runtime_ready"
-QWEN_PYTHON = Path("/workspace/venvs/qwen3-tts/bin/python")
+QWEN_PYTHON = Path(os.environ.get("QWEN_PYTHON", "/opt/venv/bin/python"))
 
 WORKER_CODE = r"""
 import json
@@ -80,8 +80,8 @@ with open(os.environ["QWEN_RESULT_JSON"], "w", encoding="utf-8") as f:
 
 class QwenCustomVoiceRequest(BaseModel):
     text: str = Field(..., min_length=1)
-    language: str = Field("German", min_length=1)
-    speaker: str = Field("Ryan", min_length=1)
+    language: str = Field("german", min_length=1)
+    speaker: str = Field("ryan", min_length=1)
     instruct: Optional[str] = Field(
         "A deep male German-speaking voice, slightly faster pace, a bit more energetic and lively, confident, warm, natural, realistic, premium YouTube voiceover style, clear pronunciation, engaging but not overexcited."
     )

@@ -33,7 +33,6 @@ BASE_DIR = Path("/workspace")
 RUNTIME_DIRS = {
     "exports": BASE_DIR / "exports",
     "jobs": BASE_DIR / "jobs",
-    "agent_runs": BASE_DIR / "agent_runs",
 }
 
 
@@ -50,7 +49,6 @@ app.mount("/exports", StaticFiles(directory=str(runtime_dirs["exports"])), name=
 
 # Mount für Jobs (damit Videos per Link abrufbar sind)
 app.mount("/jobs", StaticFiles(directory=str(runtime_dirs["jobs"])), name="jobs")
-app.mount("/agent-runs", StaticFiles(directory=str(runtime_dirs["agent_runs"])), name="agent-runs")
 
 # ---- Routers ----
 app.include_router(ace_step_router, prefix="/Ace_step_1.5", tags=["Ace_step_1.5"])

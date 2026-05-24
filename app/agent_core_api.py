@@ -87,18 +87,11 @@ def _build_refs(job_id: str, store: StateStore) -> dict[str, str]:
         "state_json_path": str(job_dir / "state.json"),
         "result_json_path": str(job_dir / "result.json"),
         "final_mp4_path": str(job_dir / "final.mp4"),
-        "state_json_url": f"/agent-runs/{job_id}/state.json",
-        "result_json_url": f"/agent-runs/{job_id}/result.json",
-        "final_mp4_url": f"/agent-runs/{job_id}/final.mp4",
     }
 
 
 def _build_public_refs(refs: dict[str, str]) -> dict[str, str]:
-    return {
-        "state_json_url": refs["state_json_url"],
-        "result_json_url": refs["result_json_url"],
-        "final_mp4_url": refs["final_mp4_url"],
-    }
+    return {}
 
 
 def _sync_success_payload(job_id: str, result: ResultSummary, store: StateStore) -> dict[str, Any]:

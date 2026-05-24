@@ -6,11 +6,13 @@ import binascii
 import json
 import os
 import re
+import sys
 from pathlib import Path
 from typing import Any
 
 
 BOOT_PROFILE_ENV = "CONTENT_MACHINE_BOOT_PROFILE_B64"
+BOOT_PROFILE_NAME_ENV = "BOOT_MODEL_PROFILE"
 BOOT_PROFILE_JOB_ID_ENV = "CONTENT_MACHINE_BOOT_PROFILE_JOB_ID"
 BOOT_PROFILE_SOURCE_ENV = "CONTENT_MACHINE_BOOT_PROFILE_SOURCE"
 
@@ -27,16 +29,37 @@ TOOLS_CONFIG_ORIGINAL_PATH = Path(
 STATUS_PATH = Path(os.environ.get("BOOT_PROFILE_STATUS_PATH", str(RUNTIME_DIR / "boot_model_profile_status.json")))
 
 MODEL_TO_TOOLS = {
+    "hidream": ["HiDream_O1_Dev"],
     "hidream_image_o1": ["HiDream_O1_Dev"],
+    "ltx2": ["DW_LTX2"],
     "ltx_video": ["DW_LTX2"],
+    "ace_step": ["Ace_Step1_5"],
     "ace_music": ["Ace_Step1_5"],
     "qwen_tts": ["Qwen_TTS_Tokenizer", "Qwen_TTS_Model"],
+    "director_llm": [],
     "qwen3_vl_review": ["Qwen3_VL_Review", "Vision_Review_Model"],
 }
 
 PROFILE_CONTROLLED_TOOLS = sorted({tool for tools in MODEL_TO_TOOLS.values() for tool in tools})
 VALID_SCHEMA_VERSION = "content_machine_boot_profile_v1"
 ASSIGNMENT_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)=(.*)$")
+MODEL_ALIASES = {
+    "image": "hidream",
+    "hidream_o1": "hidream",
+    "hidream_image_o1": "hidream",
+    "video": "ltx2",
+    "ltx_video": "ltx2",
+    "audio": "qwen_tts",
+    "ace_music": "ace_step",
+}
+NAMED_PROFILES = {
+    "image-only": ["hidream"],
+    "video-only": ["ltx2"],
+    "audio-only": ["qwen_tts", "ace_step"],
+    "director-only": ["director_llm"],
+    "image-video": ["hidream", "ltx2"],
+    "full": ["hidream", "ltx2", "qwen_tts", "ace_step", "director_llm"],
+}
 
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
@@ -53,9 +76,49 @@ def _string_list(profile: dict[str, Any], key: str) -> list[str]:
     return value
 
 
+def _normalize_model_id(model_id: str) -> str:
+    return MODEL_ALIASES.get(model_id, model_id)
+
+
+def _normalize_profile_models(profile: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(profile)
+    for key in ("required_models", "disabled_models", "readiness_wait_for"):
+        normalized[key] = [_normalize_model_id(model_id) for model_id in _string_list(profile, key)]
+    return normalized
+
+
+def _profile_from_name(name: str) -> dict[str, Any]:
+    required_models = NAMED_PROFILES.get(name)
+    if required_models is None:
+        raise ValueError(
+            f"unsupported {BOOT_PROFILE_NAME_ENV}: {name!r}; "
+            f"valid profiles: {', '.join(sorted(NAMED_PROFILES))}"
+        )
+    return {
+        "schema_version": VALID_SCHEMA_VERSION,
+        "profile": name,
+        "required_models": required_models,
+        "disabled_models": [],
+        "readiness_wait_for": required_models,
+        "tools_config_enable": [],
+        "tools_config_disable": [],
+        "source": BOOT_PROFILE_NAME_ENV,
+    }
+
+
 def decode_profile_from_env(env: dict[str, str] | None = None) -> tuple[dict[str, Any] | None, list[str]]:
     env = os.environ if env is None else env
     encoded = env.get(BOOT_PROFILE_ENV)
+    profile_name = env.get(BOOT_PROFILE_NAME_ENV)
+    if profile_name:
+        profile = _profile_from_name(profile_name)
+        warnings = validate_profile(profile)
+        if env.get(BOOT_PROFILE_JOB_ID_ENV) and not profile.get("job_id"):
+            profile["job_id"] = env[BOOT_PROFILE_JOB_ID_ENV]
+        if env.get(BOOT_PROFILE_SOURCE_ENV) and not profile.get("source"):
+            profile["source"] = env[BOOT_PROFILE_SOURCE_ENV]
+        return profile, warnings
+
     if not encoded:
         return None, []
 
@@ -72,6 +135,7 @@ def decode_profile_from_env(env: dict[str, str] | None = None) -> tuple[dict[str
     if not isinstance(profile, dict):
         raise ValueError("boot profile must be a JSON object")
 
+    profile = _normalize_profile_models(profile)
     warnings = validate_profile(profile)
     if env.get(BOOT_PROFILE_JOB_ID_ENV) and not profile.get("job_id"):
         profile["job_id"] = env[BOOT_PROFILE_JOB_ID_ENV]
@@ -93,7 +157,7 @@ def validate_profile(profile: dict[str, Any]) -> list[str]:
         "tools_config_enable",
         "tools_config_disable",
     ):
-        _string_list(profile, key)
+        profile[key] = [_normalize_model_id(model_id) for model_id in _string_list(profile, key)]
 
     for key in ("required_models", "disabled_models", "readiness_wait_for"):
         for model_id in _string_list(profile, key):
@@ -160,6 +224,7 @@ def apply_boot_model_profile(env: dict[str, str] | None = None) -> dict[str, Any
         profile, warnings = decode_profile_from_env(env)
     except ValueError as exc:
         EFFECTIVE_TOOLS_CONFIG_PATH.unlink(missing_ok=True)
+        BOOT_PROFILE_PATH.unlink(missing_ok=True)
         payload = {
             "loaded": False,
             "error": str(exc),
@@ -172,9 +237,12 @@ def apply_boot_model_profile(env: dict[str, str] | None = None) -> dict[str, Any
 
     if profile is None:
         EFFECTIVE_TOOLS_CONFIG_PATH.unlink(missing_ok=True)
+        BOOT_PROFILE_PATH.unlink(missing_ok=True)
         payload = {
             "loaded": False,
             "message": f"{BOOT_PROFILE_ENV} not set; using default tools.config",
+            "profile_env": BOOT_PROFILE_NAME_ENV,
+            "valid_profiles": sorted(NAMED_PROFILES),
             "boot_profile_path": str(BOOT_PROFILE_PATH),
             "effective_tools_config_path": str(EFFECTIVE_TOOLS_CONFIG_PATH),
             "default_behavior": True,
@@ -202,6 +270,12 @@ def apply_boot_model_profile(env: dict[str, str] | None = None) -> dict[str, Any
 
 
 def main() -> int:
+    if any(arg in {"-h", "--help"} for arg in sys.argv[1:]):
+        print("Apply boot model profile from BOOT_MODEL_PROFILE or CONTENT_MACHINE_BOOT_PROFILE_B64.")
+        print("Named profiles: " + ", ".join(sorted(NAMED_PROFILES)))
+        print("Known model ids: " + ", ".join(sorted(MODEL_TO_TOOLS)))
+        return 0
+
     result = apply_boot_model_profile()
     if result.get("loaded"):
         print(f"[boot-profile] loaded: {result['boot_profile_path']}")
