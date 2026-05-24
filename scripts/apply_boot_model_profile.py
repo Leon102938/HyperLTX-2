@@ -58,7 +58,8 @@ NAMED_PROFILES = {
     "audio-only": ["qwen_tts", "ace_step"],
     "director-only": ["director_llm"],
     "image-video": ["hidream", "ltx2"],
-    "full": ["hidream", "ltx2", "qwen_tts", "ace_step", "director_llm"],
+    "full": ["hidream", "ltx2", "qwen_tts", "ace_step"],
+    "full-with-director": ["hidream", "ltx2", "qwen_tts", "ace_step", "director_llm"],
 }
 
 

@@ -172,8 +172,13 @@ log_model "[hf] preflight=${HF_XET_PREFLIGHT_JSON}"
 
 # SoX systemweit sicherstellen
 if ! command -v sox >/dev/null 2>&1; then
-  apt-get update
-  apt-get install -y sox libsox-fmt-all
+  if [ "${ALLOW_RUNTIME_APT:-0}" = "1" ]; then
+    log_model "[sox] missing in image; ALLOW_RUNTIME_APT=1 enables legacy runtime install"
+    apt-get update
+    apt-get install -y sox libsox-fmt-all
+  else
+    fatal_init "sox missing; rebuild image with sox libsox-fmt-all or set ALLOW_RUNTIME_APT=1 for legacy runtime install"
+  fi
 fi
 
 

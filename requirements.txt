@@ -30,6 +30,20 @@ bitsandbytes>=0.45.0
 # ===== Audio (Wichtig für LTX-2) =====
 librosa
 soundfile
+loguru
+toml
+modelscope
+torchao
+matplotlib
+vector-quantize-pytorch>=1.27.15
+xxhash
+contourpy
+cycler
+fonttools
+kiwisolver
+pyparsing
+einx
+frozendict
 
 # ===== Dev / Server =====
 fastapi

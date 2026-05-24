@@ -27,6 +27,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python-is-python3 \
     git \
     ffmpeg \
+    sox \
+    libsox-fmt-all \
     curl \
     ca-certificates \
     build-essential \
