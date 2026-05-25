@@ -5,6 +5,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+from .ltx_readiness import ltx_completeness_readiness_report
+
 
 WORKSPACE = Path("/workspace")
 RUNTIME_DIR = WORKSPACE / "runtime"
@@ -90,8 +92,8 @@ def _ready_payload(model_id: str) -> tuple[bool | None, bool | None, bool, str]:
         ready = _flag_ready(QWEN3_VL_READY_FLAG)
         return ready, False, False, "ready flag ok" if ready else "Qwen3-VL ready flag missing"
     if model_id == "ltx_video":
-        downloaded = _flag_ready(INIT_FLAG) if _flag_ready(INIT_FLAG) else None
-        return None, False, False, "no model-specific ready endpoint"
+        report = ltx_completeness_readiness_report(run_help=True)
+        return report["ready"], False, False, "LTX completeness check ok" if report["ready"] else "LTX completeness check failed"
     return None, None, True, "unknown model id"
 
 

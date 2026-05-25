@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 
 try:
@@ -25,6 +25,7 @@ from .LTX2 import LTX2JobRequest, LTX_BACKEND, submit_job, get_status
 from .qwen_tts import router as qwen_tts_router
 from .hidream import router as hidream_router
 from .model_status import get_model_status, get_models_status
+from .segment_pipeline_router import PipelineAvailability, capability_matrix, decide_segment_pipeline
 
 
 app = FastAPI(title="LTX-2.3 API", version="2.3")
@@ -128,6 +129,90 @@ def dw_model_ready(model_id: str):
 
 # ---------------- LTX-2 / LTX-2.3 ENDPUNKTE ----------------
 
+A2VID_ALLOWED_OVERRIDES = {
+    "pipeline", "mode", "audio_path", "audio", "audio_file", "audio_file_path",
+    "audio_start_time", "audio_max_duration", "image_path", "img_path", "image", "images",
+    "image_frame_idx", "img_frame_idx", "image_strength", "img_strength", "image_crf", "img_crf",
+    "negative_prompt", "seed", "height", "width", "num_frames", "frame_rate", "num_inference_steps",
+    "video_cfg_guidance_scale", "video_cfg_scale", "video_stg_guidance_scale", "video_stg_scale",
+    "video_rescale_scale", "a2v_guidance_scale", "video_modality_scale", "video_skip_step",
+    "video_stg_blocks", "audio_cfg_guidance_scale", "audio_cfg_scale", "audio_stg_guidance_scale",
+    "audio_stg_scale", "audio_rescale_scale", "v2a_guidance_scale", "audio_modality_scale",
+    "audio_skip_step", "audio_stg_blocks", "quantization", "checkpoint_path", "spatial_upsampler_path",
+    "gemma_root", "distilled_lora", "distilled_lora_strength", "distilled_strength", "lora",
+    "enhance_prompt", "pytorch_cuda_alloc_conf", "dry_run", "validate_only",
+}
+
+TI2VID_ALLOWED_OVERRIDES = {
+    "pipeline", "mode", "image_path", "img_path", "image", "images", "image_frame_idx",
+    "img_frame_idx", "image_strength", "img_strength", "image_crf", "img_crf", "negative_prompt",
+    "seed", "height", "width", "num_frames", "frame_rate", "num_inference_steps",
+    "video_cfg_guidance_scale", "video_stg_guidance_scale", "video_rescale_scale",
+    "a2v_guidance_scale", "video_skip_step", "video_stg_blocks", "audio_cfg_guidance_scale",
+    "audio_stg_guidance_scale", "audio_rescale_scale", "v2a_guidance_scale", "audio_skip_step",
+    "audio_stg_blocks", "quantization", "checkpoint_path", "spatial_upsampler_path", "gemma_root",
+    "distilled_lora", "distilled_lora_strength", "distilled_strength", "lora", "enhance_prompt",
+    "pytorch_cuda_alloc_conf", "dry_run", "validate_only",
+}
+
+
+def _truthy(value) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _reject_unknown_overrides(overrides: dict, allowed: set[str]) -> None:
+    unknown = sorted({str(key).replace("-", "_") for key in overrides} - allowed)
+    if unknown:
+        raise HTTPException(status_code=422, detail={"error": "unknown_override_args", "unknown": unknown})
+
+
+@app.get("/ltx2/capabilities")
+def ltx2_capabilities():
+    return {
+        "backend": LTX_BACKEND,
+        "capabilities": capability_matrix(),
+        "audio_policy": {
+            "master_audio_default": "qwen_tts_voice_chunks",
+            "ti2vid": "strip generated LTX audio; add Qwen-TTS in assembly",
+            "a2vid": "condition on audio chunk; probe output audio; keep Qwen-TTS master by default",
+            "lipdub": "requires reference video; probe output audio",
+            "fake_voice": "never accept an LTX fake voice in final output",
+        },
+    }
+
+
+@app.post("/ltx2/segment/submit")
+async def ltx2_segment_submit(payload: dict):
+    decision = decide_segment_pipeline(payload)
+    return {
+        "ok": not decision.blocked,
+        "dry_run": _truthy(payload.get("dry_run", True)) or _truthy(payload.get("validate_only", True)),
+        "job_submitted": False,
+        "decision": decision.to_dict(),
+        "note": "Segment endpoint performs routing validation only; submit generation through the selected pipeline endpoint.",
+    }
+
+
+@app.post("/ltx2/ti2vid/submit")
+async def ltx2_ti2vid_submit(request: LTX2JobRequest):
+    overrides = dict(request.overrides or {})
+    _reject_unknown_overrides(overrides, TI2VID_ALLOWED_OVERRIDES)
+    overrides["pipeline"] = "image_to_video"
+    if _truthy(overrides.get("dry_run")) or _truthy(overrides.get("validate_only")):
+        return {
+            "ok": True,
+            "dry_run": True,
+            "job_submitted": False,
+            "selected_pipeline": "ti2vid_two_stages",
+            "native_audio_conditioning": False,
+            "audio_policy": "strip_ltx_audio_use_qwen_tts_master_in_assembly",
+        }
+    jid = await submit_job(LTX2JobRequest(prompt=request.prompt, overrides=overrides, job_id=request.job_id))
+    return {"job_id": jid, "backend": LTX_BACKEND, "status_url": f"/ltx2/status/{jid}", "get_url": f"/ltx2/get/{jid}"}
+
+
 @app.post("/ltx2/submit")
 async def ltx2_submit(request: LTX2JobRequest):
     jid = await submit_job(request)
@@ -137,6 +222,65 @@ async def ltx2_submit(request: LTX2JobRequest):
         "status_url": f"/ltx2/status/{jid}",
         "get_url": f"/ltx2/get/{jid}",
     }
+
+
+@app.post("/ltx2/a2vid/submit")
+async def ltx2_a2vid_submit(request: LTX2JobRequest):
+    overrides = dict(request.overrides or {})
+    _reject_unknown_overrides(overrides, A2VID_ALLOWED_OVERRIDES)
+    if not any(overrides.get(key) for key in ("audio_path", "audio", "audio_file", "audio_file_path")):
+        raise HTTPException(status_code=422, detail={"error": "audio_path_required_for_a2vid"})
+    overrides["pipeline"] = "a2vid_two_stage"
+    if _truthy(overrides.get("dry_run")) or _truthy(overrides.get("validate_only")):
+        return {
+            "ok": True,
+            "dry_run": True,
+            "job_submitted": False,
+            "selected_pipeline": "a2vid_two_stage",
+            "native_audio_image_to_video": True,
+            "strict_lipsync_guaranteed": False,
+            "audio_policy": "condition_on_audio_chunk_probe_output_keep_qwen_tts_master_by_default",
+        }
+    jid = await submit_job(LTX2JobRequest(prompt=request.prompt, overrides=overrides, job_id=request.job_id))
+    return {
+        "job_id": jid,
+        "backend": LTX_BACKEND,
+        "native_audio_image_to_video": True,
+        "status_url": f"/ltx2/status/{jid}",
+        "get_url": f"/ltx2/get/{jid}",
+    }
+
+
+@app.post("/ltx2/lipdub/submit")
+async def ltx2_lipdub_submit(payload: dict):
+    availability = PipelineAvailability.detect()
+    reference_video = payload.get("reference_video_path") or payload.get("video_path")
+    audio_path = payload.get("audio_path")
+    if not availability.lipdub:
+        raise HTTPException(status_code=503, detail={"error": "lipdub_unavailable", "missing": ["ltx_pipelines.lipdub module"]})
+    if not reference_video or not audio_path:
+        raise HTTPException(status_code=422, detail={"error": "reference_video_and_audio_path_required"})
+    return {"ok": True, "dry_run": True, "job_submitted": False, "selected_pipeline": "lipdub"}
+
+
+@app.post("/ltx2/retake/submit")
+async def ltx2_retake_submit(payload: dict):
+    availability = PipelineAvailability.detect()
+    if not availability.retake:
+        raise HTTPException(status_code=503, detail={"error": "retake_unavailable"})
+    if _truthy(payload.get("dry_run", True)) or _truthy(payload.get("validate_only", True)):
+        return {"ok": True, "dry_run": True, "job_submitted": False, "selected_pipeline": "retake"}
+    raise HTTPException(status_code=501, detail={"error": "retake_runner_not_wired_for_live_submit"})
+
+
+@app.post("/ltx2/keyframe/submit")
+async def ltx2_keyframe_submit(payload: dict):
+    availability = PipelineAvailability.detect()
+    if not availability.keyframe_interpolation:
+        raise HTTPException(status_code=503, detail={"error": "keyframe_interpolation_unavailable"})
+    if _truthy(payload.get("dry_run", True)) or _truthy(payload.get("validate_only", True)):
+        return {"ok": True, "dry_run": True, "job_submitted": False, "selected_pipeline": "keyframe_interpolation"}
+    raise HTTPException(status_code=501, detail={"error": "keyframe_runner_not_wired_for_live_submit"})
 
 
 @app.get("/ltx2/status/{job_id}")

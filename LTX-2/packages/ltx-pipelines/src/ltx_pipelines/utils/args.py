@@ -348,7 +348,7 @@ def default_1_stage_arg_parser(params: PipelineParams = LTX_2_3_PARAMS) -> argpa
         default=video_guider.skip_step,
         help=(
             "Video skip step N controls periodic skipping during the video diffusion process: "
-            "only steps where step_index % (N + 1) == 0 are processed, all others are skipped "
+            "only steps where step_index %% (N + 1) == 0 are processed, all others are skipped "
             f"(e.g., 0 = no skipping; 1 = skip every other step; 2 = skip 2 of every 3 steps; "
             f"default: {video_guider.skip_step})."
         ),
@@ -408,7 +408,7 @@ def default_1_stage_arg_parser(params: PipelineParams = LTX_2_3_PARAMS) -> argpa
         default=audio_guider.skip_step,
         help=(
             "Audio skip step N controls periodic skipping during the audio diffusion process: "
-            "only steps where step_index % (N + 1) == 0 are processed, all others are skipped "
+            "only steps where step_index %% (N + 1) == 0 are processed, all others are skipped "
             f"(e.g., 0 = no skipping; 1 = skip every other step; 2 = skip 2 of every 3 steps; "
             f"default: {audio_guider.skip_step})."
         ),

@@ -12,6 +12,8 @@ from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, Field
 
+from .audio_policy import fallback_audio_policy, native_a2vid_audio_policy
+
 LTX_ROOT = "/workspace/LTX-2"
 LTX_CKPT_DIR = f"{LTX_ROOT}/checkpoints"
 LTX_JOBS_DIR = "/workspace/jobs"
@@ -120,11 +122,10 @@ def _prepare_a2vid_audio(audio_path: str, output_file: str) -> str:
 
 def _select_pipeline_module(overrides: Dict[str, Any]) -> tuple[str, bool]:
     requested = str(overrides.get("pipeline") or overrides.get("mode") or "").strip().lower().replace("-", "_")
-    audio_path = _get_audio_path(overrides)
 
     if requested in {"", "ti2vid", "t2v", "i2v", "text_to_video", "image_to_video"}:
-        return ("ltx_pipelines.a2vid_two_stage", True) if audio_path else ("ltx_pipelines.ti2vid_two_stages", False)
-    if requested in {"a2vid", "a2v", "audio2video", "audio_to_video"}:
+        return "ltx_pipelines.ti2vid_two_stages", False
+    if requested in {"a2vid", "a2v", "a2vid_two_stage", "audio2video", "audio_to_video", "audio_image_to_video"}:
         return "ltx_pipelines.a2vid_two_stage", True
 
     raise ValueError(f"Unsupported pipeline/mode: {requested}")
@@ -153,6 +154,11 @@ class Job:
     prompt: str = ""
     overrides: Dict[str, Any] = None
     command: Optional[list[str]] = None
+    pipeline_module: Optional[str] = None
+    native_audio_image_to_video: bool = False
+    fallback_mode: Optional[str] = None
+    input_audio_path: Optional[str] = None
+    audio_policy: Optional[Dict[str, Any]] = None
     backend: str = LTX_BACKEND
 
 
@@ -171,6 +177,18 @@ def _normalize_overrides(overrides: Optional[Dict[str, Any]]) -> Dict[str, Any]:
 
     if "cfg_guidance_scale" in normalized and "video_cfg_guidance_scale" not in normalized:
         normalized["video_cfg_guidance_scale"] = normalized["cfg_guidance_scale"]
+    if "video_cfg_scale" in normalized and "video_cfg_guidance_scale" not in normalized:
+        normalized["video_cfg_guidance_scale"] = normalized["video_cfg_scale"]
+    if "video_stg_scale" in normalized and "video_stg_guidance_scale" not in normalized:
+        normalized["video_stg_guidance_scale"] = normalized["video_stg_scale"]
+    if "video_modality_scale" in normalized and "a2v_guidance_scale" not in normalized:
+        normalized["a2v_guidance_scale"] = normalized["video_modality_scale"]
+    if "audio_cfg_scale" in normalized and "audio_cfg_guidance_scale" not in normalized:
+        normalized["audio_cfg_guidance_scale"] = normalized["audio_cfg_scale"]
+    if "audio_stg_scale" in normalized and "audio_stg_guidance_scale" not in normalized:
+        normalized["audio_stg_guidance_scale"] = normalized["audio_stg_scale"]
+    if "audio_modality_scale" in normalized and "v2a_guidance_scale" not in normalized:
+        normalized["v2a_guidance_scale"] = normalized["audio_modality_scale"]
     if "distilled_lora_strength" in normalized and "distilled_strength" not in normalized:
         normalized["distilled_strength"] = normalized["distilled_lora_strength"]
     return normalized
@@ -342,7 +360,7 @@ def _append_raw_flags(cmd: list[str], value: Any) -> None:
     raise ValueError(f"Unsupported raw_flags value: {value!r}")
 
 
-def _build_command(prompt: str, output_file: str, overrides: Dict[str, Any]) -> tuple[list[str], Dict[str, str]]:
+def _build_command(prompt: str, output_file: str, overrides: Dict[str, Any]) -> tuple[list[str], Dict[str, str], Dict[str, Any]]:
     ov = _normalize_overrides(overrides)
     pipeline_module, use_a2vid = _select_pipeline_module(ov)
     audio_path = _get_audio_path(ov)
@@ -435,7 +453,14 @@ def _build_command(prompt: str, output_file: str, overrides: Dict[str, Any]) -> 
     env["PYTHONPATH"] = ":".join(pythonpath_entries + ([existing_pythonpath] if existing_pythonpath else []))
     env["PYTORCH_CUDA_ALLOC_CONF"] = str(ov.get("pytorch_cuda_alloc_conf") or DEFAULT_CUDA_ALLOC_CONF)
 
-    return cmd, env
+    metadata = {
+        "pipeline_module": pipeline_module,
+        "native_audio_image_to_video": use_a2vid,
+        "input_audio_path": audio_path if use_a2vid else None,
+        "fallback_mode": None if use_a2vid else "image_to_video_plus_assembly_audio",
+        "audio_policy": native_a2vid_audio_policy(audio_path) if use_a2vid else fallback_audio_policy(),
+    }
+    return cmd, env, metadata
 
 
 class _LTX2Service:
@@ -487,8 +512,13 @@ class _LTX2Service:
                 self._persist(job)
 
                 try:
-                    cmd, env = _build_command(job.prompt, job.output_file, job.overrides or {})
+                    cmd, env, metadata = _build_command(job.prompt, job.output_file, job.overrides or {})
                     job.command = cmd
+                    job.pipeline_module = metadata["pipeline_module"]
+                    job.native_audio_image_to_video = metadata["native_audio_image_to_video"]
+                    job.fallback_mode = metadata["fallback_mode"]
+                    job.input_audio_path = metadata["input_audio_path"]
+                    job.audio_policy = metadata["audio_policy"]
                     self._persist(job)
 
                     with open(job.log_file, "w", encoding="utf-8") as log_file:

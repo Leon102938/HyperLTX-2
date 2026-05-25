@@ -1,4 +1,5 @@
 import logging
+import sys
 from collections.abc import Iterator
 
 import torch
@@ -239,9 +240,12 @@ class KeyframeInterpolationPipeline:
 @torch.inference_mode()
 def main() -> None:
     logging.getLogger().setLevel(logging.INFO)
-    checkpoint_path = detect_checkpoint_path()
-    params = detect_params(checkpoint_path)
-    parser = default_2_stage_arg_parser(params=params)
+    if any(arg in {"-h", "--help"} for arg in sys.argv[1:]):
+        parser = default_2_stage_arg_parser()
+    else:
+        checkpoint_path = detect_checkpoint_path()
+        params = detect_params(checkpoint_path)
+        parser = default_2_stage_arg_parser(params=params)
     args = parser.parse_args()
     pipeline = KeyframeInterpolationPipeline(
         checkpoint_path=args.checkpoint_path,
